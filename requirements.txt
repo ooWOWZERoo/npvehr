@@ -1,3 +1,6 @@
+# Used for local `pip install -r requirements.txt`. Vercel deployments build
+# from the [project.dependencies] list in pyproject.toml instead (its uv-based
+# build requires a [project] table there) -- keep the two lists in sync.
 fastapi>=0.111.0
 uvicorn[standard]>=0.30.0
 sqlalchemy>=2.0.0

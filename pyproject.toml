@@ -1,3 +1,16 @@
+[project]
+name = "npvehr"
+version = "1.0.0"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.111.0",
+    "uvicorn[standard]>=0.30.0",
+    "sqlalchemy>=2.0.0",
+    "jinja2>=3.1.0",
+    "python-multipart>=0.0.9",
+    "psycopg[binary]>=3.1.0",
+]
+
 [tool.vercel]
 # Points Vercel's Python runtime at the existing FastAPI app instance instead
 # of requiring an api/ directory or a root-level main.py.
