@@ -7,10 +7,14 @@ from sqlalchemy.orm import DeclarativeBase, relationship, sessionmaker
 # DATABASE_URL is read from the environment so the same code runs against local
 # SQLite (default, for local dev -- unusable on Vercel, whose filesystem is
 # read-only/ephemeral outside /tmp) and a real Postgres instance (e.g. Neon) in
-# deployed environments. Neon's connection strings are typically
-# "postgresql://..." -- SQLAlchemy's psycopg driver is selected automatically
-# via requirements.txt (psycopg[binary]).
+# deployed environments.
 DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///./ehr.db")
+# Neon (and most providers) hand out plain "postgresql://..." strings, which
+# SQLAlchemy defaults to the psycopg2 driver. This app depends on psycopg
+# (v3) instead, so rewrite the scheme to select it explicitly rather than
+# also carrying a psycopg2 dependency just for URL compatibility.
+if DATABASE_URL.startswith("postgresql://"):
+    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg://", 1)
 _connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
 engine = create_engine(DATABASE_URL, connect_args=_connect_args)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
