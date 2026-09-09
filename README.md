@@ -27,6 +27,18 @@ The app expects to be run from this directory (paths to the database, templates,
 assets are relative to the working directory). On first run it seeds a local SQLite database
 (`ehr.db`) with demo data and four demo login accounts — printed to the console on first seed.
 
+## Testing
+
+End-to-end tests (Playwright, driven via pytest) launch the real app against a
+throwaway, freshly-seeded SQLite database and exercise it in a real browser --
+login, auth redirects, and the main navigation destinations.
+
+```bash
+pip install -r requirements.txt -r requirements-dev.txt
+playwright install chromium   # first time only, downloads the browser
+pytest
+```
+
 ## Structure
 
 - `ehr/app.py` — FastAPI app entrypoint, router registration, startup migrations
