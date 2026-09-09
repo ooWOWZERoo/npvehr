@@ -1,0 +1,4 @@
+[tool.vercel]
+# Points Vercel's Python runtime at the existing FastAPI app instance instead
+# of requiring an api/ directory or a root-level main.py.
+entrypoint = "ehr.app:app"

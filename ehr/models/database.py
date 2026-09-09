@@ -1,10 +1,18 @@
 import enum
+import os
 from datetime import datetime
 from sqlalchemy import create_engine, Column, Integer, String, Float, Text, DateTime, Boolean, ForeignKey, Enum, Index, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, relationship, sessionmaker
 
-DATABASE_URL = "sqlite:///./ehr.db"
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+# DATABASE_URL is read from the environment so the same code runs against local
+# SQLite (default, for local dev -- unusable on Vercel, whose filesystem is
+# read-only/ephemeral outside /tmp) and a real Postgres instance (e.g. Neon) in
+# deployed environments. Neon's connection strings are typically
+# "postgresql://..." -- SQLAlchemy's psycopg driver is selected automatically
+# via requirements.txt (psycopg[binary]).
+DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///./ehr.db")
+_connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
+engine = create_engine(DATABASE_URL, connect_args=_connect_args)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 class Base(DeclarativeBase):
