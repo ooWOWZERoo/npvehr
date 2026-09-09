@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Appointments &mdash; New Path Vision EHR{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Appointments</h1>
+  <div style="display:flex;gap:0.5rem">
+    <a href="/appointments/day" class="btn btn-secondary btn-sm">Day</a>
+    <a href="/appointments/week" class="btn btn-secondary btn-sm">Week</a>
+    <a href="/appointments/calendar" class="btn btn-secondary btn-sm">Month</a>
+    <a href="/appointments/new" class="btn btn-primary btn-sm">+ New Appointment</a>
+  </div>
+</div>
+<div class="card">
+  <table><thead><tr><th>Date/Time</th><th>Type</th><th>Rel.</th><th>Patient</th><th>Provider</th><th>Reason</th><th>Status</th><th></th></tr></thead><tbody>
+  {% for a in appointments %}
+    <tr>
+      <td>{{ a.scheduled_at.strftime('%m/%d/%Y %I:%M %p') }}</td>
+      <td>
+        {% if a.appointment_type_version %}
+          <span class="color-swatch" style="background:{{ a.resolved_color or a.appointment_type_version.base_color or '#94a3b8' }}"></span>
+          {{ a.appointment_type_version.calendar_abbreviation }}
+        {% else %}&mdash;{% endif %}
+      </td>
+      <td>{% if a.patient_relationship_at_booking %}<span class="badge-relationship {{ a.patient_relationship_at_booking }}">{{ 'NEW' if a.patient_relationship_at_booking == 'new' else 'EST' }}</span>{% endif %}</td>
+      <td><a href="/patients/{{ a.patient_id }}">{{ a.patient.last_name }}, {{ a.patient.first_name }}</a></td>
+      <td>Dr. {{ a.provider.last_name }}</td>
+      <td>{{ a.reason or '—' }}</td>
+      <td><span class="badge badge-{{ a.status.value }}">{{ a.status.value.replace('_',' ') }}</span></td>
+      <td><a href="/appointments/{{ a.id }}" class="btn btn-sm btn-secondary">View</a></td>
+    </tr>
+  {% else %}<tr><td colspan="8" style="text-align:center;color:#64748b">No appointments.</td></tr>
+  {% endfor %}
+  </tbody></table>
+</div>
+{% endblock %}

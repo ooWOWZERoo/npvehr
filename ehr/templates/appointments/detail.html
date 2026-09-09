@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Appointment &mdash; New Path Vision EHR{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Appointment #{{ appt.id }}</h1>
+  <div style="display:flex;gap:0.5rem">
+    <a href="/appointments/{{ appt.id }}/edit" class="btn btn-secondary btn-sm">Edit / Reschedule</a>
+    <a href="/appointments/" class="btn btn-secondary btn-sm">Back</a>
+  </div>
+</div>
+{% if appt.conflict_overridden %}<div class="alert alert-error">This appointment was booked as an approved overbook: {{ appt.conflict_override_reason }}</div>{% endif %}
+<div class="detail-grid">
+  <div class="card"><h3>Details</h3><dl class="dl-grid">
+    <dt>Patient</dt><dd><a href="/patients/{{ appt.patient_id }}">{{ appt.patient.last_name }}, {{ appt.patient.first_name }}</a></dd>
+    <dt>Provider</dt><dd>Dr. {{ appt.provider.last_name }}</dd>
+    <dt>Type</dt><dd>{% if appt.appointment_type_version %}<span class="color-swatch" style="background:{{ appt.resolved_color or appt.appointment_type_version.base_color }}"></span> {{ appt.appointment_type_version.display_name }} <span class="badge-version">v{{ appt.appointment_type_version.version_number }}</span>{% else %}&mdash;{% endif %}</dd>
+    <dt>Relationship</dt><dd><span class="badge-relationship {{ appt.patient_relationship_at_booking }}">{{ 'NEW' if appt.patient_relationship_at_booking == 'new' else 'EST' }}</span> ({{ appt.patient_relationship_source }})</dd>
+    <dt>Follow-up</dt><dd>{{ 'Yes' if appt.is_follow_up else 'No' }}</dd>
+    <dt>Date/Time</dt><dd>{{ appt.scheduled_at.strftime('%B %d, %Y at %I:%M %p') }} &ndash; {{ appt.scheduled_end_at.strftime('%I:%M %p') if appt.scheduled_end_at else '?' }}</dd>
+    <dt>Duration</dt><dd>{{ appt.duration_minutes }} min{% if appt.duration_overridden %} (overridden: {{ appt.duration_override_reason }}){% endif %}</dd>
+    <dt>Color</dt><dd><span class="color-swatch" style="background:{{ appt.resolved_color }}"></span> {{ appt.resolved_color_reason }}</dd>
+    <dt>Tests</dt><dd>{% for t in appt.tests if t.status == 'active' %}<span class="test-chip">{{ t.diagnostic_test.calendar_abbreviation }}</span> {% else %}&mdash;{% endfor %}</dd>
+    <dt>Resources</dt><dd>{% for r in appt.resource_reservations if r.active %}<span class="test-chip">{{ r.resource.display_name }}</span> {% else %}&mdash;{% endfor %}</dd>
+    <dt>Reason</dt><dd>{{ appt.reason or '—' }}</dd>
+    <dt>Notes</dt><dd>{{ appt.notes or '—' }}</dd>
+    <dt>Status</dt><dd><span class="badge badge-{{ appt.status.value }}">{{ appt.status.value.replace('_',' ') }}</span></dd>
+  </dl></div>
+  <div class="card"><h3>Update Status</h3>
+    <form method="post" action="/appointments/{{ appt.id }}/status">
+      <div class="form-group"><label>Status</label>
+        <select name="status">
+          {% for s in statuses %}<option value="{{ s.value }}" {{ 'selected' if appt.status == s }}>{{ s.value.replace('_',' ') }}</option>{% endfor %}
+        </select>
+      </div>
+      <button type="submit" class="btn btn-primary">Update</button>
+    </form>
+    <div style="margin-top:1rem"><a href="/exams/new?patient_id={{ appt.patient_id }}" class="btn btn-secondary btn-sm">Start Exam</a></div>
+    <h3 style="margin-top:1.25rem">Audit History</h3>
+    {% if audit_events %}
+    <table><thead><tr><th>When</th><th>Event</th><th>Field</th><th>Change</th><th>Reason</th></tr></thead><tbody>
+    {% for e in audit_events %}
+      <tr><td>{{ e.occurred_at.strftime('%m/%d %I:%M %p') }}</td><td>{{ e.event_type }}</td><td>{{ e.field_name or '—' }}</td>
+      <td>{{ e.old_value or '—' }} &rarr; {{ e.new_value or '—' }}</td><td>{{ e.reason or '—' }}</td></tr>
+    {% endfor %}
+    </tbody></table>
+    {% else %}<p style="color:#64748b">No audit events.</p>{% endif %}
+  </div>
+</div>
+{% endblock %}

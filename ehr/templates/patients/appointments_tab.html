@@ -1,0 +1,21 @@
+{% extends "patients/_workspace.html" %}
+{% block wcontent %}
+<div class="card">
+  <div class="page-header"><h2 style="margin:0">Appointments</h2><a href="/appointments/new?patient_id={{ patient.id }}" class="btn btn-primary btn-sm">+ Schedule</a></div>
+  {% if appointments %}
+  <div class="table-responsive">
+  <table><thead><tr><th>Date/Time</th><th>Type</th><th>Status</th><th>Relationship</th><th></th></tr></thead><tbody>
+  {% for a in appointments %}
+    <tr>
+      <td>{{ a.scheduled_at.strftime('%Y-%m-%d %I:%M %p') }}</td>
+      <td>{{ a.appointment_type_version.display_name if a.appointment_type_version else (a.reason or '—') }}</td>
+      <td><span class="badge badge-{{ a.status.value }}">{{ a.status.value.replace('_',' ') }}</span></td>
+      <td><span class="badge-relationship {{ a.patient_relationship_at_booking }}">{{ a.patient_relationship_at_booking or '—' }}</span></td>
+      <td><a href="/appointments/{{ a.id }}" class="btn btn-sm btn-secondary">View</a></td>
+    </tr>
+  {% endfor %}
+  </tbody></table>
+  </div>
+  {% else %}<p style="color:#64748b">No appointments on file for this patient.</p>{% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}New Prescription &mdash; New Path Vision EHR{% endblock %}
+{% block content %}
+<div class="page-header"><h1>New Prescription</h1><a href="/patients/" class="btn btn-secondary">Cancel</a></div>
+<div class="card form-card">
+  <form method="post" action="/prescriptions/new">
+    {% if selected_exam_id %}<input type="hidden" name="exam_id" value="{{ selected_exam_id }}">{% endif %}
+    <div class="form-row cols-3">
+      <div class="form-group"><label>Patient*</label>
+        <select name="patient_id" required>{% for p in patients %}<option value="{{ p.id }}" {{ 'selected' if selected_patient_id == p.id }}>{{ p.last_name }}, {{ p.first_name }}</option>{% endfor %}</select>
+      </div>
+      <div class="form-group"><label>Provider*</label>
+        <select name="provider_id" required>{% for p in providers %}<option value="{{ p.id }}">Dr. {{ p.last_name }}</option>{% endfor %}</select>
+      </div>
+      <div class="form-group"><label>Rx Type</label>
+        <select name="rx_type"><option value="glasses">Glasses</option><option value="contacts">Contact Lenses</option></select>
+      </div>
+    </div>
+    <div class="form-row cols-2">
+      <div class="form-group"><label>Issue Date</label><input name="issue_date" type="date" value="{{ today }}"></div>
+      <div class="form-group"><label>Expiry Date</label><input name="expiry_date" type="date"></div>
+    </div>
+    <div class="section-title">Rx Values</div>
+    <div class="table-responsive">
+    <table class="exam-table">
+      <tr><th></th><th>Sphere</th><th>Cylinder</th><th>Axis</th><th>Add</th><th>Prism</th><th>Base</th></tr>
+      <tr><td>OD</td><td><input name="od_sphere" type="number" step="0.25"></td><td><input name="od_cylinder" type="number" step="0.25"></td><td><input name="od_axis" type="number" min="1" max="180"></td><td><input name="od_add" type="number" step="0.25"></td><td><input name="od_prism" type="number" step="0.25"></td><td><input name="od_base"></td></tr>
+      <tr><td>OS</td><td><input name="os_sphere" type="number" step="0.25"></td><td><input name="os_cylinder" type="number" step="0.25"></td><td><input name="os_axis" type="number" min="1" max="180"></td><td><input name="os_add" type="number" step="0.25"></td><td><input name="os_prism" type="number" step="0.25"></td><td><input name="os_base"></td></tr>
+    </table>
+    </div>
+    <div class="section-title">Contact Lens Parameters</div>
+    <div class="table-responsive">
+    <table class="exam-table">
+      <tr><th></th><th>Base Curve</th><th>Diameter</th><th>Brand</th></tr>
+      <tr><td>OD</td><td><input name="od_bc" type="number" step="0.1" placeholder="8.6"></td><td><input name="od_dia" type="number" step="0.1" placeholder="14.2"></td><td><input name="od_brand"></td></tr>
+      <tr><td>OS</td><td><input name="os_bc" type="number" step="0.1" placeholder="8.6"></td><td><input name="os_dia" type="number" step="0.1" placeholder="14.2"></td><td><input name="os_brand"></td></tr>
+    </table>
+    </div>
+    <div class="form-group" style="margin-top:1rem"><label>Notes</label><textarea name="notes"></textarea></div>
+    <div class="form-actions"><button type="submit" class="btn btn-primary">Save Prescription</button></div>
+  </form>
+</div>
+{% endblock %}

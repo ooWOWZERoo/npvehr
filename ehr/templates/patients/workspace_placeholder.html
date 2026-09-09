@@ -1,0 +1,14 @@
+{% extends "patients/_workspace.html" %}
+{% block wcontent %}
+<div class="card placeholder-page">
+  <div class="placeholder-icon">{{ (icon or '&#128203;') | safe }}</div>
+  <h1>{{ title }}</h1>
+  <p>{{ description }}</p>
+  {% if bullets %}
+  <ul>
+    {% for b in bullets %}<li>{{ b }}</li>{% endfor %}
+  </ul>
+  {% endif %}
+  <p class="placeholder-note" style="margin-top:1.5rem">This area is a placeholder reserving the navigation and page structure. It is not yet functional.</p>
+</div>
+{% endblock %}

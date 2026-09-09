@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Holidays / Closures &mdash; Admin{% endblock %}
+{% block content %}
+<div class="page-header"><h1>Scheduling Administration</h1></div>
+{% include "admin/scheduling/_nav.html" %}
+<div class="card form-card"><h3>Add Closure</h3>
+  <form method="post" action="/admin/scheduling/holidays/new">
+    <div class="form-row cols-3">
+      <div class="form-group"><label>Date*</label><input name="closure_date" type="date" required></div>
+      <div class="form-group"><label>Label*</label><input name="label" required placeholder="e.g. Thanksgiving"></div>
+      <div class="form-group"><label>Notes</label><input name="notes" placeholder="Optional"></div>
+    </div>
+    <button type="submit" class="btn btn-primary">Add Closure</button>
+  </form>
+  <p style="font-size:0.8rem;color:#64748b;margin-top:0.75rem">
+    A closure blocks new appointment bookings for every provider on that date (practice-wide), not just
+    one resource or provider. Attempting to book on a closed date is rejected with a clear error message.
+  </p>
+</div>
+<div class="card" style="margin-top:1rem">
+  <table><thead><tr><th>Date</th><th>Label</th><th>Notes</th><th>Added</th><th></th></tr></thead><tbody>
+  {% for c in closures %}
+    <tr>
+      <td>{{ c.closure_date }}</td><td>{{ c.label }}</td><td>{{ c.notes or '—' }}</td>
+      <td>{{ c.created_at.strftime('%m/%d/%Y') if c.created_at else '—' }}</td>
+      <td>
+        <form method="post" action="/admin/scheduling/holidays/{{ c.id }}/delete" style="display:inline" onsubmit="return confirm('Remove this closure?');">
+          <button type="submit" class="btn btn-sm btn-secondary">Delete</button>
+        </form>
+      </td>
+    </tr>
+  {% else %}<tr><td colspan="5" style="text-align:center;color:#64748b">No closures defined yet.</td></tr>
+  {% endfor %}
+  </tbody></table>
+</div>
+{% endblock %}

@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Appointment Types &mdash; Admin{% endblock %}
+{% block content %}
+<div class="page-header"><h1>Scheduling Administration</h1></div>
+{% include "admin/scheduling/_nav.html" %}
+<p style="font-size:0.8rem;color:#b91c1c">
+  No authentication exists yet in this application (spec section 7) &mdash; these admin screens are open
+  to anyone who can reach them. TODO: gate this page behind appointment_types.manage once auth exists.
+</p>
+<div class="page-header"><h2>Appointment Types</h2><a href="/admin/scheduling/appointment-types/new" class="btn btn-primary btn-sm">+ New Type</a></div>
+<div class="card">
+  <table><thead><tr><th>Order</th><th>Active</th><th>Code</th><th>Name</th><th>Service Line</th>
+    <th>New</th><th>Established</th><th>Color</th><th>Buffers</th><th>Version</th><th></th></tr></thead><tbody>
+  {% for t, v in rows %}
+    <tr>
+      <td>{{ v.display_order if v else '—' }}</td>
+      <td><span class="badge {{ 'badge-completed' if (v and v.active) else 'badge-cancelled' }}">{{ 'Active' if (v and v.active) else 'Inactive' }}</span></td>
+      <td>{{ t.code }}{% if t.is_system_seeded %} <span class="badge-version">system</span>{% endif %}</td>
+      <td><a href="/admin/scheduling/appointment-types/{{ t.id }}">{{ v.display_name if v else t.code }}</a></td>
+      <td>{{ v.service_line if v else '—' }}</td>
+      <td>{% if v %}{{ 'Yes ('+v.new_duration_minutes|string+'m)' if v.allows_new and v.new_duration_minutes else ('Yes' if v.allows_new else 'No') }}{% endif %}</td>
+      <td>{% if v %}{{ 'Yes ('+v.established_duration_minutes|string+'m)' if v.allows_established and v.established_duration_minutes else ('Yes' if v.allows_established else 'No') }}{% endif %}</td>
+      <td>{% if v and v.base_color %}<span class="color-swatch" style="background:{{ v.base_color }}"></span>{% elif v and v.color_rules %}<span title="Conditional">&#9673;</span>{% else %}<span style="color:#b91c1c">unset</span>{% endif %}</td>
+      <td>{% if v %}{{ v.buffer_before_minutes }}/{{ v.buffer_after_minutes }} min{% endif %}</td>
+      <td>{% if v %}<span class="badge-version">v{{ v.version_number }}</span>{% endif %}</td>
+      <td style="white-space:nowrap">
+        <a href="/admin/scheduling/appointment-types/{{ t.id }}/edit" class="btn btn-sm btn-secondary">Edit</a>
+        <a href="/admin/scheduling/appointment-types/{{ t.id }}/history" class="btn btn-sm btn-secondary">History</a>
+        {% if not t.is_system_seeded %}
+        {% if v and v.active %}
+        <form style="display:inline" method="post" action="/admin/scheduling/appointment-types/{{ t.id }}/deactivate"><button class="btn btn-sm btn-secondary" type="submit">Deactivate</button></form>
+        {% else %}
+        <form style="display:inline" method="post" action="/admin/scheduling/appointment-types/{{ t.id }}/activate"><button class="btn btn-sm btn-primary" type="submit">Activate</button></form>
+        {% endif %}
+        {% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody></table>
+</div>
+{% endblock %}

@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Day &mdash; New Path Vision EHR{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>{{ day.strftime('%A, %B %d, %Y') }}</h1>
+  <div style="display:flex;gap:0.5rem">
+    <a href="/appointments/week?date_str={{ day.isoformat() }}" class="btn btn-secondary btn-sm">Week</a>
+    <a href="/appointments/calendar" class="btn btn-secondary btn-sm">Month</a>
+    <a href="/appointments/new?date={{ day.isoformat() }}" class="btn btn-primary btn-sm">+ New Appointment</a>
+  </div>
+</div>
+<div class="day-toolbar">
+  <a href="/appointments/day?date_str={{ prev_day }}" class="btn btn-secondary btn-sm">&larr; Prev</a>
+  <a href="/appointments/day" class="btn btn-secondary btn-sm">Today</a>
+  <a href="/appointments/day?date_str={{ next_day }}" class="btn btn-secondary btn-sm">Next &rarr;</a>
+  <form method="get" style="display:flex;gap:0.5rem;flex-wrap:wrap">
+    <input type="hidden" name="date_str" value="{{ day.isoformat() }}">
+    <select name="provider_id" onchange="this.form.submit()"><option value="">All Providers</option>
+      {% for p in providers %}<option value="{{ p.id }}" {{ 'selected' if provider_id == p.id }}>Dr. {{ p.last_name }}</option>{% endfor %}</select>
+    <select name="appointment_type_version_id" onchange="this.form.submit()"><option value="">All Types</option>
+      {% for t in types %}<option value="{{ t.id }}" {{ 'selected' if appointment_type_version_id == t.id }}>{{ t.display_name }}</option>{% endfor %}</select>
+    <select name="relationship" onchange="this.form.submit()"><option value="">New &amp; Established</option>
+      <option value="new" {{ 'selected' if relationship == 'new' }}>New</option>
+      <option value="established" {{ 'selected' if relationship == 'established' }}>Established</option></select>
+    <select name="status" onchange="this.form.submit()"><option value="">All Statuses</option>
+      {% for s in statuses %}<option value="{{ s.value }}" {{ 'selected' if status == s.value }}>{{ s.value.replace('_',' ') }}</option>{% endfor %}</select>
+  </form>
+</div>
+<div class="card">
+  {% for a in appointments %}
+  <a href="/appointments/{{ a.id }}" class="appt-card" style="border-left-color:{{ a.resolved_color or '#94a3b8' }}">
+    <div class="appt-card-top">
+      <span class="appt-card-time">{{ a.scheduled_at.strftime('%-I:%M') }}&ndash;{{ a.scheduled_end_at.strftime('%-I:%M %p') if a.scheduled_end_at else '?' }}</span>
+      <span class="appt-card-type">{{ a.appointment_type_version.display_name if a.appointment_type_version else 'Unclassified' }}</span>
+      <span class="badge-relationship {{ a.patient_relationship_at_booking }}">{{ 'NEW' if a.patient_relationship_at_booking == 'new' else 'EST' }}</span>
+      <span class="badge badge-{{ a.status.value }}">{{ a.status.value.replace('_',' ') }}</span>
+      {% if a.conflict_overridden %}<span class="appt-conflict-flag">OVERBOOK</span>{% endif %}
+    </div>
+    <div class="appt-card-meta">
+      <strong>{{ a.patient.last_name }}, {{ a.patient.first_name }}</strong> &middot; Dr. {{ a.provider.last_name }} &middot; {{ a.duration_minutes }} min
+    </div>
+    {% set active_tests = a.tests|selectattr('status','equalto','active')|list %}
+    {% if active_tests %}<div class="appt-card-tests">{% for t in active_tests %}{{ t.diagnostic_test.calendar_abbreviation }}{{ ' &middot; ' if not loop.last }}{% endfor %}</div>{% endif %}
+  </a>
+  {% else %}
+  <p style="color:#64748b;text-align:center">No appointments for this day.</p>
+  {% endfor %}
+</div>
+{% include "appointments/_legend.html" %}
+{% endblock %}

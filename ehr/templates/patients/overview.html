@@ -1,0 +1,66 @@
+{% extends "patients/_workspace.html" %}
+{% block wcontent %}
+<div class="card">
+  <h3>Balances &amp; Credits</h3>
+  <div class="stats-grid">
+    <div class="card" style="box-shadow:none;border:1px solid #e2e8f0">
+      <div class="card-title">Patient Balance</div>
+      <div class="card-value" style="color:{{ '#991b1b' if (patient.balance_due or 0) > 0.005 else 'var(--primary-strong)' }}">
+        ${{ '%.2f'|format(patient.balance_due) if patient.balance_due and patient.balance_due > 0.005 else '0.00' }}
+      </div>
+    </div>
+    <div class="card" style="box-shadow:none;border:1px solid #e2e8f0">
+      <div class="card-title">Patient Credit</div>
+      <div class="card-value" style="color:{{ '#92400e' if (patient.balance_due or 0) < -0.005 else 'var(--primary-strong)' }}">
+        ${{ '%.2f'|format(-patient.balance_due) if patient.balance_due and patient.balance_due < -0.005 else '0.00' }}
+      </div>
+    </div>
+    <div class="card" style="box-shadow:none;border:1px solid #e2e8f0">
+      <div class="card-title">Pending Exam</div>
+      <div class="card-value" style="font-size:1rem;color:#64748b;font-style:italic">N/A &mdash; pricing not implemented</div>
+    </div>
+  </div>
+  <p class="placeholder-note">Patient Balance/Credit come from the manually-entered balance snapshot (see Balance Due
+    on the Edit Patient form) -- there is no billing/ledger module yet. Pending Exam has no backing data at all: no
+    exam-pricing/estimate system exists in this app.</p>
+</div>
+
+<div class="detail-grid" style="margin-top:1rem">
+  <div class="card">
+    <div class="page-header" style="margin-bottom:0.75rem"><h3 style="margin:0">Appointments</h3><a href="/patients/{{ patient.id }}/appointments" class="btn btn-sm btn-secondary">View All</a></div>
+    {% if upcoming_appointments or recent_appointments %}
+      {% for a in (upcoming_appointments if upcoming_appointments else recent_appointments) %}
+        <a href="/appointments/{{ a.id }}" class="appt-card" style="border-left-color:{{ a.resolved_color or '#94a3b8' }}">
+          <div class="appt-card-top">
+            <span class="appt-card-time">{{ a.scheduled_at.strftime('%Y-%m-%d %I:%M %p') }}</span>
+            <span class="badge badge-{{ a.status.value }}">{{ a.status.value.replace('_',' ') }}</span>
+          </div>
+          <div class="appt-card-meta">{{ a.reason or 'Appointment' }}</div>
+        </a>
+      {% endfor %}
+    {% else %}<p style="color:#64748b">No appointments on file.</p>{% endif %}
+  </div>
+  <div class="card">
+    <div class="page-header" style="margin-bottom:0.75rem"><h3 style="margin:0">Eye Exams</h3><a href="/patients/{{ patient.id }}/orders/exams" class="btn btn-sm btn-secondary">View All</a></div>
+    {% if recent_exams %}
+    <table><tbody>
+    {% for e in recent_exams %}
+      <tr><td>{{ e.exam_date }}</td><td>{{ e.chief_complaint or '—' }}</td>
+        <td><a href="/exams/{{ e.id }}" class="btn btn-sm btn-secondary">View</a></td></tr>
+    {% endfor %}
+    </tbody></table>
+    {% else %}<p style="color:#64748b">No exams recorded.</p>{% endif %}
+  </div>
+  <div class="card">
+    <div class="page-header" style="margin-bottom:0.75rem"><h3 style="margin:0">Prescriptions</h3><a href="/patients/{{ patient.id }}/rx" class="btn btn-sm btn-secondary">View All</a></div>
+    {% if recent_prescriptions %}
+    <table><tbody>
+    {% for rx in recent_prescriptions %}
+      <tr><td>{{ rx.issue_date or '—' }}</td><td>{{ rx.rx_type }}</td>
+        <td><a href="/prescriptions/{{ rx.id }}" class="btn btn-sm btn-secondary">View</a></td></tr>
+    {% endfor %}
+    </tbody></table>
+    {% else %}<p style="color:#64748b">No prescriptions recorded.</p>{% endif %}
+  </div>
+</div>
+{% endblock %}

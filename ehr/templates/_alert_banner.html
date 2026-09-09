@@ -1,0 +1,18 @@
+{#
+  Reusable system alert banner. Import and call it from any template:
+
+      {% from "_alert_banner.html" import alert_banner %}
+      {{ alert_banner("Something needs attention.", "warning") }}
+
+  `severity` is one of:
+    - "warning"  amber -- something the user should notice before proceeding
+                 (e.g. a posting-date mismatch).
+    - "error"    red -- a blocking problem (rejected submissions, conflicts).
+    - "info"     green -- a neutral heads-up, no action required to proceed.
+  Defaults to "info" if omitted or unrecognized. This is the standard pattern
+  for any future banner in this app -- prefer this macro over a one-off styled
+  <div>, so severity colors/spacing stay consistent everywhere.
+#}
+{% macro alert_banner(message, severity="info") %}
+<div class="alert alert-{{ severity if severity in ["warning", "error", "info"] else "info" }}" role="alert">{{ message }}</div>
+{% endmacro %}

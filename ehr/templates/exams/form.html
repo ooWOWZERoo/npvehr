@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}New Eye Exam &mdash; New Path Vision EHR{% endblock %}
+{% block content %}
+<div class="page-header"><h1>New Eye Exam</h1><a href="/patients/" class="btn btn-secondary">Cancel</a></div>
+<div class="card form-card">
+  <form method="post" action="/exams/new">
+    <div class="section-title">Visit Info</div>
+    <div class="form-row cols-3">
+      <div class="form-group"><label>Patient*</label>
+        <select name="patient_id" required>{% for p in patients %}<option value="{{ p.id }}" {{ 'selected' if selected_patient_id == p.id }}>{{ p.last_name }}, {{ p.first_name }}</option>{% endfor %}</select>
+      </div>
+      <div class="form-group"><label>Provider*</label>
+        <select name="provider_id" required>{% for p in providers %}<option value="{{ p.id }}">Dr. {{ p.last_name }}</option>{% endfor %}</select>
+      </div>
+      <div class="form-group"><label>Exam Date*</label><input name="exam_date" type="date" value="{{ today }}" required></div>
+    </div>
+    <div class="form-group"><label>Chief Complaint</label><textarea name="chief_complaint"></textarea></div>
+    <div class="section-title">Visual Acuity</div>
+    <div class="table-responsive">
+    <table class="exam-table">
+      <tr><th></th><th>SC (Without Correction)</th><th>CC (With Correction)</th></tr>
+      <tr><td>OD</td><td><input name="od_sc" placeholder="20/200"></td><td><input name="od_cc" placeholder="20/20"></td></tr>
+      <tr><td>OS</td><td><input name="os_sc" placeholder="20/200"></td><td><input name="os_cc" placeholder="20/20"></td></tr>
+    </table>
+    </div>
+    <div class="section-title">Manifest Refraction</div>
+    <div class="table-responsive">
+    <table class="exam-table">
+      <tr><th></th><th>Sphere</th><th>Cylinder</th><th>Axis</th><th>Add</th><th>VA</th></tr>
+      <tr><td>OD</td><td><input name="od_sphere" type="number" step="0.25"></td><td><input name="od_cylinder" type="number" step="0.25"></td><td><input name="od_axis" type="number" min="1" max="180"></td><td><input name="od_add" type="number" step="0.25"></td><td><input name="od_va" placeholder="20/20"></td></tr>
+      <tr><td>OS</td><td><input name="os_sphere" type="number" step="0.25"></td><td><input name="os_cylinder" type="number" step="0.25"></td><td><input name="os_axis" type="number" min="1" max="180"></td><td><input name="os_add" type="number" step="0.25"></td><td><input name="os_va" placeholder="20/20"></td></tr>
+    </table>
+    </div>
+    <div class="section-title">IOP &amp; Cover Test</div>
+    <div class="form-row cols-3">
+      <div class="form-group"><label>IOP OD (mmHg)</label><input name="iop_od" type="number" step="0.5"></div>
+      <div class="form-group"><label>IOP OS (mmHg)</label><input name="iop_os" type="number" step="0.5"></div>
+      <div class="form-group"><label>Method</label><select name="iop_method"><option>Goldmann</option><option>Non-contact</option><option>iCare</option></select></div>
+    </div>
+    <div class="form-group"><label>Cover Test</label><input name="cover_test" placeholder="Orthophoria at distance and near"></div>
+    <div class="section-title">Slit Lamp</div>
+    <div class="table-responsive">
+    <table class="exam-table">
+      <tr><th></th><th>Lids</th><th>Cornea</th><th>Lens</th></tr>
+      <tr><td>OD</td><td><input name="sl_lids_od" placeholder="Normal"></td><td><input name="sl_cornea_od" placeholder="Clear"></td><td><input name="sl_lens_od" placeholder="Clear"></td></tr>
+      <tr><td>OS</td><td><input name="sl_lids_os" placeholder="Normal"></td><td><input name="sl_cornea_os" placeholder="Clear"></td><td><input name="sl_lens_os" placeholder="Clear"></td></tr>
+    </table>
+    </div>
+    <div class="section-title">Fundus</div>
+    <div class="table-responsive">
+    <table class="exam-table">
+      <tr><th></th><th>Disc</th><th>Macula</th><th>Vessels</th><th>Periphery</th></tr>
+      <tr><td>OD</td><td><input name="fundus_disc_od"></td><td><input name="fundus_macula_od"></td><td><input name="fundus_vessels_od"></td><td><input name="fundus_periphery_od"></td></tr>
+      <tr><td>OS</td><td><input name="fundus_disc_os"></td><td><input name="fundus_macula_os"></td><td><input name="fundus_vessels_os"></td><td><input name="fundus_periphery_os"></td></tr>
+    </table>
+    </div>
+    <div class="section-title">Assessment &amp; Plan</div>
+    <div class="form-row cols-2">
+      <div class="form-group"><label>Assessment</label><textarea name="assessment"></textarea></div>
+      <div class="form-group"><label>Plan</label><textarea name="plan"></textarea></div>
+    </div>
+    <div class="form-row cols-2">
+      <div class="form-group"><label>Diagnosis Codes (ICD-10)</label><input name="diagnosis_codes" placeholder="H52.13, H52.219"></div>
+      <div class="form-group"><label>Follow-up (weeks)</label><input name="follow_up_weeks" type="number"></div>
+    </div>
+    <div class="form-actions"><button type="submit" class="btn btn-primary">Save Exam</button></div>
+  </form>
+</div>
+{% endblock %}

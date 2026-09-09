@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+ehr.db
+.venv/
+*.egg-info/
+.DS_Store

@@ -1,0 +1,386 @@
+*, *::before, *::after { box-sizing: border-box; }
+
+:root {
+  --ink: #132420;
+  --ink-muted: #4B5D57;
+  --canvas: #F4F6F2;
+  --surface: #FFFFFF;
+  --surface-sunken: #EEF1EC;
+  --border: #DDE4DD;
+  --primary: #1F6F5C;
+  --primary-strong: #154F42;
+  --primary-soft: #E4F0EB;
+  --accent: #C9A227;
+  --accent-soft: #FBF3DC;
+
+  --font-display: 'Fraunces', Georgia, 'Times New Roman', serif;
+  --font-body: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'IBM Plex Mono', 'SF Mono', Consolas, monospace;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 40px;
+  --space-8: 48px;
+
+  --sidebar-width: 230px;
+  --sidebar-collapsed-width: 58px;
+
+  /* legacy aliases kept so any un-migrated value below still resolves sensibly */
+  --green-900: var(--primary-strong);
+  --green-700: var(--primary);
+  --green-600: var(--primary);
+  --green-50: var(--primary-soft);
+  --amber-100: #fef3c7;
+  --amber-800: #92400e;
+}
+
+html { -webkit-text-size-adjust: 100%; }
+body { font-family: var(--font-body); margin: 0; background: var(--canvas); color: var(--ink); font-size: 0.9rem; line-height: 1.5; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+
+h1, h2, h3 { font-family: var(--font-display); color: var(--ink); text-wrap: balance; font-weight: 700; }
+h1 { font-size: 1.85rem; margin: 0 0 var(--space-5); line-height: 1.15; }
+h2 { font-size: 1.35rem; font-weight: 600; margin: 0 0 var(--space-4); line-height: 1.2; }
+h3 { font-size: 1.05rem; font-weight: 600; margin: 0 0 var(--space-3); line-height: 1.25; }
+
+.navbar { background: var(--primary-strong); color: white; padding: 0 var(--space-5); display: flex; align-items: center; height: 56px; gap: var(--space-6); }
+.navbar-brand { font-family: var(--font-display); font-size: 1.25rem; font-weight: 700; color: white; display: flex; align-items: center; gap: var(--space-2); }
+.navbar-brand:hover { text-decoration: none; }
+.navbar-logo { height: 32px; width: auto; display: block; }
+.patient-photo-preview { width: 96px; height: 96px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border); }
+.patient-photo-placeholder { width: 96px; height: 96px; display: flex; align-items: center; justify-content: center; border-radius: 8px; border: 1px dashed var(--border); color: var(--ink-muted); font-size: 0.7rem; text-align: center; background: var(--surface-sunken); }
+.patient-thumb { width: 36px; height: 36px; object-fit: cover; border-radius: 50%; vertical-align: middle; margin-right: var(--space-2); border: 1px solid var(--border); }
+.patient-thumb-placeholder { width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; background: var(--primary-soft); color: var(--primary); font-size: 0.75rem; font-weight: 700; vertical-align: middle; margin-right: var(--space-2); }
+.patient-name-cell { display: flex; align-items: center; }
+.patient-photo-lg { width: 140px; height: 140px; object-fit: cover; border-radius: 10px; border: 1px solid var(--border); }
+.navbar a { color: rgba(255,255,255,0.85); font-size: 0.9rem; }
+.navbar a:hover { color: white; text-decoration: none; }
+/* Fluid width: scales with the browser window instead of capping at a fixed
+   1200px, so wide monitors don't leave large unused margins either side of
+   the content, while narrower windows still shrink normally (no forced
+   minimum) -- pure CSS, recalculated live by the browser on resize. */
+/* width:100% is required here, not just max-width: .container is a flex item inside
+   .main-col's column flex layout, and per the flexbox spec, an item with `auto`
+   horizontal margins (used here to center it once it hits max-width) does NOT stretch
+   to fill the cross axis the way align-items:stretch normally would -- it falls back to
+   shrink-to-fit sizing instead. That in turn breaks any `repeat(auto-fit, minmax(...))`
+   grid inside it (auto-fit can't resolve a column count without a definite container
+   width), causing .stats-grid/.dashboard-grid/.detail-grid to collapse to one narrow
+   column even on a wide screen. Explicit width:100% gives the flex item a definite
+   width (still capped by max-width, still centered by the auto margins beyond 1800px),
+   which resolves both problems. */
+.container { width: 100%; max-width: min(96vw, 1800px); margin: 0 auto; padding: var(--space-5); box-sizing: border-box; }
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-4); margin-bottom: var(--space-5); }
+.dashboard-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: var(--space-5); }
+.detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: var(--space-4); }
+.detail-grid > .card, .dashboard-grid > .card { min-width: 0; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: var(--space-5); box-shadow: 0 1px 2px rgba(19,36,32,0.05); }
+.card .card { box-shadow: none; border-color: var(--border); background: var(--surface-sunken); }
+/* Data-entry forms (New/Edit Patient, New/Edit Appointment, New Eye Exam, New Prescription,
+   Store Operations and Admin Scheduling forms) deliberately cap at 1400px rather than stretching
+   the .card to the full fluid .container (up to 1800px). A .form-row.cols-2/3/4 of short text
+   inputs or selects would otherwise split into columns hundreds of pixels wide each on a large
+   monitor, with huge gaps of empty input chrome around short values -- worse UX than a comfortably
+   wide, evenly-filled form. 1400px is wide enough to make cols-3/cols-4 rows and the exam-table
+   visual-acuity/refraction grids look intentional and well filled, without the cramped, dead-space
+   look of the old fixed-1200px-viewport layout. List pages (Patients list) and detail/summary
+   pages (.detail-grid, dashboard .stats-grid) are NOT capped here -- those already make good use
+   of full fluid width and should keep doing so. */
+.form-card { max-width: 1400px; }
+.card-title { font-family: var(--font-body); font-size: 0.75rem; font-weight: 600; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.06em; margin: 0 0 var(--space-2); }
+.card-value { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 2.5rem; font-weight: 600; color: var(--primary-strong); line-height: 1.1; }
+.btn { display: inline-flex; align-items: center; gap: 0.4em; padding: 0.5rem 1.1rem; border-radius: 6px; font-size: 0.875rem; border: 1px solid transparent; cursor: pointer; font-weight: 600; font-family: var(--font-body); transition: background 0.12s ease, border-color 0.12s ease, transform 0.08s ease, box-shadow 0.12s ease; }
+.btn-primary { background: var(--primary); color: white; box-shadow: 0 1px 2px rgba(19,36,32,0.12); }
+.btn-primary:hover { background: var(--primary-strong); text-decoration: none; color: white; transform: translateY(-1px); box-shadow: 0 3px 8px rgba(19,36,32,0.18); }
+.btn-secondary { background: transparent; color: var(--primary-strong); border-color: var(--border); }
+.btn-secondary:hover { background: var(--surface-sunken); border-color: var(--primary); text-decoration: none; color: var(--primary-strong); }
+.btn-sm { padding: 0.3rem 0.7rem; font-size: 0.8rem; }
+.icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; border-radius: 50%; background: var(--surface-sunken); color: var(--ink-muted); font-size: 1rem; text-decoration: none; flex-shrink: 0; }
+.icon-btn:hover { background: var(--primary-soft); color: var(--primary-strong); text-decoration: none; }
+.badge { display: inline-block; padding: 0.2rem 0.6rem; border-radius: 12px; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+.badge-scheduled { background: #dbeafe; color: #1d4ed8; }
+.badge-checked_in { background: #fef9c3; color: #854d0e; }
+.badge-in_progress { background: #fde68a; color: #92400e; }
+.badge-completed { background: #dcfce7; color: #166534; }
+.badge-cancelled { background: #fee2e2; color: #991b1b; }
+.badge-no_show { background: var(--surface-sunken); color: var(--ink-muted); }
+table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+th { text-align: left; padding: var(--space-3) var(--space-4); background: var(--surface-sunken); border-bottom: 1px solid var(--border); color: var(--ink-muted); font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+td { padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--border); }
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: var(--primary-soft); }
+.form-group { margin-bottom: var(--space-4); }
+.form-group label { display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: var(--space-2); color: var(--ink); }
+.form-group input, .form-group select, .form-group textarea { width: 100%; padding: 0.55rem 0.75rem; border: 1px solid var(--border); border-radius: 6px; font-size: 0.9rem; font-family: var(--font-body); background: var(--surface); color: var(--ink); transition: border-color 0.12s ease, box-shadow 0.12s ease; }
+.form-group input:focus, .form-group select:focus, .form-group textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.form-group textarea { min-height: 80px; resize: vertical; }
+.form-row { display: grid; gap: var(--space-4); margin-bottom: var(--space-4); }
+.form-row.cols-2 { grid-template-columns: 1fr 1fr; }
+.form-row.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+.form-row.cols-4 { grid-template-columns: repeat(4, 1fr); }
+.form-actions { margin-top: var(--space-5); display: flex; gap: var(--space-3); }
+.section-title { font-family: var(--font-display); font-size: 1.05rem; font-weight: 600; color: var(--primary-strong); border-bottom: 2px solid var(--border); padding-bottom: var(--space-2); margin: var(--space-5) 0 var(--space-4); }
+.table-responsive { width: 100%; max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.exam-table { width: 100%; border-collapse: collapse; font-size: 0.875rem; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.exam-table th, .exam-table td { padding: var(--space-2) var(--space-3); border: 1px solid var(--border); white-space: nowrap; }
+.exam-table th { background: var(--surface-sunken); font-weight: 600; text-align: center; font-family: var(--font-body); }
+.exam-table td:first-child { font-weight: 600; background: var(--surface-sunken); text-align: center; font-family: var(--font-body); }
+.dl-grid { display: grid; grid-template-columns: max-content 1fr; gap: var(--space-2) var(--space-4); font-size: 0.875rem; }
+.dl-grid dt { color: var(--ink-muted); font-weight: 500; }
+.dl-grid dd { margin: 0; }
+.page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-5); gap: var(--space-3); }
+.search-form { display: flex; gap: var(--space-2); margin-bottom: var(--space-4); }
+.search-form input { padding: 0.5rem 0.75rem; border: 1px solid var(--border); border-radius: 6px; font-size: 0.9rem; width: 300px; font-family: var(--font-body); }
+.calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.calendar-weekday { text-align: center; font-size: 0.72rem; font-weight: 600; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.04em; padding: var(--space-2) 0; }
+.calendar-day { min-height: 100px; border: 1px solid var(--border); border-radius: 6px; padding: var(--space-2); background: var(--surface); display: flex; flex-direction: column; gap: 2px; }
+.calendar-day.other-month { background: transparent; border-color: transparent; }
+.calendar-day.today { background: var(--primary-soft); border-color: var(--primary); }
+.calendar-day-num { font-family: var(--font-mono); font-size: 0.8rem; font-weight: 600; color: var(--ink); margin-bottom: 2px; }
+.calendar-day.today .calendar-day-num { color: var(--primary-strong); }
+.calendar-appt { display: block; font-size: 0.7rem; padding: 1px 4px; border-radius: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--primary-strong); background: var(--primary-soft); font-variant-numeric: tabular-nums; }
+.calendar-appt:hover { text-decoration: none; filter: brightness(0.95); }
+.calendar-day { cursor: pointer; }
+.calendar-day-head { display: flex; align-items: center; justify-content: space-between; }
+.calendar-day-add { visibility: hidden; width: 18px; height: 18px; line-height: 16px; text-align: center; border-radius: 4px; background: var(--primary); color: #fff; font-weight: 700; font-size: 0.85rem; }
+.calendar-day:hover .calendar-day-add { visibility: visible; }
+.calendar-day-add:hover { text-decoration: none; background: var(--primary-strong); }
+@media print { .no-print { display: none !important; } }
+@media (max-width: 900px) {
+  .stats-grid { grid-template-columns: repeat(2, 1fr); }
+  .dashboard-grid, .detail-grid { grid-template-columns: 1fr; }
+  .form-row.cols-2, .form-row.cols-3, .form-row.cols-4 { grid-template-columns: 1fr; }
+  .exam-table { min-width: 480px; }
+  .calendar-day { min-height: 70px; }
+}
+@media (max-width: 600px) {
+  .container { padding: var(--space-4); }
+  .stats-grid { grid-template-columns: 1fr 1fr; gap: var(--space-2); }
+  .navbar { gap: var(--space-4); padding: 0 var(--space-4); overflow-x: auto; }
+  .calendar-weekday { font-size: 0.65rem; }
+  .calendar-day { min-height: 56px; padding: 0.2rem; }
+  .calendar-appt { font-size: 0.6rem; }
+  .page-header { flex-direction: column; align-items: flex-start; gap: var(--space-2); }
+  .search-form input { width: 100%; }
+}
+
+/* --- Appointment Scheduling Module additions --- */
+.badge-relationship { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 10px; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; background: var(--surface-sunken); color: var(--ink-muted); border: 1px solid var(--border); }
+.badge-relationship.new { background: #fef2f2; color: #991b1b; border-color: #fecaca; }
+.badge-relationship.established { background: #eff6ff; color: #1e40af; border-color: #bfdbfe; }
+.appt-card { display: flex; flex-direction: column; gap: 0.15rem; background: var(--surface); border: 1px solid var(--border); border-left: 5px solid #94a3b8; border-radius: 8px; padding: var(--space-3) var(--space-4); box-shadow: 0 1px 2px rgba(19,36,32,0.05); margin-bottom: var(--space-3); }
+.appt-card:hover { text-decoration: none; filter: brightness(0.98); }
+.appt-card-top { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.appt-card-time { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-weight: 600; color: var(--primary-strong); font-size: 0.9rem; }
+.appt-card-type { font-weight: 600; font-size: 0.85rem; color: var(--ink); }
+.appt-card-meta { font-size: 0.8rem; color: var(--ink-muted); display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: center; }
+.appt-card-tests { font-size: 0.72rem; color: var(--ink-muted); letter-spacing: 0.02em; }
+.appt-conflict-flag { color: #b91c1c; font-weight: 700; font-size: 0.75rem; }
+.color-swatch { display: inline-block; width: 14px; height: 14px; border-radius: 3px; vertical-align: middle; border: 1px solid rgba(0,0,0,0.15); }
+.legend { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-5); font-size: 0.8rem; padding: var(--space-3) var(--space-4); }
+.legend-item { display: flex; align-items: center; gap: var(--space-2); }
+.legend-rules { margin: 0.15rem 0 0 1.3rem; padding: 0; list-style: none; font-size: 0.72rem; color: var(--ink-muted); }
+.day-toolbar, .week-toolbar { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; margin-bottom: var(--space-3); }
+.day-toolbar select, .week-toolbar select { padding: 0.4rem 0.55rem; border: 1px solid var(--border); border-radius: 6px; font-size: 0.85rem; font-family: var(--font-body); }
+.week-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: var(--space-2); align-items: start; }
+.week-col { background: var(--surface-sunken); border: 1px solid var(--border); border-radius: 8px; padding: var(--space-2); min-height: 120px; }
+.week-col-head { font-size: 0.75rem; font-weight: 700; color: var(--ink); text-align: center; margin-bottom: var(--space-2); }
+.week-col-head.today { color: var(--primary-strong); }
+.alert { padding: var(--space-3) var(--space-4); border-radius: 8px; font-size: 0.875rem; margin-bottom: var(--space-4); }
+.alert-error { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+.alert-info { background: var(--primary-soft); color: var(--primary-strong); border: 1px solid #bbf7d0; }
+.alert-warning { background: #fffbeb; color: #92400e; border: 1px solid #fde68a; }
+/* Placeholder/stub pages (Store Ops, Catalog, Orders, Claims, Merge Patient, etc.) intentionally
+   cap their own width and center themselves: on a wide monitor, a placeholder .card stretching to
+   the full fluid .container (up to 1800px) would look like a huge, mostly-empty white box with a
+   tiny icon/paragraph lost in the middle. 760px keeps the icon/heading/description/list block
+   looking like a deliberate, readable notice regardless of container width, while the surrounding
+   page chrome (sidebar/topbar) still spans full width as normal. */
+.placeholder-page { text-align: center; padding: var(--space-8) var(--space-5); max-width: 760px; margin: 0 auto; }
+.placeholder-page .placeholder-icon { font-size: 3rem; line-height: 1; margin-bottom: var(--space-4); }
+.placeholder-page h1 { margin-bottom: var(--space-3); }
+.placeholder-page p { max-width: 640px; margin: 0 auto var(--space-4); color: var(--ink-muted); font-size: 0.95rem; line-height: 1.6; }
+.placeholder-page ul { max-width: 460px; margin: var(--space-4) auto 0; text-align: left; color: var(--ink-muted); font-size: 0.9rem; line-height: 1.7; }
+.placeholder-note { color: var(--ink-muted); font-style: italic; font-size: 0.85rem; }
+.sidebar-static-sublinks { display: flex; flex-direction: column; padding: 0.1rem var(--space-2) 0.4rem 2.35rem; }
+.sidebar-static-sublinks a { color: rgba(255,255,255,0.75); font-size: 0.8rem; padding: 0.25rem 0; white-space: nowrap; }
+.sidebar-static-sublinks a:hover { color: #fff; text-decoration: none; }
+.dc-table input[type=number] { width: 110px; font-family: var(--font-mono); }
+.dc-table input[type=text] { width: 100%; }
+.dc-variance.negative { color: #b91c1c; font-weight: 700; }
+.dc-variance.positive { color: #166534; font-weight: 700; }
+.checkbox-row { display: flex; align-items: center; gap: var(--space-2); }
+.checkbox-row input[type=checkbox] { width: auto; }
+.test-chip-list { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.test-chip { display: flex; align-items: center; gap: 0.3rem; border: 1px solid var(--border); border-radius: 14px; padding: 0.2rem 0.65rem; font-size: 0.78rem; background: var(--surface); }
+.badge-version { background: var(--primary-soft); color: var(--primary-strong); border: 1px solid #bbf7d0; padding: 0.1rem 0.45rem; border-radius: 8px; font-size: 0.68rem; font-weight: 700; }
+.admin-nav-tabs { display: flex; gap: var(--space-2); margin-bottom: var(--space-4); flex-wrap: wrap; }
+.admin-nav-tabs a { padding: 0.45rem 0.9rem; border-radius: 6px; background: var(--surface-sunken); color: var(--primary-strong); font-size: 0.85rem; font-weight: 600; }
+.admin-nav-tabs a.active { background: var(--primary); color: white; }
+@media (max-width: 900px) {
+  .week-grid { grid-template-columns: 1fr; }
+}
+
+/* --- Sidebar / top-bar layout redesign --- */
+.app-shell { display: flex; min-height: 100vh; }
+.sidebar { width: var(--sidebar-width); background: var(--primary-strong); color: #fff; display: flex; flex-direction: column; flex-shrink: 0; transition: width 0.15s ease; }
+.sidebar-header { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-4) var(--space-3); overflow: hidden; }
+.sidebar-logo { width: 26px; height: 26px; flex-shrink: 0; }
+.sidebar-brand-text { font-family: var(--font-display); font-weight: 600; font-size: 1rem; white-space: nowrap; letter-spacing: 0.01em; }
+.sidebar-nav { flex: 1; overflow-y: auto; overflow-x: hidden; padding: var(--space-2) 0; }
+.sidebar-link, .sidebar-expand-toggle { display: flex; align-items: center; gap: var(--space-3); width: 100%; padding: 0.6rem 0.9rem; color: rgba(255,255,255,0.88); background: none; border: none; font-size: 0.85rem; text-align: left; cursor: pointer; font-family: var(--font-body); white-space: nowrap; }
+.sidebar-link:hover, .sidebar-expand-toggle:hover { background: rgba(255,255,255,0.08); text-decoration: none; color: #fff; }
+.sidebar-link.active { background: var(--primary-soft); color: var(--primary-strong); font-weight: 600; }
+.sidebar-icon { width: 1.1rem; text-align: center; flex-shrink: 0; }
+.sidebar-caret { margin-left: auto; transition: transform 0.15s ease; font-size: 0.65rem; flex-shrink: 0; }
+.sidebar-group.open .sidebar-caret { transform: rotate(90deg); }
+.sidebar-subnav { display: none; flex-direction: column; padding-left: 2.35rem; }
+.sidebar-group.open .sidebar-subnav { display: flex; }
+.sidebar-subnav a { color: rgba(255,255,255,0.75); font-size: 0.8rem; padding: 0.35rem 0; white-space: nowrap; }
+.sidebar-subnav a:hover { color: #fff; text-decoration: none; }
+.sidebar-subnav-heading { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.06em; color: rgba(255,255,255,0.5); margin: 0.4rem 0 0.1rem; }
+.sidebar-recent { padding: 0.1rem var(--space-2) 0.3rem 2.35rem; display: flex; flex-direction: column; gap: 0.15rem; }
+.sidebar-recent-heading { font-size: 0.63rem; text-transform: uppercase; color: rgba(255,255,255,0.45); letter-spacing: 0.06em; margin-top: 0.1rem; }
+.sidebar-recent a { font-size: 0.78rem; color: rgba(255,255,255,0.75); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+.sidebar-recent a:hover { color: #fff; text-decoration: none; }
+.sidebar-recent-empty { font-size: 0.7rem; color: rgba(255,255,255,0.4); }
+.sidebar-collapse-btn { border: none; background: rgba(255,255,255,0.08); color: #fff; padding: var(--space-2); cursor: pointer; font-size: 0.85rem; }
+.sidebar-collapse-btn:hover { background: rgba(255,255,255,0.16); }
+.sidebar-overlay { display: none; }
+.main-col { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+@media (min-width: 901px) {
+  .app-shell.sidebar-collapsed .sidebar { width: var(--sidebar-collapsed-width); }
+  .app-shell.sidebar-collapsed .sidebar-brand-text,
+  .app-shell.sidebar-collapsed .sidebar-label,
+  .app-shell.sidebar-collapsed .sidebar-caret,
+  .app-shell.sidebar-collapsed .sidebar-subnav,
+  .app-shell.sidebar-collapsed .sidebar-recent,
+  .app-shell.sidebar-collapsed .sidebar-static-sublinks,
+  .app-shell.sidebar-collapsed .sidebar-subnav-heading { display: none; }
+}
+
+.topbar { background: var(--primary-strong); color: #fff; display: flex; align-items: center; gap: var(--space-4); padding: 0 var(--space-4); height: 56px; }
+.hamburger-btn { display: none; background: none; border: none; color: #fff; font-size: 1.3rem; cursor: pointer; padding: 0.2rem 0.4rem; flex-shrink: 0; }
+.topbar-brand { display: flex; align-items: center; gap: var(--space-2); color: #fff; font-family: var(--font-display); font-weight: 600; font-size: 1rem; flex-shrink: 0; }
+.topbar-brand:hover { text-decoration: none; }
+.topbar-logo { height: 22px; width: auto; }
+.env-badge { padding: 0.2rem 0.6rem; border-radius: 12px; font-size: 0.65rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; white-space: nowrap; flex-shrink: 0; }
+.env-badge.env-prod { background: #dcfce7; color: #166534; }
+.env-badge.env-dev { background: var(--amber-100); color: var(--amber-800); }
+.patient-switcher { position: relative; width: 190px; flex-shrink: 1; min-width: 90px; }
+.patient-switcher input { width: 100%; padding: 0.4rem 0.65rem; border-radius: 6px; border: 1px solid rgba(255,255,255,0.3); background: rgba(255,255,255,0.12); color: #fff; font-size: 0.8rem; font-family: var(--font-body); }
+.patient-switcher input::placeholder { color: rgba(255,255,255,0.65); }
+.patient-switcher input:focus { outline: none; background: #fff; color: var(--ink); box-shadow: 0 0 0 3px rgba(201,162,39,0.4); }
+.patient-switcher-results { position: absolute; top: 115%; left: 0; width: 260px; background: var(--surface); color: var(--ink); border-radius: 8px; box-shadow: 0 4px 14px rgba(0,0,0,0.18); max-height: 260px; overflow-y: auto; z-index: 80; }
+.patient-switcher-results a { display: block; padding: 0.5rem 0.75rem; font-size: 0.82rem; color: var(--ink); }
+.patient-switcher-results a:hover { background: var(--primary-soft); text-decoration: none; }
+.patient-switcher-results .psr-empty { padding: 0.5rem 0.7rem; font-size: 0.8rem; color: var(--ink-muted); }
+.topbar-spacer { flex: 1; }
+.topbar-clock { text-align: right; line-height: 1.1; flex-shrink: 0; }
+.topbar-clock-time { font-family: var(--font-mono); font-size: 0.8rem; font-weight: 500; font-variant-numeric: tabular-nums; }
+.topbar-clock-caption { font-size: 0.6rem; color: rgba(255,255,255,0.6); }
+.staff-picker { flex-shrink: 0; font-size: 0.8rem; }
+.staff-display-btn { background: none; border: none; color: #fff; cursor: pointer; font-size: 0.8rem; padding: 0.3rem 0.55rem; border-radius: 5px; font-family: var(--font-body); }
+.staff-display-btn:hover { background: rgba(255,255,255,0.12); }
+.staff-picker input { padding: 0.35rem 0.55rem; border-radius: 6px; border: 1px solid rgba(255,255,255,0.3); font-size: 0.8rem; width: 130px; font-family: var(--font-body); }
+/* .btn-secondary's default text color (--primary-strong) is the same dark green as the
+   topbar background itself, making "Manage Users"/"Logout" text invisible there (dark-on-dark,
+   only the light border was visible). Light-text override for any .btn used inside the topbar. */
+.topbar .btn { color: #fff; border-color: rgba(255,255,255,0.4); }
+.topbar .btn:hover { background: rgba(255,255,255,0.14); border-color: rgba(255,255,255,0.6); color: #fff; }
+
+.patient-context-strip { background: var(--surface); border-bottom: 1px solid var(--border); padding: var(--space-4) var(--space-5); display: flex; align-items: flex-start; gap: var(--space-5); flex-wrap: wrap; }
+.pcs-info { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.82rem; color: var(--ink-muted); }
+.pcs-name { font-family: var(--font-display); font-size: 1.1rem; font-weight: 700; color: var(--primary-strong); }
+.pcs-allergy-flag { display: inline-flex; align-items: center; gap: 0.25rem; background: #fee2e2; color: #991b1b; padding: 0.15rem 0.55rem; border-radius: 10px; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; width: fit-content; }
+.pcs-side { display: flex; flex-direction: column; align-items: flex-end; gap: var(--space-3); margin-left: auto; text-align: right; }
+.pcs-balance { padding: 0.5rem 0.9rem; border-radius: 8px; font-size: 0.85rem; line-height: 1.25; text-align: right; border: 1px solid transparent; }
+.pcs-balance strong { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 1.1rem; }
+.pcs-balance-note { font-style: italic; font-weight: 400; font-size: 0.68rem; }
+/* Three balance states (patient.balance_due is a manually-entered snapshot -- see model comment):
+   due = red/pink, even/no balance = green/light-green, credit/overpayment = amber/orange.
+   The "due" state is deliberately much louder than the other two: this is the state staff must
+   not miss at checkout, so it gets a solid high-contrast fill (not a pale tint), a bold border,
+   a warning icon, and a real pulse -- the other two states stay as calm, low-key tinted boxes
+   since there's nothing urgent to act on when a balance is even or in credit. */
+.pcs-balance-due {
+  background: #dc2626; border-color: #7f1d1d; color: #fff;
+  box-shadow: 0 2px 10px rgba(220,38,38,0.35);
+  font-weight: 600;
+}
+.pcs-balance-due strong { color: #fff; font-size: 1.3rem; }
+.pcs-balance-due .pcs-balance-note { color: #fecaca; font-style: normal; font-weight: 600; }
+.pcs-balance-icon { margin-right: 0.3rem; }
+.pcs-balance-even { background: var(--primary-soft); border-color: #bbf7d0; color: var(--primary-strong); }
+.pcs-balance-even .pcs-balance-note { color: #15803d; }
+.pcs-balance-credit { background: #fffbeb; border-color: #fde68a; color: #92400e; }
+.pcs-balance-credit .pcs-balance-note { color: #b45309; }
+/* Pulse the "balance due" box every second: a brightening color pulse plus a glowing ring and a
+   slight scale bump, not just an opacity fade -- opacity dimming alone was too easy to miss at a
+   glance; this reads as an active alert instead of a passive tint. */
+.pcs-balance-flash { animation: pcsBalancePulse 1s ease-in-out infinite; }
+@keyframes pcsBalancePulse {
+  0%, 100% { background: #dc2626; box-shadow: 0 2px 10px rgba(220,38,38,0.35); transform: scale(1); }
+  50%      { background: #ef4444; box-shadow: 0 0 0 6px rgba(220,38,38,0.28), 0 2px 14px rgba(220,38,38,0.5); transform: scale(1.035); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pcs-balance-flash { animation: none; box-shadow: 0 0 0 3px rgba(220,38,38,0.28), 0 2px 10px rgba(220,38,38,0.35); }
+}
+.pcs-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; justify-content: flex-end; }
+
+@media (max-width: 900px) {
+  .sidebar { position: fixed; top: 0; left: 0; bottom: 0; width: 240px; transform: translateX(-100%); transition: transform 0.2s ease; z-index: 60; }
+  .app-shell.sidebar-mobile-open .sidebar { transform: translateX(0); }
+  .hamburger-btn { display: inline-block; }
+  .sidebar-collapse-btn { display: none; }
+  .sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 55; }
+  .app-shell.sidebar-mobile-open .sidebar-overlay { display: block; }
+  .patient-switcher { width: 130px; }
+}
+@media (max-width: 600px) {
+  .topbar { gap: var(--space-2); padding: 0 0.6rem; }
+  .topbar-brand span.topbar-brand-text { display: none; }
+  .topbar-clock-caption { display: none; }
+  .staff-picker input { width: 90px; }
+  .patient-switcher { width: 88px; }
+  .patient-context-strip { padding: 0.6rem var(--space-4); gap: 0.6rem; }
+  .pcs-side { align-items: flex-start; text-align: left; width: 100%; }
+  .pcs-balance, .pcs-balance-note { text-align: left; }
+  .pcs-actions { width: 100%; justify-content: flex-start; }
+}
+
+/* --- Patient workspace restructure: identity header + secondary in-page sub-nav ---
+   The sub-nav here is a narrower nested nav COLUMN inside the content area (not the
+   global sidebar), visually distinct from it: white/green card styling vs. the
+   sidebar's solid dark-green fill. */
+.pw-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; margin-bottom: var(--space-5); }
+.pw-header-id { display: flex; align-items: center; gap: var(--space-4); min-width: 0; }
+.pw-header-info h1 { margin: 0 0 var(--space-2); font-size: 1.55rem; }
+.pw-header-meta { display: flex; flex-wrap: wrap; gap: 0.35rem var(--space-4); font-size: 0.82rem; color: var(--ink-muted); align-items: center; }
+.pw-header-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; flex-shrink: 0; }
+.patient-workspace { display: flex; gap: var(--space-5); align-items: flex-start; }
+.pw-subnav { width: 210px; flex-shrink: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: var(--space-3); display: flex; flex-direction: column; gap: 0.1rem; position: sticky; top: var(--space-4); }
+.pw-subnav a { padding: 0.45rem 0.65rem; border-radius: 6px; font-size: 0.85rem; color: var(--primary-strong); font-weight: 500; }
+.pw-subnav a:hover { background: var(--primary-soft); text-decoration: none; }
+.pw-subnav a.active { background: var(--primary); color: #fff; }
+.pw-subgroup { display: flex; flex-direction: column; padding-left: 0.9rem; margin-bottom: 0.15rem; border-left: 2px solid var(--border); }
+.pw-subgroup a { font-size: 0.78rem; font-weight: 400; color: var(--ink-muted); padding: 0.3rem 0.6rem; }
+.pw-subgroup a.active { color: #fff; background: var(--primary); }
+.pw-content { flex: 1; min-width: 0; }
+@media (max-width: 900px) {
+  .patient-workspace { flex-direction: column; }
+  .pw-subnav { width: 100%; flex-direction: row; overflow-x: auto; gap: 0.25rem; position: static; white-space: nowrap; }
+  .pw-subnav a { flex-shrink: 0; }
+  .pw-subgroup { flex-direction: row; border-left: none; border-top: none; padding-left: 0; gap: 0.25rem; }
+  .pw-header { flex-direction: column; }
+}
+@media (max-width: 600px) {
+  .pw-header-id { gap: 0.6rem; }
+  .pw-header-info h1 { font-size: 1.2rem; }
+}

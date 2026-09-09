@@ -1,0 +1,9 @@
+{% extends "patients/_workspace.html" %}
+{% block wcontent %}
+<div class="card"><h3>Insurance</h3><dl class="dl-grid">
+  <dt>Insurance Provider</dt><dd>{{ patient.insurance_provider or '—' }}</dd>
+  <dt>Insurance ID</dt><dd>{{ patient.insurance_id or '—' }}</dd>
+</dl>
+<p style="margin-top:1rem"><a href="/patients/{{ patient.id }}/edit" class="btn btn-sm btn-secondary">Edit Insurance</a></p>
+</div>
+{% endblock %}

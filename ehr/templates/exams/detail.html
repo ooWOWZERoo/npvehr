@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Eye Exam &mdash; New Path Vision EHR{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Eye Exam &mdash; {{ exam.exam_date }}</h1>
+  <div style="display:flex;gap:0.5rem">
+    <a href="/patients/{{ exam.patient_id }}" class="btn btn-secondary btn-sm">Patient</a>
+    <a href="/prescriptions/new?patient_id={{ exam.patient_id }}&exam_id={{ exam.id }}" class="btn btn-primary btn-sm">Write Rx</a>
+  </div>
+</div>
+<div class="detail-grid">
+  <div class="card"><h3>Visit Info</h3><dl class="dl-grid">
+    <dt>Patient</dt><dd><a href="/patients/{{ exam.patient_id }}">{{ exam.patient.last_name }}, {{ exam.patient.first_name }}</a></dd>
+    <dt>Provider</dt><dd>Dr. {{ exam.provider.last_name }}</dd>
+    <dt>Date</dt><dd>{{ exam.exam_date }}</dd>
+    <dt>Chief Complaint</dt><dd>{{ exam.chief_complaint or '—' }}</dd>
+    <dt>IOP OD/OS</dt><dd>{{ exam.iop_od or '—' }} / {{ exam.iop_os or '—' }} mmHg</dd>
+    <dt>Cover Test</dt><dd>{{ exam.cover_test or '—' }}</dd>
+    <dt>Dx Codes</dt><dd>{{ exam.diagnosis_codes or '—' }}</dd>
+    <dt>Follow-up</dt><dd>{{ (exam.follow_up_weeks|string + ' weeks') if exam.follow_up_weeks else '—' }}</dd>
+  </dl></div>
+  <div class="card"><h3>Visual Acuity</h3>
+    <div class="table-responsive">
+    <table class="exam-table">
+      <tr><th></th><th>SC</th><th>CC</th></tr>
+      <tr><td>OD</td><td>{{ exam.od_sc or '—' }}</td><td>{{ exam.od_cc or '—' }}</td></tr>
+      <tr><td>OS</td><td>{{ exam.os_sc or '—' }}</td><td>{{ exam.os_cc or '—' }}</td></tr>
+    </table>
+    </div>
+    {% if exam.refractions %}{% set r = exam.refractions[0] %}
+    <h3 style="margin-top:1rem">Manifest Refraction</h3>
+    <div class="table-responsive">
+    <table class="exam-table">
+      <tr><th></th><th>Sph</th><th>Cyl</th><th>Axis</th><th>Add</th><th>VA</th></tr>
+      <tr><td>OD</td>
+        <td>{{ '%+.2f'|format(r.od_sphere) if r.od_sphere is not none else '—' }}</td>
+        <td>{{ '%+.2f'|format(r.od_cylinder) if r.od_cylinder is not none else '—' }}</td>
+        <td>{{ r.od_axis or '—' }}</td>
+        <td>{{ '%+.2f'|format(r.od_add) if r.od_add is not none else '—' }}</td>
+        <td>{{ r.od_va or '—' }}</td>
+      </tr>
+      <tr><td>OS</td>
+        <td>{{ '%+.2f'|format(r.os_sphere) if r.os_sphere is not none else '—' }}</td>
+        <td>{{ '%+.2f'|format(r.os_cylinder) if r.os_cylinder is not none else '—' }}</td>
+        <td>{{ r.os_axis or '—' }}</td>
+        <td>{{ '%+.2f'|format(r.os_add) if r.os_add is not none else '—' }}</td>
+        <td>{{ r.os_va or '—' }}</td>
+      </tr>
+    </table>
+    </div>
+    {% endif %}
+  </div>
+</div>
+<div class="detail-grid" style="margin-top:1rem">
+  <div class="card"><h3>Slit Lamp</h3>
+    <div class="table-responsive">
+    <table class="exam-table">
+      <tr><th></th><th>Lids</th><th>Cornea</th><th>Lens</th></tr>
+      <tr><td>OD</td><td>{{ exam.sl_lids_od or '—' }}</td><td>{{ exam.sl_cornea_od or '—' }}</td><td>{{ exam.sl_lens_od or '—' }}</td></tr>
+      <tr><td>OS</td><td>{{ exam.sl_lids_os or '—' }}</td><td>{{ exam.sl_cornea_os or '—' }}</td><td>{{ exam.sl_lens_os or '—' }}</td></tr>
+    </table>
+    </div>
+  </div>
+  <div class="card"><h3>Fundus</h3>
+    <div class="table-responsive">
+    <table class="exam-table">
+      <tr><th></th><th>Disc</th><th>Macula</th><th>Vessels</th><th>Periphery</th></tr>
+      <tr><td>OD</td><td>{{ exam.fundus_disc_od or '—' }}</td><td>{{ exam.fundus_macula_od or '—' }}</td><td>{{ exam.fundus_vessels_od or '—' }}</td><td>{{ exam.fundus_periphery_od or '—' }}</td></tr>
+      <tr><td>OS</td><td>{{ exam.fundus_disc_os or '—' }}</td><td>{{ exam.fundus_macula_os or '—' }}</td><td>{{ exam.fundus_vessels_os or '—' }}</td><td>{{ exam.fundus_periphery_os or '—' }}</td></tr>
+    </table>
+    </div>
+  </div>
+</div>
+<div class="card" style="margin-top:1rem"><h3>Assessment &amp; Plan</h3>
+  <div class="form-row cols-2">
+    <div><strong>Assessment</strong><p>{{ exam.assessment or '—' }}</p></div>
+    <div><strong>Plan</strong><p>{{ exam.plan or '—' }}</p></div>
+  </div>
+</div>
+{% endblock %}

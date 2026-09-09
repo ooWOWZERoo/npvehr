@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}User Accounts &mdash; New Path Vision EHR{% endblock %}
+{% block content %}
+<h1>User Accounts</h1>
+<p style="color:var(--ink-muted);margin-top:-0.75rem">System Administrator only. Create accounts and activate/deactivate access -- there is no self-service password reset in this pass (see report).</p>
+<div class="form-actions" style="margin-bottom:var(--space-5)">
+  <a href="/admin/users/new" class="btn btn-primary">+ New User</a>
+  <a href="/admin/audit" class="btn btn-secondary">Auth Audit Log</a>
+</div>
+<div class="card">
+  <div class="table-responsive">
+  <table>
+    <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Last Login</th><th>Action</th></tr></thead>
+    <tbody>
+    {% for u in users %}
+      <tr>
+        <td>{{ u.first_name }} {{ u.last_name }}</td>
+        <td>{{ u.email }}</td>
+        <td>{{ ROLE_LABELS.get(u.role, u.role) }}</td>
+        <td>{% if u.active %}<span style="color:var(--primary)">Active</span>{% else %}<span style="color:#991b1b">Deactivated</span>{% endif %}</td>
+        <td>{{ u.last_login_at.strftime('%Y-%m-%d %H:%M') if u.last_login_at else 'Never' }}</td>
+        <td>
+          <form method="post" action="/admin/users/{{ u.id }}/toggle-active" style="display:inline">
+            <button type="submit" class="btn btn-sm btn-secondary">{{ 'Deactivate' if u.active else 'Activate' }}</button>
+          </form>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+{% endblock %}

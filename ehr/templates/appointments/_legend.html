@@ -1,0 +1,30 @@
+<div class="card" style="margin-top:0.75rem">
+  <h3 style="margin-bottom:0.25rem">Legend</h3>
+  <div class="legend" role="list" aria-label="Appointment type color legend">
+    {% for v in legend_types %}
+    <div class="legend-item" role="listitem">
+      <span class="color-swatch" style="background:{{ v.base_color or '#94a3b8' }}"></span>
+      <span>{{ v.calendar_abbreviation }} &ndash; {{ v.display_name }}</span>
+    </div>
+    {% if v.color_rules %}
+    <ul class="legend-rules">
+      {% for r in v.color_rules %}
+      <li><span class="color-swatch" style="background:{{ r.color }}"></span>
+        {{ r.patient_relationship or 'any' }}{% if r.is_follow_up %}, follow-up{% endif %}
+        {% if r.minimum_countable_tests is not none or r.maximum_countable_tests is not none %}
+          , tests {{ r.minimum_countable_tests if r.minimum_countable_tests is not none else '0' }}&ndash;{{ r.maximum_countable_tests if r.maximum_countable_tests is not none else '&infin;' }}
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+    {% endfor %}
+  </div>
+  <div class="legend" aria-label="Status and relationship badge legend">
+    <div class="legend-item"><span class="badge-relationship new">NEW</span> new patient</div>
+    <div class="legend-item"><span class="badge-relationship established">EST</span> established patient</div>
+    {% for s in ['scheduled','checked_in','in_progress','completed','cancelled','no_show'] %}
+    <div class="legend-item"><span class="badge badge-{{ s }}">{{ s.replace('_',' ') }}</span></div>
+    {% endfor %}
+  </div>
+</div>

@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% from "_alert_banner.html" import alert_banner %}
+{% block title %}Daily Closing &mdash; New Path Vision EHR{% endblock %}
+{% block content %}
+<div class="page-header"><h1>Daily Closing</h1></div>
+
+{% if posting_date != today_iso %}
+  {{ alert_banner("Posting date is not today's date. Close prior days before posting new transactions.", "warning") }}
+{% endif %}
+
+<div class="card">
+  <form method="get" action="/store-ops/daily-closing" style="margin-bottom:1rem">
+    <div class="form-row cols-3">
+      <div class="form-group"><label>Posting Date</label><input type="date" name="posting_date" value="{{ posting_date }}" onchange="this.form.submit()"></div>
+      <div class="form-group"><label>Today's Date</label><input type="text" value="{{ today_iso }}" readonly></div>
+    </div>
+  </form>
+
+  <form method="post" action="/store-ops/daily-closing">
+    <input type="hidden" name="posting_date" value="{{ posting_date }}">
+    <div class="table-responsive">
+    <table class="dc-table">
+      <thead><tr>
+        <th>Payment Type</th><th>Calculated</th><th>Actual</th><th>Variance</th><th>Explanation of Variance</th>
+      </tr></thead>
+      <tbody>
+      {% for code, label in payment_types %}
+        {% set existing = by_type.get(code) %}
+        <tr>
+          <td>{{ label }}</td>
+          <td>$0.00</td>
+          <td><input type="number" step="0.01" name="actual_{{ code }}" class="dc-actual"
+                data-row="{{ code }}" value="{{ '%.2f'|format(existing.actual_amount) if existing else '' }}"></td>
+          <td><span class="dc-variance" id="variance_{{ code }}">{{ '%.2f'|format(existing.variance) if existing else '0.00' }}</span></td>
+          <td><input type="text" name="explanation_{{ code }}" value="{{ existing.explanation if existing else '' }}"></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    <p class="placeholder-note">Calculated amounts are fixed at $0.00 &mdash; there is no real transaction
+      ledger yet to compute expected totals against. This will be wired up once billing/POS transactions exist.</p>
+    <div class="form-actions"><button type="submit" class="btn btn-primary">Save Daily Closing</button></div>
+  </form>
+</div>
+
+<div class="card" style="margin-top:1rem">
+  <h2>History</h2>
+  {% if history %}
+  {% for h in history %}
+    <h3 style="margin-top:{{ '0' if loop.first else '1.25rem' }}">{{ h.posting_date }}
+      <span style="font-weight:400;font-size:0.8rem;color:{{ '#b91c1c' if h.total_variance != 0 else '#64748b' }}">
+        (total variance {{ '%+.2f'|format(h.total_variance) }})
+      </span>
+    </h3>
+    <table><thead><tr><th>Payment Type</th><th>Calculated</th><th>Actual</th><th>Variance</th><th>Explanation</th></tr></thead><tbody>
+    {% for r in h.rows %}
+      <tr>
+        <td>{{ payment_labels.get(r.payment_type, r.payment_type) }}</td>
+        <td>${{ '%.2f'|format(r.calculated_amount or 0) }}</td>
+        <td>${{ '%.2f'|format(r.actual_amount or 0) }}</td>
+        <td>{{ '%+.2f'|format(r.variance or 0) }}</td>
+        <td>{{ r.explanation or '—' }}</td>
+      </tr>
+    {% endfor %}
+    </tbody></table>
+  {% endfor %}
+  {% else %}<p style="color:#64748b">No daily closings saved yet.</p>{% endif %}
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+  document.querySelectorAll('.dc-actual').forEach(function (input) {
+    input.addEventListener('input', function () {
+      var row = input.getAttribute('data-row');
+      var actual = parseFloat(input.value) || 0;
+      var calculated = 0; // placeholder pending a real transaction ledger
+      var variance = actual - calculated;
+      var el = document.getElementById('variance_' + row);
+      el.textContent = variance.toFixed(2);
+      el.className = 'dc-variance' + (variance < 0 ? ' negative' : (variance > 0 ? ' positive' : ''));
+    });
+  });
+</script>
+{% endblock %}

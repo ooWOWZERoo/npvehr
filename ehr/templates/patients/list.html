@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Patients &mdash; New Path Vision EHR{% endblock %}
+{% block content %}
+<div class="page-header"><h1>Patients</h1><a href="/patients/new" class="btn btn-primary">+ New Patient</a></div>
+<div class="card" style="margin-bottom:1rem">
+  <form method="get" class="patient-search-form">
+    <div class="form-row cols-4">
+      <div class="form-group"><label>Last Name</label><input type="text" name="last_name" value="{{ last_name }}"></div>
+      <div class="form-group"><label>First Name</label><input type="text" name="first_name" value="{{ first_name }}"></div>
+      <div class="form-group"><label>Date of Birth</label><input type="text" name="dob" placeholder="YYYY-MM-DD" value="{{ dob }}"></div>
+      <div class="form-group"><label>Phone</label><input type="text" name="phone" value="{{ phone }}"></div>
+    </div>
+    <div class="form-row cols-4">
+      <div class="form-group"><label>MRN</label><input type="text" name="mrn" value="{{ mrn }}"></div>
+    </div>
+    <!--
+      "Show Inactive" was deliberately left OFF this form rather than added as a disabled,
+      tooltipped checkbox: this app's Patient model has no active/inactive status field at
+      all yet, and a checkbox that looks clickable but silently does nothing tends to read
+      as a bug rather than an honest placeholder (unlike e.g. the Daily Closing "Calculated"
+      column, which is a value that legitimately reads as $0.00 either way). When a real
+      patient-status field exists, add the filter here alongside a functioning checkbox.
+    -->
+    <div class="form-actions" style="margin-top:0">
+      <button type="submit" class="btn btn-secondary">Search</button>
+      {% if last_name or first_name or dob or phone or mrn or q %}<a href="/patients/" class="btn btn-secondary">Clear</a>{% endif %}
+    </div>
+  </form>
+</div>
+<div class="card">
+  <div class="table-responsive">
+  <table><thead><tr><th>Name</th><th>MRN</th><th>Age</th><th>DOB</th><th>Phone</th><th>Insurance</th><th>Last Exam</th><th></th></tr></thead><tbody>
+  {% for p in patients %}
+    <tr>
+      <td>
+        <a href="/patients/{{ p.id }}" class="patient-name-cell">
+          {% if p.photo_path %}
+            <img src="{{ p.photo_path }}" alt="" class="patient-thumb">
+          {% else %}
+            <span class="patient-thumb-placeholder">{{ p.first_name[0] }}{{ p.last_name[0] }}</span>
+          {% endif %}
+          {{ p.last_name }}, {{ p.first_name }}{% if p.preferred_name %} "{{ p.preferred_name }}"{% endif %}
+        </a>
+      </td>
+      <td>{{ p.mrn or '—' }}</td>
+      <td>{{ ages.get(p.id) if ages.get(p.id) is not none else '—' }}</td>
+      <td>{{ p.date_of_birth or '—' }}</td>
+      <td>{{ p.phone or '—' }}</td>
+      <td>{{ p.insurance_provider or '—' }}</td>
+      <td>{{ last_exam_dates.get(p.id) or 'No exams yet' }}</td>
+      <td><a href="/appointments/new?patient_id={{ p.id }}" class="btn btn-sm btn-secondary">Schedule</a></td>
+    </tr>
+  {% else %}
+    <tr><td colspan="8" style="text-align:center;color:#64748b">No patients found.</td></tr>
+  {% endfor %}
+  </tbody></table>
+  </div>
+</div>
+{% endblock %}

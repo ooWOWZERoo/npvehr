@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit' if type_ else 'New' }} Appointment Type &mdash; Admin{% endblock %}
+{% block content %}
+<div class="page-header"><h1>{{ 'Edit / Publish New Version: ' + version.display_name if type_ else 'New Appointment Type' }}</h1>
+  <a href="/admin/scheduling/appointment-types" class="btn btn-secondary">Cancel</a></div>
+{% include "admin/scheduling/_nav.html" %}
+<div class="card form-card">
+  <form method="post" action="{{ '/admin/scheduling/appointment-types/' + type_.id|string + '/versions' if type_ else '/admin/scheduling/appointment-types/new' }}">
+    <div class="section-title">Identity &amp; Service Line</div>
+    <div class="form-row cols-3">
+      {% if not type_ %}<div class="form-group"><label>Stable Code* (immutable once used)</label><input name="code" required placeholder="e.g. NEW_TEST_TYPE"></div>{% endif %}
+      <div class="form-group"><label>Internal Name*</label><input name="internal_name" required value="{{ version.internal_name if version else '' }}"></div>
+      <div class="form-group"><label>Display Name*</label><input name="display_name" required value="{{ version.display_name if version else '' }}"></div>
+    </div>
+    <div class="form-row cols-3">
+      <div class="form-group"><label>Calendar Abbreviation* (2-8 chars)</label><input name="calendar_abbreviation" required minlength="2" maxlength="8" value="{{ version.calendar_abbreviation if version else '' }}"></div>
+      <div class="form-group"><label>Service Line*</label>
+        <select name="service_line" required>
+          {% for line in ['Vision','Medical Eye Care','Dry Eye','Contact Lens','Diagnostic Testing'] %}
+          <option value="{{ line }}" {{ 'selected' if version and version.service_line == line }}>{{ line }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group"><label>Display Order</label><input name="display_order" type="number" value="{{ version.display_order if version else 100 }}"></div>
+    </div>
+    <div class="form-group"><label>Description</label><textarea name="description">{{ version.description if version else '' }}</textarea></div>
+
+    <div class="section-title">Patient Eligibility &amp; Duration (spec 10, 11)</div>
+    <div class="form-row cols-2">
+      <div class="form-group checkbox-row"><input type="checkbox" name="allows_new" value="true" id="allows_new" {{ 'checked' if not version or version.allows_new }}><label for="allows_new" style="margin:0">Allow New Patients</label></div>
+      <div class="form-group checkbox-row"><input type="checkbox" name="allows_established" value="true" id="allows_established" {{ 'checked' if not version or version.allows_established }}><label for="allows_established" style="margin:0">Allow Established Patients</label></div>
+    </div>
+    <div class="form-row cols-2">
+      <div class="form-group"><label>New-Patient Duration (min, multiple of 5)</label><input name="new_duration_minutes" type="number" step="5" value="{{ version.new_duration_minutes if version else '' }}"></div>
+      <div class="form-group"><label>Established-Patient Duration (min, multiple of 5)</label><input name="established_duration_minutes" type="number" step="5" value="{{ version.established_duration_minutes if version else '' }}"></div>
+    </div>
+
+    <div class="section-title">Buffers &amp; Arrival</div>
+    <div class="form-row cols-3">
+      <div class="form-group"><label>Buffer Before (min)</label><input name="buffer_before_minutes" type="number" value="{{ version.buffer_before_minutes if version else 0 }}"></div>
+      <div class="form-group"><label>Buffer After (min)</label><input name="buffer_after_minutes" type="number" value="{{ version.buffer_after_minutes if version else 0 }}"></div>
+      <div class="form-group"><label>Arrival Lead Time (min)</label><input name="arrival_lead_minutes" type="number" value="{{ version.arrival_lead_minutes if version else 0 }}"></div>
+    </div>
+
+    <div class="section-title">Base Color (spec 9.2) &mdash; required before activation</div>
+    <div class="form-row cols-2">
+      <div class="form-group"><label>Base Color (hex)</label><input name="base_color" type="text" placeholder="#0F766E" value="{{ version.base_color if version else '' }}"></div>
+      <div class="form-group checkbox-row" style="align-items:flex-end;padding-bottom:0.5rem"><input type="checkbox" name="active" value="true" id="active" {{ 'checked' if version and version.active }}><label for="active" style="margin:0">Active (bookable)</label></div>
+    </div>
+    <p style="font-size:0.8rem;color:#64748b">
+      Conditional color rules (spec 9.3/9.5, e.g. Medical Eye Evaluation's new/follow-up/test-count precedence)
+      are seeded automatically for the system catalog and carried forward on republish; a dedicated
+      rule-builder UI is deferred (see implementation report) &mdash; edit AppointmentTypeColorRule rows directly for now.
+    </p>
+
+    {% if type_ %}
+    <div class="section-title">Publish New Version</div>
+    <div class="form-group"><label>Change Reason* (required to publish, spec 17.4)</label><input name="change_reason" required placeholder="Why is this version being published?"></div>
+    <p style="font-size:0.8rem;color:#64748b">Publishing creates a new immutable version. Previously booked appointments keep referencing the version active when they were booked (spec 3.22-3.24) &mdash; nothing here rewrites them.</p>
+    {% endif %}
+    <div class="form-actions"><button type="submit" class="btn btn-primary">{{ 'Publish New Version' if type_ else 'Create Appointment Type' }}</button></div>
+  </form>
+</div>
+{% endblock %}

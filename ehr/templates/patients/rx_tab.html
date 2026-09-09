@@ -1,0 +1,21 @@
+{% extends "patients/_workspace.html" %}
+{% block wcontent %}
+<div class="card">
+  <div class="page-header"><h2 style="margin:0">Rx{% if rx_kind_label %} &mdash; {{ rx_kind_label }}{% endif %}</h2>
+    <a href="/prescriptions/new?patient_id={{ patient.id }}" class="btn btn-primary btn-sm">+ New Rx</a></div>
+  {% if prescriptions %}
+  <div class="table-responsive">
+  <table><thead><tr><th>Date</th><th>Type</th><th>OD</th><th>OS</th><th></th></tr></thead><tbody>
+  {% for rx in prescriptions %}
+    <tr>
+      <td>{{ rx.issue_date or '—' }}</td><td>{{ rx.rx_type }}</td>
+      <td>{% if rx.od_sphere is not none %}{{ '%+.2f'|format(rx.od_sphere) }}{% if rx.od_cylinder %} / {{ '%+.2f'|format(rx.od_cylinder) }} x{{ rx.od_axis }}{% endif %}{% else %}&mdash;{% endif %}</td>
+      <td>{% if rx.os_sphere is not none %}{{ '%+.2f'|format(rx.os_sphere) }}{% if rx.os_cylinder %} / {{ '%+.2f'|format(rx.os_cylinder) }} x{{ rx.os_axis }}{% endif %}{% else %}&mdash;{% endif %}</td>
+      <td><a href="/prescriptions/{{ rx.id }}" class="btn btn-sm btn-secondary">View</a> <a href="/prescriptions/{{ rx.id }}/print" class="btn btn-sm btn-secondary">Print</a></td>
+    </tr>
+  {% endfor %}
+  </tbody></table>
+  </div>
+  {% else %}<p style="color:#64748b">No prescriptions{% if rx_kind_label %} of this type{% endif %} recorded.</p>{% endif %}
+</div>
+{% endblock %}

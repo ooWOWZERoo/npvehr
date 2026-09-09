@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}{{ type_.code }} History &mdash; Admin{% endblock %}
+{% block content %}
+<div class="page-header"><h1>Version &amp; Audit History &mdash; {{ type_.code }}</h1><a href="/admin/scheduling/appointment-types/{{ type_.id }}" class="btn btn-secondary">Back</a></div>
+{% include "admin/scheduling/_nav.html" %}
+<div class="card"><h3>Versions</h3>
+  <table><thead><tr><th>Version</th><th>Display Name</th><th>Active</th><th>Effective From</th><th>Change Reason</th></tr></thead><tbody>
+  {% for v in versions %}
+    <tr><td>v{{ v.version_number }}</td><td>{{ v.display_name }}</td><td>{{ 'Yes' if v.active else 'No' }}</td><td>{{ v.effective_from }}</td><td>{{ v.change_reason or '—' }}</td></tr>
+  {% endfor %}
+  </tbody></table>
+</div>
+<div class="card" style="margin-top:1rem"><h3>Audit Events</h3>
+  <table><thead><tr><th>When</th><th>Event</th><th>Version</th><th>Reason</th></tr></thead><tbody>
+  {% for e in events %}
+    <tr><td>{{ e.occurred_at.strftime('%m/%d/%Y %I:%M %p') }}</td><td>{{ e.event_type }}</td><td>{{ 'v'+e.appointment_type_version_id|string if e.appointment_type_version_id else '—' }}</td><td>{{ e.change_reason or '—' }}</td></tr>
+  {% else %}<tr><td colspan="4" style="text-align:center;color:#64748b">No events.</td></tr>
+  {% endfor %}
+  </tbody></table>
+</div>
+{% endblock %}

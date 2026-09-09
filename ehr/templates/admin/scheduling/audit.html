@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Scheduling Audit &mdash; Admin{% endblock %}
+{% block content %}
+<div class="page-header"><h1>Scheduling Administration</h1></div>
+{% include "admin/scheduling/_nav.html" %}
+<div class="card"><h3>Appointment Audit Events (most recent 100)</h3>
+  <div class="table-responsive"><table><thead><tr><th>When</th><th>Appt</th><th>Event</th><th>Field</th><th>Change</th><th>Reason</th></tr></thead><tbody>
+  {% for e in appt_events %}
+    <tr><td>{{ e.occurred_at.strftime('%m/%d %I:%M %p') }}</td><td><a href="/appointments/{{ e.appointment_id }}">#{{ e.appointment_id }}</a></td>
+    <td>{{ e.event_type }}</td><td>{{ e.field_name or '—' }}</td><td>{{ e.old_value or '—' }} &rarr; {{ e.new_value or '—' }}</td><td>{{ e.reason or '—' }}</td></tr>
+  {% else %}<tr><td colspan="6" style="text-align:center;color:#64748b">No appointment audit events yet.</td></tr>
+  {% endfor %}
+  </tbody></table></div>
+</div>
+<div class="card" style="margin-top:1rem"><h3>Appointment-Type Audit Events (most recent 100)</h3>
+  <div class="table-responsive"><table><thead><tr><th>When</th><th>Type</th><th>Version</th><th>Event</th><th>Reason</th></tr></thead><tbody>
+  {% for e in type_events %}
+    <tr><td>{{ e.occurred_at.strftime('%m/%d %I:%M %p') }}</td><td><a href="/admin/scheduling/appointment-types/{{ e.appointment_type_id }}">#{{ e.appointment_type_id }}</a></td>
+    <td>{{ 'v'+e.appointment_type_version_id|string if e.appointment_type_version_id else '—' }}</td><td>{{ e.event_type }}</td><td>{{ e.change_reason or '—' }}</td></tr>
+  {% else %}<tr><td colspan="5" style="text-align:center;color:#64748b">No appointment-type audit events yet.</td></tr>
+  {% endfor %}
+  </tbody></table></div>
+</div>
+{% endblock %}

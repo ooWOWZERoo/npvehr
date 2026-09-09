@@ -1,0 +1,26 @@
+{% extends "patients/_workspace.html" %}
+{% block wcontent %}
+<div class="detail-grid">
+  <div class="card"><h3>Demographics</h3><dl class="dl-grid">
+    <dt>First Name</dt><dd>{{ patient.first_name }}</dd>
+    <dt>Last Name</dt><dd>{{ patient.last_name }}</dd>
+    <dt>Preferred Name</dt><dd>{{ patient.preferred_name or '—' }}</dd>
+    <dt>MRN</dt><dd>{{ patient.mrn or '—' }}</dd>
+    <dt>DOB</dt><dd>{{ patient.date_of_birth or '—' }}</dd>
+    <dt>Gender</dt><dd>{{ patient.gender or '—' }}</dd>
+    <dt>Phone</dt><dd>{{ patient.phone or '—' }}</dd>
+    <dt>Email</dt><dd>{{ patient.email or '—' }}</dd>
+    <dt>Address</dt><dd>{{ [patient.address, patient.city, patient.state, patient.zip_code] | select | join(', ') or '—' }}</dd>
+  </dl></div>
+  <div class="card"><h3>Emergency Contact</h3><dl class="dl-grid">
+    <dt>Name</dt><dd>{{ patient.emergency_contact_name or '—' }}</dd>
+    <dt>Phone</dt><dd>{{ patient.emergency_contact_phone or '—' }}</dd>
+  </dl></div>
+  <div class="card"><h3>Medical History</h3><dl class="dl-grid">
+    <dt>Allergies</dt><dd>{{ patient.allergies or 'NKDA' }}</dd>
+    <dt>Medical Hx</dt><dd>{{ patient.medical_history or '—' }}</dd>
+    <dt>Ocular Hx</dt><dd>{{ patient.ocular_history or '—' }}</dd>
+    <dt>Family Ocular Hx</dt><dd>{{ patient.family_ocular_history or '—' }}</dd>
+  </dl></div>
+</div>
+{% endblock %}

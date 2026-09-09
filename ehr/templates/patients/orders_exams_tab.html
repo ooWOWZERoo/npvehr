@@ -1,0 +1,24 @@
+{% extends "patients/_workspace.html" %}
+{% block wcontent %}
+<div class="card">
+  <p class="placeholder-note" style="margin-top:0">
+    Encompass's "Material Orders &raquo; Exams" most plausibly refers to exam-related billing/order
+    records, which this app does not model -- there is no billing/order-line concept for exams here,
+    only the clinical exam chart below. Rather than fabricate a billing screen, this shows the real
+    exam history for this patient (see code comment in ehr/routes/patients.py).
+  </p>
+  <h2>Exams</h2>
+  {% if exams %}
+  <div class="table-responsive">
+  <table><thead><tr><th>Date</th><th>Chief Complaint</th><th>Dx</th><th></th></tr></thead><tbody>
+  {% for e in exams %}
+    <tr>
+      <td>{{ e.exam_date }}</td><td>{{ e.chief_complaint or '—' }}</td><td>{{ e.diagnosis_codes or '—' }}</td>
+      <td><a href="/exams/{{ e.id }}" class="btn btn-sm btn-secondary">View</a></td>
+    </tr>
+  {% endfor %}
+  </tbody></table>
+  </div>
+  {% else %}<p style="color:#64748b">No exams recorded.</p>{% endif %}
+</div>
+{% endblock %}

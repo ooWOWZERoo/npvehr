@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}{{ type_.code }} &mdash; Admin{% endblock %}
+{% block content %}
+<div class="page-header"><h1>{{ version.display_name if version else type_.code }}</h1>
+  <div style="display:flex;gap:0.5rem">
+    <a href="/admin/scheduling/appointment-types/{{ type_.id }}/edit" class="btn btn-secondary btn-sm">Edit / Publish Version</a>
+    <a href="/admin/scheduling/appointment-types/{{ type_.id }}/history" class="btn btn-secondary btn-sm">History</a>
+    <a href="/admin/scheduling/appointment-types" class="btn btn-secondary btn-sm">Back</a>
+  </div>
+</div>
+{% include "admin/scheduling/_nav.html" %}
+<div class="detail-grid">
+  <div class="card"><h3>Configuration (v{{ version.version_number if version else '?' }})</h3>
+    <dl class="dl-grid">
+      <dt>Code</dt><dd>{{ type_.code }}</dd>
+      <dt>Service Line</dt><dd>{{ version.service_line if version else '—' }}</dd>
+      <dt>New Eligible</dt><dd>{{ 'Yes, ' + version.new_duration_minutes|string + ' min' if version and version.allows_new and version.new_duration_minutes else ('Yes' if version and version.allows_new else 'No') }}</dd>
+      <dt>Established Eligible</dt><dd>{{ 'Yes, ' + version.established_duration_minutes|string + ' min' if version and version.allows_established and version.established_duration_minutes else ('Yes' if version and version.allows_established else 'No') }}</dd>
+      <dt>Buffers</dt><dd>{{ version.buffer_before_minutes if version else 0 }} before / {{ version.buffer_after_minutes if version else 0 }} after</dd>
+      <dt>Base Color</dt><dd>{% if version and version.base_color %}<span class="color-swatch" style="background:{{ version.base_color }}"></span> {{ version.base_color }}{% else %}<span style="color:#b91c1c">unset</span>{% endif %}</dd>
+      <dt>Active</dt><dd>{{ 'Yes' if version and version.active else 'No' }}</dd>
+    </dl>
+  </div>
+  <div class="card"><h3>Color Preview (spec 17.3)</h3>
+    {% if previews %}
+    <table><thead><tr><th>Relationship</th><th>Follow-up</th><th>Tests</th><th>Color</th><th>Reason</th></tr></thead><tbody>
+    {% for p in previews %}
+      <tr><td>{{ p.relationship }}</td><td>{{ 'Yes' if p.is_follow_up else 'No' }}</td><td>{{ p.count }}</td>
+      <td><span class="color-swatch" style="background:{{ p.color }}"></span> {{ p.color }}</td><td>{{ p.reason }}</td></tr>
+    {% endfor %}
+    </tbody></table>
+    {% else %}<p style="color:#64748b">No eligible relationships to preview.</p>{% endif %}
+  </div>
+</div>
+{% endblock %}

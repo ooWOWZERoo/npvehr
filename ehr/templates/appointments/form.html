@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}New Appointment &mdash; New Path Vision EHR{% endblock %}
+{% block content %}
+<div class="page-header"><h1>New Appointment</h1><a href="/appointments/" class="btn btn-secondary">Cancel</a></div>
+{% if error %}<div class="alert alert-error" role="alert">{{ error }}</div>{% endif %}
+<div class="card form-card">
+  <form method="post" action="/appointments/new">
+    <div class="form-row cols-2">
+      <div class="form-group"><label for="patient_id">Patient*</label>
+        <select id="patient_id" name="patient_id" required onchange="updateSuggestion()">
+          {% for p in patients %}<option value="{{ p.id }}" {{ 'selected' if (posted.patient_id or selected_patient_id) == p.id }} data-suggested="">{{ p.last_name }}, {{ p.first_name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group"><label for="provider_id">Provider*</label>
+        <select id="provider_id" name="provider_id" required>
+          {% for p in providers %}<option value="{{ p.id }}" {{ 'selected' if posted.provider_id == p.id }}>Dr. {{ p.last_name }}</option>{% endfor %}
+        </select>
+      </div>
+    </div>
+    <div class="form-row cols-2">
+      <div class="form-group"><label for="scheduled_at">Date &amp; Time*</label>
+        <input id="scheduled_at" name="scheduled_at" type="datetime-local" required
+               value="{{ posted.scheduled_at or ((prefill_date + 'T09:00') if prefill_date else '') }}" onchange="updateSuggestion()"></div>
+      <div class="form-group"><label>Reason</label><input name="reason" placeholder="Annual exam&hellip;" value="{{ posted.reason or '' }}"></div>
+    </div>
+
+    <div class="section-title">Patient Relationship (spec 10)</div>
+    <p style="font-size:0.85rem;color:#64748b;margin-top:-0.5rem">
+      Suggested: <strong id="suggested-label">{{ (suggested_relationship or 'established')|upper }}</strong>
+      (established if an EyeExam predates this visit; otherwise new). Staff must confirm or override with a reason.
+    </p>
+    <div class="form-row cols-2">
+      <div class="form-group"><label for="relationship">Patient Relationship*</label>
+        <select id="relationship" name="relationship" required onchange="onRelationshipChange()">
+          <option value="new" {{ 'selected' if (posted.relationship or suggested_relationship) == 'new' }}>New</option>
+          <option value="established" {{ 'selected' if (posted.relationship or suggested_relationship) == 'established' }}>Established</option>
+        </select>
+        <input type="hidden" id="relationship_source" name="relationship_source" value="automatic">
+      </div>
+      <div class="form-group"><label for="relationship_override_reason">Override Reason (required if changed from suggestion)</label>
+        <input id="relationship_override_reason" name="relationship_override_reason" placeholder="Reason for overriding suggested classification">
+      </div>
+    </div>
+
+    <div class="section-title">Appointment Type &amp; Color (spec 8-9)</div>
+    <div class="form-row cols-2">
+      <div class="form-group"><label for="appointment_type_version_id">Appointment Type*</label>
+        <select id="appointment_type_version_id" name="appointment_type_version_id" required onchange="onTypeChange()">
+          {% for v in types %}
+          <option value="{{ v.id }}" data-allows-new="{{ 1 if v.allows_new else 0 }}" data-allows-established="{{ 1 if v.allows_established else 0 }}"
+            {{ 'selected' if posted.appointment_type_version_id == v.id }}>{{ v.display_name }} ({{ v.calendar_abbreviation }})</option>
+          {% endfor %}
+        </select>
+        <div id="eligibility-note" style="font-size:0.78rem;color:#b91c1c;margin-top:0.3rem"></div>
+      </div>
+      <div class="form-group checkbox-row" style="align-items:flex-end;padding-bottom:0.5rem">
+        <input type="checkbox" id="is_follow_up" name="is_follow_up" value="true" {{ 'checked' if posted.is_follow_up }}>
+        <label for="is_follow_up" style="margin:0">Follow-up visit (affects Medical Eye Evaluation color)</label>
+      </div>
+    </div>
+
+    <div class="section-title">Scheduled Tests (spec 13)</div>
+    <div class="test-chip-list">
+      {% for t in tests %}
+      <label class="test-chip"><input type="checkbox" name="test_ids" value="{{ t.id }}" {{ 'checked' if t.id in (posted.test_ids or []) }}> {{ t.calendar_abbreviation }}</label>
+      {% endfor %}
+    </div>
+
+    <div class="section-title">Overrides (require a reason; spec 11.4, 12.4)</div>
+    <div class="form-row cols-2">
+      <div class="form-group"><label>Duration Override (minutes, multiple of 5)</label><input name="duration_override" type="number" step="5" min="5" max="480" placeholder="Leave blank to use type default"></div>
+      <div class="form-group"><label>Duration Override Reason</label><input name="duration_override_reason"></div>
+    </div>
+    <div class="form-row cols-2">
+      <div class="form-group checkbox-row"><input type="checkbox" name="conflict_override" value="true" id="conflict_override"><label for="conflict_override" style="margin:0">Override conflict (approved overbook)</label></div>
+      <div class="form-group"><label>Conflict Override Reason</label><input name="conflict_override_reason"></div>
+    </div>
+    <div class="form-group"><label>Notes</label><textarea name="notes">{{ posted.notes or '' }}</textarea></div>
+    <div class="form-actions"><button type="submit" class="btn btn-primary">Schedule Appointment</button></div>
+  </form>
+</div>
+<script>
+function onRelationshipChange(){
+  document.getElementById('relationship_source').value = 'manual_override';
+}
+function updateSuggestion(){ /* suggestion is computed server-side on load; changing patient/date requires reload for a fresh suggestion */ }
+function onTypeChange(){
+  var sel = document.getElementById('appointment_type_version_id');
+  var opt = sel.options[sel.selectedIndex];
+  var rel = document.getElementById('relationship').value;
+  var note = document.getElementById('eligibility-note');
+  var allowsNew = opt.getAttribute('data-allows-new') === '1';
+  var allowsEst = opt.getAttribute('data-allows-established') === '1';
+  if ((rel === 'new' && !allowsNew) || (rel === 'established' && !allowsEst)) {
+    note.textContent = 'This appointment type is not available for ' + rel + ' patients. The server will reject this combination.';
+  } else {
+    note.textContent = '';
+  }
+}
+document.getElementById('relationship').addEventListener('change', onTypeChange);
+onTypeChange();
+</script>
+{% endblock %}

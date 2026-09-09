@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Diagnostic Tests &mdash; Admin{% endblock %}
+{% block content %}
+<div class="page-header"><h1>Scheduling Administration</h1></div>
+{% include "admin/scheduling/_nav.html" %}
+<div class="card form-card"><h3>Add Diagnostic Test</h3>
+  <form method="post" action="/admin/scheduling/tests/new">
+    <div class="form-row cols-4">
+      <div class="form-group"><label>Code*</label><input name="code" required></div>
+      <div class="form-group"><label>Display Name*</label><input name="display_name" required></div>
+      <div class="form-group"><label>Abbreviation*</label><input name="calendar_abbreviation" required maxlength="8"></div>
+      <div class="form-group"><label>Default Duration (min)</label><input name="default_duration_minutes" type="number"></div>
+    </div>
+    <div class="checkbox-row" style="margin-bottom:1rem"><input type="checkbox" name="counts_toward_color" value="true" id="ctc" checked><label for="ctc">Counts toward medical color rules</label></div>
+    <button type="submit" class="btn btn-primary">Add Test</button>
+  </form>
+</div>
+<div class="card" style="margin-top:1rem">
+  <table><thead><tr><th>Order</th><th>Code</th><th>Name</th><th>Abbrev</th><th>Counts Toward Color</th><th>Active</th><th></th></tr></thead><tbody>
+  {% for t in tests %}
+    <tr><td>{{ t.display_order }}</td><td>{{ t.code }}</td><td>{{ t.display_name }}</td><td>{{ t.calendar_abbreviation }}</td>
+    <td>{{ 'Yes' if t.counts_toward_color else 'No' }}</td>
+    <td><span class="badge {{ 'badge-completed' if t.active else 'badge-cancelled' }}">{{ 'Active' if t.active else 'Inactive' }}</span></td>
+    <td><form method="post" action="/admin/scheduling/tests/{{ t.id }}/toggle"><button class="btn btn-sm btn-secondary" type="submit">{{ 'Deactivate' if t.active else 'Activate' }}</button></form></td></tr>
+  {% endfor %}
+  </tbody></table>
+</div>
+{% endblock %}

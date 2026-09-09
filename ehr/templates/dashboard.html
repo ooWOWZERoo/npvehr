@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% from "_alert_banner.html" import alert_banner %}
+{% block title %}Dashboard &mdash; New Path Vision EHR{% endblock %}
+{% block content %}
+<h1>Dashboard</h1>
+{% if overdue_scheduled_count %}
+  {{ alert_banner(overdue_scheduled_count|string + " appointment(s) from earlier today are still marked Scheduled — check them in or update their status.", "info") }}
+{% endif %}
+<div class="stats-grid">
+  <div class="card"><div class="card-title">Patients</div><div class="card-value">{{ total_patients }}</div></div>
+  <div class="card"><div class="card-title">Appointments</div><div class="card-value">{{ total_appointments }}</div></div>
+  <div class="card"><div class="card-title">Eye Exams</div><div class="card-value">{{ total_exams }}</div></div>
+  <div class="card"><div class="card-title">Prescriptions</div><div class="card-value">{{ total_rx }}</div></div>
+</div>
+<div class="dashboard-grid">
+  <div class="card">
+    <h2>Upcoming Appointments</h2>
+    {% if upcoming %}
+    <table><thead><tr><th>Time</th><th>Patient</th><th>Reason</th></tr></thead><tbody>
+    {% for a in upcoming %}
+      <tr>
+        <td>{{ a.scheduled_at.strftime('%m/%d %I:%M %p') }}</td>
+        <td><a href="/patients/{{ a.patient_id }}">{{ a.patient.last_name }}, {{ a.patient.first_name }}</a></td>
+        <td>{{ a.reason or '—' }}</td>
+      </tr>
+    {% endfor %}
+    </tbody></table>
+    {% else %}<p style="color:#64748b">No upcoming appointments.</p>{% endif %}
+  </div>
+  <div class="card">
+    <h2>Recent Patients</h2>
+    {% if recent_patients %}
+    <table><thead><tr><th>Name</th><th>DOB</th><th>Phone</th></tr></thead><tbody>
+    {% for p in recent_patients %}
+      <tr>
+        <td><a href="/patients/{{ p.id }}">{{ p.last_name }}, {{ p.first_name }}</a></td>
+        <td>{{ p.date_of_birth or '—' }}</td>
+        <td>{{ p.phone or '—' }}</td>
+      </tr>
+    {% endfor %}
+    </tbody></table>
+    {% else %}<p style="color:#64748b">No patients yet.</p>{% endif %}
+  </div>
+</div>
+{% endblock %}

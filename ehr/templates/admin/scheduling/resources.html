@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Resources &mdash; Admin{% endblock %}
+{% block content %}
+<div class="page-header"><h1>Scheduling Administration</h1></div>
+{% include "admin/scheduling/_nav.html" %}
+<div class="card form-card"><h3>Add Resource</h3>
+  <form method="post" action="/admin/scheduling/resources/new">
+    <div class="form-row cols-4">
+      <div class="form-group"><label>Code*</label><input name="code" required></div>
+      <div class="form-group"><label>Display Name*</label><input name="display_name" required></div>
+      <div class="form-group"><label>Class*</label>
+        <select name="resource_class" required>
+          {% for c in ['provider','technician','exam_lane','room','device','other'] %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group checkbox-row" style="align-items:flex-end;padding-bottom:0.5rem"><input type="checkbox" name="exclusive" value="true" checked id="ex"><label for="ex">Exclusive</label></div>
+    </div>
+    <button type="submit" class="btn btn-primary">Add Resource</button>
+  </form>
+  <p style="font-size:0.8rem;color:#64748b;margin-top:0.75rem">
+    Only provider conflicts are enforced against live bookings in this release (spec 12.1 scoping note);
+    the schema here supports technicians, exam lanes, rooms, and devices without redesign for a future pass.
+  </p>
+</div>
+<div class="card" style="margin-top:1rem">
+  <table><thead><tr><th>Code</th><th>Name</th><th>Class</th><th>Exclusive</th><th>Active</th></tr></thead><tbody>
+  {% for r in resources %}
+    <tr><td>{{ r.code }}</td><td>{{ r.display_name }}</td><td>{{ r.resource_class }}</td><td>{{ 'Yes' if r.exclusive else 'No' }}</td><td>{{ 'Yes' if r.active else 'No' }}</td></tr>
+  {% else %}<tr><td colspan="5" style="text-align:center;color:#64748b">No resources defined yet.</td></tr>
+  {% endfor %}
+  </tbody></table>
+</div>
+{% endblock %}

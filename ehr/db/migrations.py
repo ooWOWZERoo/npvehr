@@ -1,0 +1,525 @@
+"""Lightweight, idempotent, versioned migration runner.
+
+Alembic is intentionally not used here -- this whole application is a single
+self-contained script, and a full migration framework would be disproportionate.
+Instead each migration is a small Python function that:
+  1. Checks current schema state via sqlite_master / PRAGMA table_info.
+  2. Applies raw ALTER TABLE / CREATE TABLE / data SQL only if not already applied.
+  3. Is safe to run every time the app starts (idempotent), and is recorded by id
+     in the `schema_migrations` table so it never re-runs.
+
+Run order: add columns to existing tables -> create_all() for brand-new tables
+(called by the caller in between) -> data seed migrations -> legacy backfill.
+"""
+from datetime import datetime
+from sqlalchemy import text
+
+def _ensure_migrations_table(conn):
+    conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS schema_migrations (
+            id TEXT PRIMARY KEY,
+            applied_at TEXT
+        )
+    """))
+
+def _applied(conn, migration_id: str) -> bool:
+    row = conn.execute(text("SELECT 1 FROM schema_migrations WHERE id = :id"), {"id": migration_id}).fetchone()
+    return row is not None
+
+def _mark_applied(conn, migration_id: str):
+    conn.execute(text("INSERT INTO schema_migrations (id, applied_at) VALUES (:id, :ts)"),
+                 {"id": migration_id, "ts": datetime.utcnow().isoformat()})
+
+def _table_exists(conn, table_name: str) -> bool:
+    row = conn.execute(text("SELECT name FROM sqlite_master WHERE type='table' AND name=:n"),
+                        {"n": table_name}).fetchone()
+    return row is not None
+
+def _existing_columns(conn, table_name: str):
+    rows = conn.execute(text(f"PRAGMA table_info({table_name})")).fetchall()
+    return {r[1] for r in rows}  # r[1] = column name
+
+def _add_column_if_missing(conn, table_name: str, column_name: str, ddl_type_and_default: str):
+    cols = _existing_columns(conn, table_name)
+    if column_name not in cols:
+        conn.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {ddl_type_and_default}"))
+
+# ---------------------------------------------------------------------------
+# Migration: 001 -- add Appointment Scheduling Module columns to `appointments`
+# ---------------------------------------------------------------------------
+def migration_001_appointment_columns(conn):
+    if not _table_exists(conn, "appointments"):
+        return  # brand-new database; create_all() will create the full table with these columns.
+    new_columns = [
+        ("appointment_type_version_id", "INTEGER"),
+        ("patient_relationship_at_booking", "VARCHAR DEFAULT 'established'"),
+        ("patient_relationship_source", "VARCHAR DEFAULT 'automatic'"),
+        ("patient_relationship_override_reason", "TEXT"),
+        ("is_follow_up", "BOOLEAN DEFAULT 0"),
+        ("scheduled_end_at", "DATETIME"),
+        ("buffer_before_minutes", "INTEGER DEFAULT 0"),
+        ("buffer_after_minutes", "INTEGER DEFAULT 0"),
+        ("arrival_lead_minutes", "INTEGER DEFAULT 0"),
+        ("resolved_color", "VARCHAR"),
+        ("resolved_color_reason", "VARCHAR"),
+        ("duration_overridden", "BOOLEAN DEFAULT 0"),
+        ("duration_override_reason", "TEXT"),
+        ("conflict_overridden", "BOOLEAN DEFAULT 0"),
+        ("conflict_override_reason", "TEXT"),
+        ("updated_at", "DATETIME"),
+    ]
+    for col, ddl in new_columns:
+        _add_column_if_missing(conn, "appointments", col, ddl)
+    # Backfill scheduled_end_at from legacy duration_minutes where still null.
+    conn.execute(text("""
+        UPDATE appointments
+        SET scheduled_end_at = datetime(scheduled_at, '+' || COALESCE(duration_minutes, 30) || ' minutes')
+        WHERE scheduled_end_at IS NULL
+    """))
+
+SEED_COLOR = {
+    "red": "#DC2626", "teal": "#0F766E", "dark_blue": "#1E3A5F",
+    "dark_purple": "#6B21A8", "light_purple": "#C4B5FD", "pink": "#DB2777",
+    "green": "#15803D", "orange": "#EA580C",
+}
+
+# (code, internal_name, display_name, abbrev, service_line, order,
+#  allows_new, allows_established, new_dur, est_dur, base_color)
+CATALOG = [
+    ("COMP_VISION", "Comprehensive Vision Exam", "Comprehensive Vision Exam", "COMP VIS", "Vision", 10,
+     True, True, 20, 20, None),
+    ("MED_EYE_EVAL", "Medical Eye Evaluation", "Medical Eye Evaluation", "MED EYE", "Medical Eye Care", 20,
+     True, True, 20, 20, SEED_COLOR["teal"]),
+    ("DRY_EYE_CONSULT", "Dry Eye Consultation", "Dry Eye Consultation", "DE CONS", "Dry Eye", 30,
+     True, True, 30, 20, None),  # color administrator-assigned; inactive until color is set (spec 9.2)
+    ("DRY_EYE_FOLLOWUP", "Dry Eye Follow-Up", "Dry Eye Follow-Up", "DE F/U", "Dry Eye", 40,
+     True, True, 20, 20, None),
+    ("CL_EVAL_CHECK", "Contact Lens Evaluation/Check", "Contact Lens Evaluation/Check", "CL EVAL", "Contact Lens", 50,
+     True, True, 20, 20, SEED_COLOR["pink"]),
+    ("POST_OP", "Post-Op Exam", "Post-Op Exam", "POST-OP", "Medical Eye Care", 60,
+     False, True, None, 20, SEED_COLOR["green"]),
+    ("VISITING_PHYSICIAN", "Visiting Physician", "Visiting Physician", "VISIT MD", "Medical Eye Care", 70,
+     False, True, None, 15, SEED_COLOR["orange"]),
+]
+
+def migration_002_seed_appointment_types(conn):
+    """Seed the 7 initial appointment types + color rules (spec 8.1 / 9.2 / 9.3)."""
+    if not _table_exists(conn, "appointment_types"):
+        return  # create_all() has not run yet in this ordering; caller re-invokes after create_all.
+    existing = {r[0] for r in conn.execute(text("SELECT code FROM appointment_types")).fetchall()}
+    now = datetime.utcnow().isoformat()
+    for code, internal, display, abbr, line, order, allow_new, allow_est, new_dur, est_dur, base_color in CATALOG:
+        if code in existing:
+            continue
+        # Dry Eye types stay inactive until an admin assigns a color (spec 9.2); COMP_VISION and
+        # MED_EYE_EVAL are colored entirely by conditional rules (added below) rather than base_color.
+        active = base_color is not None or code in ("COMP_VISION", "MED_EYE_EVAL")
+        # is_system_seeded=0 here: these are ordinary, admin-editable catalog types that merely
+        # ship pre-populated (spec 8.1). Only LEGACY_UNCLASSIFIED (migration 004) is a true
+        # system-only, non-bookable type.
+        cur = conn.execute(text("""
+            INSERT INTO appointment_types (code, created_at, created_by_user_id, is_system_seeded, active)
+            VALUES (:code, :now, NULL, 0, 1)
+        """), {"code": code, "now": now})
+        type_id = cur.lastrowid
+        cur2 = conn.execute(text("""
+            INSERT INTO appointment_type_versions
+            (appointment_type_id, version_number, internal_name, display_name, calendar_abbreviation,
+             description, service_line, display_order, allows_new, allows_established,
+             new_duration_minutes, established_duration_minutes, buffer_before_minutes, buffer_after_minutes,
+             arrival_lead_minutes, base_color, staff_bookable, patient_bookable, effective_from,
+             effective_through, active, change_reason, created_at, created_by_user_id)
+            VALUES (:tid, 1, :internal, :display, :abbr, :descr, :line, :order, :allow_new, :allow_est,
+             :new_dur, :est_dur, 0, 0, 0, :base_color, 1, 0, :eff, NULL, :active, 'Initial seed', :now, NULL)
+        """), {
+            "tid": type_id, "internal": internal, "display": display, "abbr": abbr,
+            "descr": f"System-seeded {display} appointment type.", "line": line, "order": order,
+            "allow_new": int(allow_new), "allow_est": int(allow_est), "new_dur": new_dur, "est_dur": est_dur,
+            "base_color": base_color, "eff": now[:10], "active": int(active), "now": now,
+        })
+        version_id = cur2.lastrowid
+        if code == "MED_EYE_EVAL":
+            # Medical color precedence, exactly as specified in section 9.3.
+            rules = [
+                (1, "new", None, None, None, SEED_COLOR["red"], "new_patient"),
+                (2, "established", 1, None, None, SEED_COLOR["teal"], "established_follow_up"),
+                (3, "established", 0, 0, 2, SEED_COLOR["teal"], "established_0_to_2_tests"),
+                (4, "established", 0, 3, None, SEED_COLOR["dark_blue"], "established_3_plus_tests"),
+            ]
+            for pri, rel, fu, mn, mx, color, reason in rules:
+                conn.execute(text("""
+                    INSERT INTO appointment_type_color_rules
+                    (appointment_type_version_id, priority, patient_relationship, is_follow_up,
+                     minimum_countable_tests, maximum_countable_tests, color, reason_code)
+                    VALUES (:vid, :pri, :rel, :fu, :mn, :mx, :color, :reason)
+                """), {"vid": version_id, "pri": pri, "rel": rel, "fu": fu, "mn": mn, "mx": mx,
+                          "color": color, "reason": reason})
+        elif code == "COMP_VISION":
+            for pri, rel, color, reason in [
+                (1, "new", SEED_COLOR["dark_purple"], "new_patient"),
+                (2, "established", SEED_COLOR["light_purple"], "established_patient"),
+            ]:
+                conn.execute(text("""
+                    INSERT INTO appointment_type_color_rules
+                    (appointment_type_version_id, priority, patient_relationship, is_follow_up,
+                     minimum_countable_tests, maximum_countable_tests, color, reason_code)
+                    VALUES (:vid, :pri, :rel, NULL, NULL, NULL, :color, :reason)
+                """), {"vid": version_id, "pri": pri, "rel": rel, "color": color, "reason": reason})
+
+def migration_003_seed_diagnostic_tests(conn):
+    if not _table_exists(conn, "diagnostic_tests"):
+        return
+    existing = {r[0] for r in conn.execute(text("SELECT code FROM diagnostic_tests")).fetchall()}
+    tests = [
+        ("OCT", "Optical Coherence Tomography", "OCT", 1, True, 10, 10),
+        ("OPTOS", "Optos Widefield Retinal Imaging", "OPTOS", 1, True, 10, 20),
+        ("VF", "Virtual Visual Field", "VF", 1, True, 10, 30),
+        ("CORNEAL_ANALYZER", "Corneal Analyzer / Topography", "TOPO", 1, True, 10, 40),
+        ("ERG", "Electroretinogram", "ERG", 1, True, 20, 50),
+        ("MEIBOGRAPHY", "Meibography", "MEIBO", 1, True, 10, 60),
+        ("TEARLAB", "TearLab Osmolarity", "TEARLAB", 1, True, 5, 70),
+    ]
+    for code, name, abbr, active, counts, dur, order in tests:
+        if code in existing:
+            continue
+        conn.execute(text("""
+            INSERT INTO diagnostic_tests (code, display_name, calendar_abbreviation, active,
+                counts_toward_color, default_duration_minutes, display_order)
+            VALUES (:code, :name, :abbr, :active, :counts, :dur, :order)
+        """), {"code": code, "name": name, "abbr": abbr, "active": active, "counts": counts,
+                  "dur": dur, "order": order})
+
+def migration_004_legacy_appointment_type(conn):
+    """Create the LEGACY_UNCLASSIFIED system type (spec 22.2) if missing."""
+    if not _table_exists(conn, "appointment_types"):
+        return
+    row = conn.execute(text("SELECT id FROM appointment_types WHERE code = 'LEGACY_UNCLASSIFIED'")).fetchone()
+    if row:
+        return
+    now = datetime.utcnow().isoformat()
+    cur = conn.execute(text("""
+        INSERT INTO appointment_types (code, created_at, created_by_user_id, is_system_seeded, active)
+        VALUES ('LEGACY_UNCLASSIFIED', :now, NULL, 1, 0)
+    """), {"now": now})
+    type_id = cur.lastrowid
+    conn.execute(text("""
+        INSERT INTO appointment_type_versions
+        (appointment_type_id, version_number, internal_name, display_name, calendar_abbreviation,
+         description, service_line, display_order, allows_new, allows_established,
+         new_duration_minutes, established_duration_minutes, buffer_before_minutes, buffer_after_minutes,
+         arrival_lead_minutes, base_color, staff_bookable, patient_bookable, effective_from,
+         effective_through, active, change_reason, created_at, created_by_user_id)
+        VALUES (:tid, 1, 'Legacy/Unclassified Appointment', 'Legacy/Unclassified Appointment', 'LEGACY',
+         'System type preserving pre-migration appointment records. Not bookable.', 'Legacy', 9999, 1, 1,
+         NULL, NULL, 0, 0, 0, '#94A3B8', 0, 0, :eff, NULL, 1, 'Migration 22.2', :now, NULL)
+    """), {"tid": type_id, "eff": now[:10], "now": now})
+
+def migration_005_backfill_legacy_appointments(conn):
+    """Link pre-existing appointments to LEGACY_UNCLASSIFIED and set a best-guess
+    new/established snapshot per spec 22.3. Only touches rows not yet classified,
+    so it is safe to re-run."""
+    if not _table_exists(conn, "appointments") or not _table_exists(conn, "appointment_types"):
+        return
+    row = conn.execute(text("""
+        SELECT v.id FROM appointment_type_versions v
+        JOIN appointment_types t ON t.id = v.appointment_type_id
+        WHERE t.code = 'LEGACY_UNCLASSIFIED'
+    """)).fetchone()
+    if not row:
+        return
+    legacy_version_id = row[0]
+    targets = conn.execute(text("""
+        SELECT id, patient_id, scheduled_at FROM appointments WHERE appointment_type_version_id IS NULL
+    """)).fetchall()
+    has_eye_exams = _table_exists(conn, "eye_exams")
+    for appt_id, patient_id, scheduled_at in targets:
+        relationship = "established"  # default per scoping note; overridden below when EyeExam history exists
+        if has_eye_exams:
+            exam_row = conn.execute(text("""
+                SELECT 1 FROM eye_exams WHERE patient_id = :pid AND exam_date < :sched LIMIT 1
+            """), {"pid": patient_id, "sched": str(scheduled_at)[:10]}).fetchone()
+            relationship = "established" if exam_row else "new"
+        # TODO(spec 22.3): when a real user/admin review workflow exists, route ambiguous
+        # legacy appointments (no eye_exams table, or exam dates equal to appt date) through
+        # a migration review report for administrative confirmation before treating this
+        # inferred value as final. For now it is applied automatically and is audit-logged.
+        conn.execute(text("""
+            UPDATE appointments
+            SET appointment_type_version_id = :vid,
+                patient_relationship_at_booking = :rel,
+                patient_relationship_source = 'migration_inferred',
+                buffer_before_minutes = COALESCE(buffer_before_minutes, 0),
+                buffer_after_minutes = COALESCE(buffer_after_minutes, 0),
+                arrival_lead_minutes = COALESCE(arrival_lead_minutes, 0),
+                resolved_color = COALESCE(resolved_color, '#94A3B8'),
+                resolved_color_reason = COALESCE(resolved_color_reason, 'legacy_unclassified'),
+                updated_at = :now
+            WHERE id = :aid
+        """), {"vid": legacy_version_id, "rel": relationship, "now": datetime.utcnow().isoformat(), "aid": appt_id})
+        if _table_exists(conn, "appointment_audit_events"):
+            conn.execute(text("""
+                INSERT INTO appointment_audit_events
+                (appointment_id, event_type, field_name, old_value, new_value, reason, actor_user_id, occurred_at)
+                VALUES (:aid, 'migration_classified', 'patient_relationship_at_booking', NULL, :rel,
+                        'Legacy appointment migration (spec 22.3): inferred from EyeExam history', NULL, :now)
+            """), {"aid": appt_id, "rel": relationship, "now": datetime.utcnow().isoformat()})
+
+# ---------------------------------------------------------------------------
+# Migration: 006 -- create `practice_closures` table (Holidays/Closures screen)
+# Migration: 007 -- create `daily_closings` table (Store Ops > Daily Closing)
+# Brand-new tables, so plain CREATE TABLE IF NOT EXISTS is safe/idempotent even
+# though create_all() would also create these on a fresh database -- per the
+# migration-runner convention in this file, schema additions for existing
+# databases must not depend on create_all() alone.
+# ---------------------------------------------------------------------------
+def migration_006_create_practice_closures(conn):
+    conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS practice_closures (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            closure_date VARCHAR NOT NULL UNIQUE,
+            label VARCHAR NOT NULL,
+            notes TEXT,
+            created_at DATETIME
+        )
+    """))
+
+def migration_007_create_daily_closings(conn):
+    conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS daily_closings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            posting_date VARCHAR NOT NULL,
+            payment_type VARCHAR NOT NULL,
+            calculated_amount FLOAT DEFAULT 0.0,
+            actual_amount FLOAT DEFAULT 0.0,
+            variance FLOAT DEFAULT 0.0,
+            explanation TEXT,
+            created_at DATETIME
+        )
+    """))
+    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_daily_closings_posting_date ON daily_closings (posting_date)"))
+
+# ---------------------------------------------------------------------------
+# Migration: 008 -- add `patients.balance_due` (manually-entered balance snapshot
+# driving the three-state patient-context-strip balance box: due/even/credit).
+# ---------------------------------------------------------------------------
+def migration_008_patient_balance_due(conn):
+    if not _table_exists(conn, "patients"):
+        return  # brand-new database; create_all() will create the full table with this column.
+    _add_column_if_missing(conn, "patients", "balance_due", "FLOAT")
+
+# ---------------------------------------------------------------------------
+# Migration: 009 -- add `patients.preferred_name` and `patients.mrn`.
+# Both nullable, no UNIQUE constraint on mrn (see Patient.mrn comment in
+# ehr/models/database.py for why uniqueness enforcement is deferred).
+# ---------------------------------------------------------------------------
+def migration_009_patient_preferred_name_mrn(conn):
+    if not _table_exists(conn, "patients"):
+        return  # brand-new database; create_all() will create the full table with these columns.
+    _add_column_if_missing(conn, "patients", "preferred_name", "VARCHAR")
+    _add_column_if_missing(conn, "patients", "mrn", "VARCHAR")
+
+# ---------------------------------------------------------------------------
+# Migration: 010 -- enforce `patients.mrn` uniqueness.
+# Two steps, both required since real data may already have collisions:
+#   1. Data cleanup: blank strings are normalized to NULL (NULL is exempt from
+#      the uniqueness check, matching "no MRN assigned yet"); for any MRN value
+#      shared by more than one patient, only the lowest-id patient keeps it --
+#      every later duplicate is cleared to NULL rather than silently kept
+#      wrong, and is audit-logged into appointment_audit_events-style history
+#      is not available for patients, so instead each cleared row is recorded
+#      into a lightweight `mrn_deduplication_log` table for administrative
+#      follow-up (which patient, which MRN value, when).
+#   2. A partial UNIQUE index (`WHERE mrn IS NOT NULL`) is created so SQLite
+#      itself now rejects a future duplicate, and the application layer
+#      (create_patient/update_patient) checks for a conflict first and returns
+#      a friendly 400 instead of ever letting that constraint raise a raw
+#      IntegrityError.
+# ---------------------------------------------------------------------------
+def migration_010_patient_mrn_uniqueness(conn):
+    if not _table_exists(conn, "patients"):
+        return  # brand-new database; create_all() creates the unique index directly.
+    conn.execute(text(
+        "CREATE TABLE IF NOT EXISTS mrn_deduplication_log ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT, patient_id INTEGER NOT NULL, "
+        "cleared_mrn VARCHAR NOT NULL, occurred_at TEXT NOT NULL)"
+    ))
+    # Normalize blank/whitespace-only MRNs to NULL so they don't collide with each other.
+    conn.execute(text("UPDATE patients SET mrn = NULL WHERE mrn IS NOT NULL AND trim(mrn) = ''"))
+    now = datetime.utcnow().isoformat()
+    dupes = conn.execute(text(
+        "SELECT mrn FROM patients WHERE mrn IS NOT NULL GROUP BY mrn HAVING COUNT(*) > 1"
+    )).fetchall()
+    for (mrn_value,) in dupes:
+        rows = conn.execute(text(
+            "SELECT id FROM patients WHERE mrn = :mrn ORDER BY id ASC"
+        ), {"mrn": mrn_value}).fetchall()
+        for (patient_id,) in rows[1:]:  # keep the first (lowest id), clear the rest
+            conn.execute(text("UPDATE patients SET mrn = NULL WHERE id = :pid"), {"pid": patient_id})
+            conn.execute(text(
+                "INSERT INTO mrn_deduplication_log (patient_id, cleared_mrn, occurred_at) "
+                "VALUES (:pid, :mrn, :now)"
+            ), {"pid": patient_id, "mrn": mrn_value, "now": now})
+    conn.execute(text(
+        "CREATE UNIQUE INDEX IF NOT EXISTS ix_patients_mrn_unique ON patients (mrn) WHERE mrn IS NOT NULL"
+    ))
+
+# ---------------------------------------------------------------------------
+# Migration: 011 -- seed Resource rows and AppointmentTypeResourceRequirement
+# links so real-resource conflict detection (ehr/services/scheduling.py) has
+# real data to check against (spec 26.10 item 1's documented gap).
+#
+# Seed choices (kept here as the single source of truth for why these were
+# picked, rather than scattered comments):
+#   - Lane 1 / Lane 2 (resource_class='exam_lane'): general exam lanes.
+#   - Contact Lens Fitting Room (resource_class='room'): required by
+#     CL_EVAL_CHECK (Contact Lens Evaluation/Check) -- a contact lens fitting
+#     visit clinically needs the fitting room and its equipment every time.
+#   - OCT Machine (resource_class='device'): seeded so a device-class resource
+#     exists, conceptually tied to the OCT diagnostic test -- but deliberately
+#     NOT wired to any AppointmentTypeResourceRequirement here. OCT is an
+#     optional per-visit diagnostic test (AppointmentTest already has its own
+#     required_resource_id column for that finer-grained, per-test case), not
+#     something every appointment of some type always needs.
+#   - COMP_VISION (Comprehensive Vision Exam) requires an exam lane (Lane 1)
+#     since a full exam always needs a lane to be performed in.
+#   - Every other seeded appointment type is intentionally left resource-free,
+#     matching real-world variability (not every visit type needs a resource).
+# ---------------------------------------------------------------------------
+def migration_011_seed_resources_and_requirements(conn):
+    if not _table_exists(conn, "resources") or not _table_exists(conn, "appointment_type_resource_requirements"):
+        return  # brand-new database ordering edge case; POST_CREATE_ALL_MIGRATIONS always runs after create_all().
+    existing_codes = {r[0] for r in conn.execute(text("SELECT code FROM resources")).fetchall()}
+    resource_rows = [
+        ("LANE1", "Lane 1", "exam_lane"),
+        ("LANE2", "Lane 2", "exam_lane"),
+        ("CL_ROOM", "Contact Lens Fitting Room", "room"),
+        ("OCT_DEVICE", "OCT Machine", "device"),
+    ]
+    ids = {}
+    for code, name, cls in resource_rows:
+        if code in existing_codes:
+            row = conn.execute(text("SELECT id FROM resources WHERE code = :c"), {"c": code}).fetchone()
+            ids[code] = row[0]
+            continue
+        cur = conn.execute(text("""
+            INSERT INTO resources (code, display_name, resource_class, exclusive, active)
+            VALUES (:code, :name, :cls, 1, 1)
+        """), {"code": code, "name": name, "cls": cls})
+        ids[code] = cur.lastrowid
+
+    def _current_type_version_id(code):
+        row = conn.execute(text("""
+            SELECT v.id FROM appointment_type_versions v
+            JOIN appointment_types t ON t.id = v.appointment_type_id
+            WHERE t.code = :code ORDER BY v.version_number DESC LIMIT 1
+        """), {"code": code}).fetchone()
+        return row[0] if row else None
+
+    requirement_specs = [
+        ("COMP_VISION", "LANE1"),
+        ("CL_EVAL_CHECK", "CL_ROOM"),
+    ]
+    for type_code, resource_code in requirement_specs:
+        version_id = _current_type_version_id(type_code)
+        resource_id = ids.get(resource_code)
+        if not version_id or not resource_id:
+            continue
+        already = conn.execute(text("""
+            SELECT 1 FROM appointment_type_resource_requirements
+            WHERE appointment_type_version_id = :vid AND resource_id = :rid
+        """), {"vid": version_id, "rid": resource_id}).fetchone()
+        if already:
+            continue
+        conn.execute(text("""
+            INSERT INTO appointment_type_resource_requirements
+            (appointment_type_version_id, resource_id, resource_pool_code, required, offset_minutes, duration_minutes)
+            VALUES (:vid, :rid, NULL, 1, 0, NULL)
+        """), {"vid": version_id, "rid": resource_id})
+
+# ---------------------------------------------------------------------------
+# Migration: 012 -- create `users`, `user_sessions`, `auth_audit_events` tables
+# (real-authentication pass). Brand-new tables -- plain CREATE TABLE IF NOT
+# EXISTS is safe/idempotent even though create_all() would also create these
+# on a fresh database, per this file's convention that schema additions for
+# EXISTING databases must not depend on create_all() alone.
+# ---------------------------------------------------------------------------
+def migration_012_create_auth_tables(conn):
+    conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email VARCHAR NOT NULL UNIQUE,
+            password_hash VARCHAR NOT NULL,
+            password_salt VARCHAR NOT NULL,
+            first_name VARCHAR NOT NULL,
+            last_name VARCHAR NOT NULL,
+            role VARCHAR NOT NULL,
+            active BOOLEAN NOT NULL DEFAULT 1,
+            created_at DATETIME,
+            last_login_at DATETIME
+        )
+    """))
+    conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_users_email ON users (email)"))
+    conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS user_sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            session_token VARCHAR NOT NULL UNIQUE,
+            created_at DATETIME,
+            last_seen_at DATETIME,
+            expires_at DATETIME NOT NULL,
+            revoked BOOLEAN NOT NULL DEFAULT 0
+        )
+    """))
+    conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_user_sessions_token ON user_sessions (session_token)"))
+    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_user_sessions_user_revoked ON user_sessions (user_id, revoked)"))
+    conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS auth_audit_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_type VARCHAR NOT NULL,
+            user_id INTEGER,
+            actor_email_attempted VARCHAR,
+            ip_address VARCHAR,
+            occurred_at DATETIME,
+            detail TEXT
+        )
+    """))
+    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_auth_audit_occurred_at ON auth_audit_events (occurred_at)"))
+    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_auth_audit_user ON auth_audit_events (user_id)"))
+
+# Ordered list of (id, function). Adding new migrations: append, never edit past entries.
+COLUMN_MIGRATIONS = [
+    ("001_appointment_columns", migration_001_appointment_columns),
+    ("006_create_practice_closures", migration_006_create_practice_closures),
+    ("007_create_daily_closings", migration_007_create_daily_closings),
+    ("008_patient_balance_due", migration_008_patient_balance_due),
+    ("009_patient_preferred_name_mrn", migration_009_patient_preferred_name_mrn),
+    ("010_patient_mrn_uniqueness", migration_010_patient_mrn_uniqueness),
+    ("012_create_auth_tables", migration_012_create_auth_tables),
+]
+POST_CREATE_ALL_MIGRATIONS = [
+    ("002_seed_appointment_types", migration_002_seed_appointment_types),
+    ("003_seed_diagnostic_tests", migration_003_seed_diagnostic_tests),
+    ("004_legacy_appointment_type", migration_004_legacy_appointment_type),
+    ("005_backfill_legacy_appointments", migration_005_backfill_legacy_appointments),
+    ("011_seed_resources_and_requirements", migration_011_seed_resources_and_requirements),
+]
+
+def run_column_migrations(engine):
+    """Phase 1: ALTER TABLE migrations on pre-existing tables. Must run BEFORE create_all()."""
+    with engine.begin() as conn:
+        conn.execute(text("PRAGMA foreign_keys=ON"))
+        _ensure_migrations_table(conn)
+        for migration_id, func in COLUMN_MIGRATIONS:
+            if not _applied(conn, migration_id):
+                func(conn)
+                _mark_applied(conn, migration_id)
+
+def run_post_create_all_migrations(engine):
+    """Phase 2: data-seeding migrations that require the new tables to already exist.
+    Must run AFTER Base.metadata.create_all()."""
+    with engine.begin() as conn:
+        _ensure_migrations_table(conn)
+        for migration_id, func in POST_CREATE_ALL_MIGRATIONS:
+            if not _applied(conn, migration_id):
+                func(conn)
+                _mark_applied(conn, migration_id)

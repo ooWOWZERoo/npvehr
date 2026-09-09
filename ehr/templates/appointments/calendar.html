@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Calendar &mdash; New Path Vision EHR{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>{{ month_name }} {{ year }}</h1>
+  <div style="display:flex;gap:0.5rem">
+    <a href="/appointments/day" class="btn btn-secondary btn-sm">Day</a>
+    <a href="/appointments/week" class="btn btn-secondary btn-sm">Week</a>
+    <a href="/appointments/" class="btn btn-secondary btn-sm">List View</a>
+    <a href="/appointments/new" class="btn btn-primary btn-sm">+ New Appointment</a>
+  </div>
+</div>
+<div class="card" style="padding:0.75rem">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem">
+    <a href="/appointments/calendar?year={{ prev_year }}&month={{ prev_month }}" class="btn btn-secondary btn-sm">&larr; Prev</a>
+    <a href="/appointments/calendar" class="btn btn-secondary btn-sm">Today</a>
+    <a href="/appointments/calendar?year={{ next_year }}&month={{ next_month }}" class="btn btn-secondary btn-sm">Next &rarr;</a>
+  </div>
+  <div class="calendar-grid">
+    {% for wd in ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'] %}
+    <div class="calendar-weekday">{{ wd }}</div>
+    {% endfor %}
+    {% for week in weeks %}
+      {% for day in week %}
+        {% if day == 0 %}
+        <div class="calendar-day other-month"></div>
+        {% else %}
+        <div class="calendar-day{% if today.year == year and today.month == month and today.day == day %} today{% endif %}" onclick="window.location='/appointments/new?date={{ day_dates[day] }}'">
+          <div class="calendar-day-head">
+            <span class="calendar-day-num">{{ day }}</span>
+            <a href="/appointments/new?date={{ day_dates[day] }}" class="calendar-day-add" title="New appointment on {{ day_dates[day] }}" onclick="event.stopPropagation()">+</a>
+          </div>
+          {% for a in by_day.get(day, []) %}
+          <a href="/appointments/{{ a.id }}" class="calendar-appt badge-{{ a.status.value }}"
+             style="border-left:4px solid {{ a.resolved_color or (a.appointment_type_version.base_color if a.appointment_type_version else '#94a3b8') }}"
+             title="{{ a.patient.last_name }}, {{ a.patient.first_name }} &mdash; {{ a.reason or '' }}" onclick="event.stopPropagation()">
+            {{ a.scheduled_at.strftime('%I:%M %p') }} {{ a.patient.last_name }}
+            [{{ a.appointment_type_version.calendar_abbreviation if a.appointment_type_version else '?' }}]
+            {{ 'N' if a.patient_relationship_at_booking == 'new' else 'E' }}
+          </a>
+          {% endfor %}
+        </div>
+        {% endif %}
+      {% endfor %}
+    {% endfor %}
+  </div>
+</div>
+{% include "appointments/_legend.html" %}
+{% endblock %}

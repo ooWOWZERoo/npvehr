@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Week &mdash; New Path Vision EHR{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Week of {{ week_start.strftime('%B %d, %Y') }}</h1>
+  <div style="display:flex;gap:0.5rem">
+    <a href="/appointments/day?date_str={{ week_start.isoformat() }}" class="btn btn-secondary btn-sm">Day</a>
+    <a href="/appointments/calendar" class="btn btn-secondary btn-sm">Month</a>
+    <a href="/appointments/new" class="btn btn-primary btn-sm">+ New Appointment</a>
+  </div>
+</div>
+<div class="week-toolbar">
+  <a href="/appointments/week?date_str={{ prev_week }}" class="btn btn-secondary btn-sm">&larr; Prev</a>
+  <a href="/appointments/week" class="btn btn-secondary btn-sm">This Week</a>
+  <a href="/appointments/week?date_str={{ next_week }}" class="btn btn-secondary btn-sm">Next &rarr;</a>
+  <form method="get" style="display:flex;gap:0.5rem;flex-wrap:wrap">
+    <input type="hidden" name="date_str" value="{{ week_start.isoformat() }}">
+    <select name="provider_id" onchange="this.form.submit()"><option value="">All Providers</option>
+      {% for p in providers %}<option value="{{ p.id }}" {{ 'selected' if provider_id == p.id }}>Dr. {{ p.last_name }}</option>{% endfor %}</select>
+    <select name="appointment_type_version_id" onchange="this.form.submit()"><option value="">All Types</option>
+      {% for t in types %}<option value="{{ t.id }}" {{ 'selected' if appointment_type_version_id == t.id }}>{{ t.display_name }}</option>{% endfor %}</select>
+    <select name="relationship" onchange="this.form.submit()"><option value="">New &amp; Established</option>
+      <option value="new" {{ 'selected' if relationship == 'new' }}>New</option>
+      <option value="established" {{ 'selected' if relationship == 'established' }}>Established</option></select>
+  </form>
+</div>
+<div class="week-grid">
+  {% for d in days %}
+  <div class="week-col">
+    <div class="week-col-head{% if d.isoformat() == today_iso %} today{% endif %}"><a href="/appointments/day?date_str={{ d.isoformat() }}">{{ d.strftime('%a %m/%d') }}</a></div>
+    {% for a in by_day[d.isoformat()] %}
+    <a href="/appointments/{{ a.id }}" class="appt-card" style="border-left-color:{{ a.resolved_color or '#94a3b8' }};padding:0.4rem 0.5rem;margin-bottom:0.35rem">
+      <div class="appt-card-top" style="gap:0.3rem">
+        <span class="appt-card-time" style="font-size:0.75rem">{{ a.scheduled_at.strftime('%-I:%M %p') }}</span>
+        <span class="badge-relationship {{ a.patient_relationship_at_booking }}" style="font-size:0.6rem">{{ 'N' if a.patient_relationship_at_booking == 'new' else 'E' }}</span>
+      </div>
+      <div class="appt-card-meta" style="font-size:0.72rem">{{ a.patient.last_name }} &middot; {{ a.appointment_type_version.calendar_abbreviation if a.appointment_type_version else '?' }}</div>
+    </a>
+    {% else %}<p style="color:#94a3b8;font-size:0.75rem;text-align:center">&mdash;</p>
+    {% endfor %}
+  </div>
+  {% endfor %}
+</div>
+{% include "appointments/_legend.html" %}
+{% endblock %}

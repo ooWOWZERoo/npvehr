@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Availability Templates &mdash; Admin{% endblock %}
+{% block content %}
+<div class="page-header"><h1>Scheduling Administration</h1></div>
+{% include "admin/scheduling/_nav.html" %}
+<div class="card form-card"><h3>Add Weekly Availability Template</h3>
+  <form method="post" action="/admin/scheduling/availability/new">
+    <div class="form-row cols-4">
+      <div class="form-group"><label>Resource*</label>
+        <select name="resource_id" required>{% for r in resources %}<option value="{{ r.id }}">{{ r.display_name }}</option>{% endfor %}</select>
+      </div>
+      <div class="form-group"><label>Day of Week*</label>
+        <select name="day_of_week" required>{% for i, name in [(0,'Monday'),(1,'Tuesday'),(2,'Wednesday'),(3,'Thursday'),(4,'Friday'),(5,'Saturday'),(6,'Sunday')] %}<option value="{{ i }}">{{ name }}</option>{% endfor %}</select>
+      </div>
+      <div class="form-group"><label>Start Time*</label><input name="start_time" type="time" required></div>
+      <div class="form-group"><label>End Time*</label><input name="end_time" type="time" required></div>
+    </div>
+    <button type="submit" class="btn btn-primary">Add Template</button>
+  </form>
+</div>
+<div class="card" style="margin-top:1rem">
+  <table><thead><tr><th>Resource</th><th>Day</th><th>Start</th><th>End</th><th>Active</th></tr></thead><tbody>
+  {% for t in templates_ %}
+    <tr><td>{{ t.resource_id }}</td><td>{{ day_names[t.day_of_week] }}</td><td>{{ t.start_time }}</td><td>{{ t.end_time }}</td><td>{{ 'Yes' if t.active else 'No' }}</td></tr>
+  {% else %}<tr><td colspan="5" style="text-align:center;color:#64748b">No availability templates defined yet. Provider-conflict detection uses existing bookings regardless.</td></tr>
+  {% endfor %}
+  </tbody></table>
+</div>
+{% endblock %}

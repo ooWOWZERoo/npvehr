@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit' if patient and patient.id else 'New' }} Patient &mdash; New Path Vision EHR{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>{{ 'Edit Patient' if patient and patient.id else 'New Patient' }}</h1>
+  {% if patient and patient.id %}<a href="/patients/{{ patient.id }}" class="btn btn-secondary">Cancel</a>
+  {% else %}<a href="/patients/" class="btn btn-secondary">Cancel</a>{% endif %}
+</div>
+{% if error %}<div class="alert alert-error" style="margin-bottom:1rem">{{ error }}</div>{% endif %}
+<div class="card form-card">
+  <form method="post" action="{{ '/patients/' + patient.id|string + '/edit' if patient and patient.id else '/patients/new' }}" enctype="multipart/form-data">
+    <div class="section-title">Photo</div>
+    <div class="form-row cols-2" style="align-items:center">
+      <div class="form-group" style="margin-bottom:0">
+        {% if patient and patient.photo_path %}
+          <img src="{{ patient.photo_path }}" alt="Patient photo" class="patient-photo-preview">
+        {% else %}
+          <div class="patient-photo-placeholder">No Photo</div>
+        {% endif %}
+      </div>
+      <div class="form-group"><label>{{ 'Replace Photo' if patient and patient.photo_path else 'Upload Photo' }}</label><input name="photo" type="file" accept="image/*"></div>
+    </div>
+    <div class="section-title">Demographics</div>
+    <div class="form-row cols-3">
+      <div class="form-group"><label>First Name*</label><input name="first_name" required value="{{ patient.first_name if patient else '' }}"></div>
+      <div class="form-group"><label>Last Name*</label><input name="last_name" required value="{{ patient.last_name if patient else '' }}"></div>
+      <div class="form-group"><label>Preferred Name</label><input name="preferred_name" placeholder="e.g. Johnny" value="{{ patient.preferred_name if patient else '' }}"></div>
+    </div>
+    <div class="form-row cols-3">
+      <div class="form-group"><label>Date of Birth</label><input name="date_of_birth" type="date" value="{{ patient.date_of_birth if patient else '' }}"></div>
+      <div class="form-group">
+        <label>MRN</label>
+        <input name="mrn" value="{{ patient.mrn if patient else '' }}">
+        <small style="display:block;color:#64748b;font-style:italic;margin-top:0.25rem">Manually entered &mdash; no auto-numbering system exists yet.</small>
+      </div>
+    </div>
+    <div class="form-row cols-3">
+      <div class="form-group"><label>Gender</label>
+        <select name="gender"><option value="">&mdash;</option>
+          {% for g in ['M','F','Other'] %}<option value="{{ g }}" {{ 'selected' if patient and patient.gender == g }}>{{ g }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group"><label>Phone</label><input name="phone" value="{{ patient.phone if patient else '' }}"></div>
+      <div class="form-group"><label>Email</label><input name="email" type="email" value="{{ patient.email if patient else '' }}"></div>
+    </div>
+    <div class="form-row cols-4">
+      <div class="form-group" style="grid-column:span 2"><label>Address</label><input name="address" value="{{ patient.address if patient else '' }}"></div>
+      <div class="form-group"><label>City</label><input name="city" value="{{ patient.city if patient else '' }}"></div>
+      <div class="form-group"><label>State / ZIP</label>
+        <div style="display:flex;gap:0.5rem">
+          <input name="state" placeholder="IL" style="width:60px" value="{{ patient.state if patient else '' }}">
+          <input name="zip_code" placeholder="62701" value="{{ patient.zip_code if patient else '' }}">
+        </div>
+      </div>
+    </div>
+    <div class="section-title">Insurance</div>
+    <div class="form-row cols-2">
+      <div class="form-group"><label>Insurance Provider</label><input name="insurance_provider" value="{{ patient.insurance_provider if patient else '' }}"></div>
+      <div class="form-group"><label>Insurance ID</label><input name="insurance_id" value="{{ patient.insurance_id if patient else '' }}"></div>
+    </div>
+    <div class="section-title">Account Balance</div>
+    <div class="form-row cols-2">
+      <div class="form-group">
+        <label>Balance Due</label>
+        <input name="balance_due" type="number" step="0.01" placeholder="0.00"
+          value="{{ patient.balance_due if patient and patient.balance_due is not none else '' }}">
+        <small style="display:block;color:#64748b;font-style:italic;margin-top:0.25rem">
+          Manually entered &mdash; no billing/ledger module exists yet. Positive = patient owes money,
+          negative = credit/overpayment on file, blank/0 = even.
+        </small>
+      </div>
+    </div>
+    <div class="section-title">Emergency Contact</div>
+    <div class="form-row cols-2">
+      <div class="form-group"><label>Name</label><input name="emergency_contact_name" value="{{ patient.emergency_contact_name if patient else '' }}"></div>
+      <div class="form-group"><label>Phone</label><input name="emergency_contact_phone" value="{{ patient.emergency_contact_phone if patient else '' }}"></div>
+    </div>
+    <div class="section-title">Medical History</div>
+    <div class="form-row cols-2">
+      <div class="form-group"><label>Allergies</label><textarea name="allergies">{{ patient.allergies if patient else '' }}</textarea></div>
+      <div class="form-group"><label>Medical History</label><textarea name="medical_history">{{ patient.medical_history if patient else '' }}</textarea></div>
+    </div>
+    <div class="form-row cols-2">
+      <div class="form-group"><label>Ocular History</label><textarea name="ocular_history">{{ patient.ocular_history if patient else '' }}</textarea></div>
+      <div class="form-group"><label>Family Ocular History</label><textarea name="family_ocular_history">{{ patient.family_ocular_history if patient else '' }}</textarea></div>
+    </div>
+    <div class="form-actions"><button type="submit" class="btn btn-primary">{{ 'Save Changes' if patient else 'Create Patient' }}</button></div>
+  </form>
+</div>
+{% endblock %}

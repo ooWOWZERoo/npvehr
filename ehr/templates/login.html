@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign In &mdash; New Path Vision EHR</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="/static/css/app.css">
+  <style>
+    body.login-body {
+      min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      background: linear-gradient(160deg, var(--primary-strong), var(--primary) 60%, var(--primary-soft));
+    }
+    .login-card {
+      background: var(--surface); border-radius: 14px; box-shadow: 0 20px 50px rgba(19,36,32,0.25);
+      padding: var(--space-7) var(--space-6); width: 100%; max-width: 380px;
+    }
+    .login-brand { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-6); }
+    .login-brand img { height: 40px; width: auto; }
+    .login-brand-text { font-family: var(--font-display); font-size: 1.3rem; font-weight: 700; color: var(--primary-strong); }
+    .login-card h1 { font-size: 1.3rem; margin-bottom: var(--space-2); }
+    .login-card p.login-sub { color: var(--ink-muted); margin: 0 0 var(--space-5); font-size: 0.85rem; }
+    .login-card .btn-primary { width: 100%; justify-content: center; padding: 0.6rem; font-size: 0.9rem; }
+    .login-footnote { margin-top: var(--space-5); font-size: 0.75rem; color: var(--ink-muted); text-align: center; }
+  </style>
+</head>
+<body class="login-body">
+  <div class="login-card">
+    <div class="login-brand">
+      <img src="/static/img/logo.svg" alt="">
+      <span class="login-brand-text">New Path Vision EHR</span>
+    </div>
+    <h1>Sign in</h1>
+    <p class="login-sub">Enter your credentials to access the practice portal.</p>
+    {% if error %}
+    <div class="alert alert-error" style="margin-bottom: var(--space-4)">{{ error }}</div>
+    {% endif %}
+    <form method="post" action="/login">
+      <input type="hidden" name="next" value="{{ next or '/' }}">
+      <div class="form-group">
+        <label for="email">Email</label>
+        <input type="email" id="email" name="email" required autofocus autocomplete="username">
+      </div>
+      <div class="form-group">
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" required autocomplete="current-password">
+      </div>
+      <button type="submit" class="btn btn-primary">Sign In</button>
+    </form>
+    <p class="login-footnote">Access is limited to authorized practice staff. All sign-in attempts are logged.</p>
+  </div>
+</body>
+</html>

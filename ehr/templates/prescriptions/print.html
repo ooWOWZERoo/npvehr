@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Rx &mdash; {{ rx.patient.last_name }}, {{ rx.patient.first_name }}</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 600px; margin: 2rem auto; padding: 1rem; }
+    .hdr { text-align: center; border-bottom: 2px solid #14532d; padding-bottom: 1rem; margin-bottom: 1.5rem; }
+    .hdr h2 { margin: 0; color: #14532d; }
+    table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+    th, td { padding: 0.5rem 0.75rem; border: 1px solid #d1d5db; text-align: center; }
+    th { background: #f8fafc; } td:first-child { font-weight: bold; }
+    .footer { margin-top: 3rem; border-top: 1px solid #d1d5db; padding-top: 1rem; font-size: 0.875rem; }
+    .no-print { margin-bottom: 1rem; }
+    @media print { .no-print { display: none !important; } }
+  </style>
+</head>
+<body>
+  <div class="no-print">
+    <button onclick="window.print()">&#128424; Print</button>
+    <a href="/prescriptions/{{ rx.id }}">&larr; Back</a>
+  </div>
+  <div class="hdr"><img src="/static/img/logo.svg" alt="New Path Vision" style="height:40px;display:block;margin:0 auto 0.5rem"><h2>New Path Vision EHR</h2><p>{{ rx.rx_type|title }} Prescription</p></div>
+  <p><strong>Patient:</strong> {{ rx.patient.last_name }}, {{ rx.patient.first_name }}&nbsp;&nbsp;<strong>DOB:</strong> {{ rx.patient.date_of_birth or '—' }}</p>
+  <p><strong>Provider:</strong> Dr. {{ rx.provider.last_name }}&nbsp;&nbsp;<strong>Issued:</strong> {{ rx.issue_date or '—' }}&nbsp;&nbsp;<strong>Expires:</strong> {{ rx.expiry_date or '—' }}</p>
+  <table>
+    <tr><th></th><th>Sphere</th><th>Cylinder</th><th>Axis</th><th>Add</th>{% if rx.rx_type == 'contacts' %}<th>BC</th><th>Dia</th><th>Brand</th>{% endif %}</tr>
+    <tr><td>OD</td>
+      <td>{{ '%+.2f'|format(rx.od_sphere) if rx.od_sphere is not none else '—' }}</td>
+      <td>{{ '%+.2f'|format(rx.od_cylinder) if rx.od_cylinder is not none else '—' }}</td>
+      <td>{{ rx.od_axis or '—' }}</td>
+      <td>{{ '%+.2f'|format(rx.od_add) if rx.od_add is not none else '—' }}</td>
+      {% if rx.rx_type == 'contacts' %}<td>{{ rx.od_bc or '—' }}</td><td>{{ rx.od_dia or '—' }}</td><td>{{ rx.od_brand or '—' }}</td>{% endif %}
+    </tr>
+    <tr><td>OS</td>
+      <td>{{ '%+.2f'|format(rx.os_sphere) if rx.os_sphere is not none else '—' }}</td>
+      <td>{{ '%+.2f'|format(rx.os_cylinder) if rx.os_cylinder is not none else '—' }}</td>
+      <td>{{ rx.os_axis or '—' }}</td>
+      <td>{{ '%+.2f'|format(rx.os_add) if rx.os_add is not none else '—' }}</td>
+      {% if rx.rx_type == 'contacts' %}<td>{{ rx.os_bc or '—' }}</td><td>{{ rx.os_dia or '—' }}</td><td>{{ rx.os_brand or '—' }}</td>{% endif %}
+    </tr>
+  </table>
+  {% if rx.notes %}<p><strong>Notes:</strong> {{ rx.notes }}</p>{% endif %}
+  <div class="footer"><p>Provider Signature: ______________________________ &nbsp; License #: {{ rx.provider.license_number or '—' }} &nbsp; NPI: {{ rx.provider.npi or '—' }}</p></div>
+</body>
+</html>

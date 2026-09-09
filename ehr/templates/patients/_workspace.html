@@ -1,0 +1,83 @@
+{#
+  Shared skeleton for the patient workspace restructure: the identity header
+  (photo, name incl. preferred name, MRN, DOB/age, phone, provider, allergy
+  flag, print-style action buttons) plus the secondary in-page sub-nav, both
+  shared by every /patients/{id}/... tab. Deliberately a nested nav COLUMN
+  inside the content area (not the global left sidebar) so the two navs stay
+  visually distinct, per the workspace-restructure spec.
+#}
+{% extends "base.html" %}
+{% block title %}{{ display_name }} &mdash; New Path Vision EHR{% endblock %}
+{% block content %}
+<div class="pw-header">
+  <div class="pw-header-id">
+    {% if patient.photo_path %}
+      <img src="{{ patient.photo_path }}" alt="{{ display_name }}" class="patient-photo-lg">
+    {% else %}
+      <div class="patient-photo-placeholder" style="width:80px;height:80px">No Photo</div>
+    {% endif %}
+    <div class="pw-header-info">
+      <h1>{{ display_name }}<a href="/patients/{{ patient.id }}/edit" class="icon-btn" style="margin-left:0.5rem;vertical-align:middle" title="Edit patient" aria-label="Edit patient">&#9998;</a></h1>
+      <div class="pw-header-meta">
+        <span>MRN: {{ patient.mrn or '—' }}</span>
+        <span>{% if age is not none %}Age {{ age }} &middot; {% endif %}DOB {{ patient.date_of_birth or '—' }}</span>
+        <span>{{ patient.phone or 'No phone on file' }}</span>
+        <span>Provider: {{ provider_label or '—' }}</span>
+        {% if context_patient.has_allergy_flag %}
+          <span class="pcs-allergy-flag" title="Allergies: {{ context_patient.allergies_text }}">&#9888; Allergies</span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  <div class="pw-header-actions no-print">
+    <a href="/appointments/new?patient_id={{ patient.id }}" class="btn btn-primary btn-sm">Schedule Appt</a>
+    <a href="/exams/new?patient_id={{ patient.id }}" class="btn btn-primary btn-sm">New Exam</a>
+    <a href="/prescriptions/new?patient_id={{ patient.id }}" class="btn btn-primary btn-sm">New Rx</a>
+    <button type="button" class="btn btn-secondary btn-sm" onclick="window.print()">Print</button>
+  </div>
+</div>
+
+<div class="patient-workspace">
+  <nav class="pw-subnav" aria-label="Patient record sections">
+    <a href="/patients/{{ patient.id }}" class="{{ 'active' if active_tab == 'overview' }}">Overview</a>
+    <a href="/patients/{{ patient.id }}/demographics" class="{{ 'active' if active_tab == 'demographics' }}">Demographics</a>
+    <a href="/patients/{{ patient.id }}/addresses" class="{{ 'active' if active_tab == 'addresses' }}">Additional Addresses</a>
+    <a href="/patients/{{ patient.id }}/appointments" class="{{ 'active' if active_tab == 'appointments' }}">Appointments</a>
+    <a href="/patients/{{ patient.id }}/recalls" class="{{ 'active' if active_tab == 'recalls' }}">Recalls</a>
+    <a href="/patients/{{ patient.id }}/insurance" class="{{ 'active' if active_tab == 'insurance' }}">Insurance</a>
+    <div class="pw-subgroup">
+      <a href="/patients/{{ patient.id }}/insurance/eligibility" class="{{ 'active' if active_tab == 'insurance-eligibility' }}">Eligibility / Authorization</a>
+      <a href="/patients/{{ patient.id }}/insurance/relationships" class="{{ 'active' if active_tab == 'insurance-relationships' }}">Relationships</a>
+    </div>
+    <a href="/patients/{{ patient.id }}/rx" class="{{ 'active' if active_tab == 'rx' }}">Rx</a>
+    <div class="pw-subgroup">
+      <a href="/patients/{{ patient.id }}/rx/glasses" class="{{ 'active' if active_tab == 'rx-glasses' }}">Glasses</a>
+      <a href="/patients/{{ patient.id }}/rx/contacts" class="{{ 'active' if active_tab == 'rx-contacts' }}">Contact Lenses</a>
+    </div>
+    <a href="/patients/{{ patient.id }}/orders" class="{{ 'active' if active_tab == 'orders' }}">Material Orders</a>
+    <div class="pw-subgroup">
+      <a href="/patients/{{ patient.id }}/orders/exams" class="{{ 'active' if active_tab == 'orders-exams' }}">Exams</a>
+      <a href="/patients/{{ patient.id }}/orders/eyeglass" class="{{ 'active' if active_tab == 'orders-eyeglass' }}">Eyeglass Order</a>
+      <a href="/patients/{{ patient.id }}/orders/contacts" class="{{ 'active' if active_tab == 'orders-contacts' }}">Contact Lens Order</a>
+    </div>
+    <a href="/patients/{{ patient.id }}/correspondence" class="{{ 'active' if active_tab == 'correspondence' }}">Correspondence</a>
+    <div class="pw-subgroup">
+      <a href="/patients/{{ patient.id }}/correspondence/documents" class="{{ 'active' if active_tab == 'correspondence-documents' }}">Documents</a>
+      <a href="/patients/{{ patient.id }}/correspondence/notes" class="{{ 'active' if active_tab == 'correspondence-notes' }}">Notes</a>
+    </div>
+  </nav>
+  <div class="pw-content">
+    {% block wcontent %}{% endblock %}
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+  // Records this visit in the browser-side "recently viewed" cookie (sidebar mini-list).
+  // Purely a client convenience -- nothing is stored server-side.
+  if (window.NPV && window.NPV.recordRecentPatient) {
+    window.NPV.recordRecentPatient({{ patient.id }}, {{ display_name | tojson }});
+  }
+</script>
+{% block wextra_js %}{% endblock %}
+{% endblock %}

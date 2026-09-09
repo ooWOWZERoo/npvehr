@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Edit Appointment &mdash; New Path Vision EHR{% endblock %}
+{% block content %}
+<div class="page-header"><h1>Edit Appointment #{{ appt.id }}</h1><a href="/appointments/{{ appt.id }}" class="btn btn-secondary">Cancel</a></div>
+{% if error %}<div class="alert alert-error" role="alert">{{ error }}</div>{% endif %}
+<div class="card form-card">
+  <form method="post" action="/appointments/{{ appt.id }}/edit">
+    <div class="form-row cols-2">
+      <div class="form-group"><label>Patient</label><input value="{{ appt.patient.last_name }}, {{ appt.patient.first_name }}" disabled></div>
+      <div class="form-group"><label for="provider_id">Provider*</label>
+        <select id="provider_id" name="provider_id" required>
+          {% for p in providers %}<option value="{{ p.id }}" {{ 'selected' if appt.provider_id == p.id }}>Dr. {{ p.last_name }}</option>{% endfor %}
+        </select>
+      </div>
+    </div>
+    <div class="form-row cols-2">
+      <div class="form-group"><label for="scheduled_at">Date &amp; Time*</label>
+        <input id="scheduled_at" name="scheduled_at" type="datetime-local" required value="{{ appt.scheduled_at.strftime('%Y-%m-%dT%H:%M') }}"></div>
+      <div class="form-group"><label>Reason</label><input name="reason" value="{{ appt.reason or '' }}"></div>
+    </div>
+    <div class="section-title">Patient Relationship</div>
+    <div class="form-row cols-2">
+      <div class="form-group"><label for="relationship">Patient Relationship*</label>
+        <select id="relationship" name="relationship" required onchange="document.getElementById('relationship_source').value='manual_override'">
+          <option value="new" {{ 'selected' if appt.patient_relationship_at_booking == 'new' }}>New</option>
+          <option value="established" {{ 'selected' if appt.patient_relationship_at_booking == 'established' }}>Established</option>
+        </select>
+        <input type="hidden" id="relationship_source" name="relationship_source" value="{{ appt.patient_relationship_source or 'automatic' }}">
+      </div>
+      <div class="form-group"><label>Override Reason</label><input name="relationship_override_reason" value="{{ appt.patient_relationship_override_reason or '' }}"></div>
+    </div>
+    <div class="section-title">Appointment Type &amp; Color</div>
+    <div class="form-row cols-2">
+      <div class="form-group"><label for="appointment_type_version_id">Appointment Type*</label>
+        <select id="appointment_type_version_id" name="appointment_type_version_id" required>
+          {% for v in types %}<option value="{{ v.id }}" {{ 'selected' if appt.appointment_type_version_id == v.id }}>{{ v.display_name }} ({{ v.calendar_abbreviation }})</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group checkbox-row" style="align-items:flex-end;padding-bottom:0.5rem">
+        <input type="checkbox" id="is_follow_up" name="is_follow_up" value="true" {{ 'checked' if appt.is_follow_up }}>
+        <label for="is_follow_up" style="margin:0">Follow-up visit</label>
+      </div>
+    </div>
+    <div class="section-title">Scheduled Tests</div>
+    <div class="test-chip-list">
+      {% set active_test_ids = appt.tests|selectattr('status','equalto','active')|map(attribute='diagnostic_test_id')|list %}
+      {% for t in tests %}
+      <label class="test-chip"><input type="checkbox" name="test_ids" value="{{ t.id }}" {{ 'checked' if t.id in active_test_ids }}> {{ t.calendar_abbreviation }}</label>
+      {% endfor %}
+    </div>
+    <div class="section-title">Overrides</div>
+    <div class="form-row cols-2">
+      <div class="form-group"><label>Duration Override (minutes)</label><input name="duration_override" type="number" step="5" min="5" max="480" value="{{ appt.duration_minutes if appt.duration_overridden else '' }}"></div>
+      <div class="form-group"><label>Duration Override Reason</label><input name="duration_override_reason" value="{{ appt.duration_override_reason or '' }}"></div>
+    </div>
+    <div class="form-row cols-2">
+      <div class="form-group checkbox-row"><input type="checkbox" name="conflict_override" value="true" id="conflict_override" {{ 'checked' if appt.conflict_overridden }}><label for="conflict_override" style="margin:0">Override conflict</label></div>
+      <div class="form-group"><label>Conflict Override Reason</label><input name="conflict_override_reason" value="{{ appt.conflict_override_reason or '' }}"></div>
+    </div>
+    <div class="form-row cols-2">
+      <div class="form-group"><label>Status</label>
+        <select name="status">{% for s in ['scheduled','checked_in','in_progress','completed','cancelled','no_show'] %}<option value="{{ s }}" {{ 'selected' if appt.status.value == s }}>{{ s.replace('_',' ') }}</option>{% endfor %}</select>
+      </div>
+      <div class="form-group"><label>Notes</label><textarea name="notes">{{ appt.notes or '' }}</textarea></div>
+    </div>
+    <div class="form-actions"><button type="submit" class="btn btn-primary">Save Changes</button></div>
+  </form>
+</div>
+{% endblock %}

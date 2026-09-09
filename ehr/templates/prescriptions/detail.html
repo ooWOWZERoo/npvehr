@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Prescription &mdash; New Path Vision EHR{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>{{ rx.rx_type|title }} Prescription</h1>
+  <div style="display:flex;gap:0.5rem">
+    <a href="/patients/{{ rx.patient_id }}" class="btn btn-secondary btn-sm">Patient</a>
+    <a href="/prescriptions/{{ rx.id }}/print" class="btn btn-primary btn-sm">Print</a>
+  </div>
+</div>
+<div class="detail-grid">
+  <div class="card"><h3>Info</h3><dl class="dl-grid">
+    <dt>Patient</dt><dd><a href="/patients/{{ rx.patient_id }}">{{ rx.patient.last_name }}, {{ rx.patient.first_name }}</a></dd>
+    <dt>Provider</dt><dd>Dr. {{ rx.provider.last_name }}</dd>
+    <dt>Type</dt><dd>{{ rx.rx_type|title }}</dd>
+    <dt>Issued</dt><dd>{{ rx.issue_date or '—' }}</dd>
+    <dt>Expires</dt><dd>{{ rx.expiry_date or '—' }}</dd>
+  </dl></div>
+  <div class="card"><h3>Rx Values</h3>
+    <div class="table-responsive">
+    <table class="exam-table">
+      <tr><th></th><th>Sph</th><th>Cyl</th><th>Axis</th><th>Add</th></tr>
+      <tr><td>OD</td>
+        <td>{{ '%+.2f'|format(rx.od_sphere) if rx.od_sphere is not none else '—' }}</td>
+        <td>{{ '%+.2f'|format(rx.od_cylinder) if rx.od_cylinder is not none else '—' }}</td>
+        <td>{{ rx.od_axis or '—' }}</td>
+        <td>{{ '%+.2f'|format(rx.od_add) if rx.od_add is not none else '—' }}</td>
+      </tr>
+      <tr><td>OS</td>
+        <td>{{ '%+.2f'|format(rx.os_sphere) if rx.os_sphere is not none else '—' }}</td>
+        <td>{{ '%+.2f'|format(rx.os_cylinder) if rx.os_cylinder is not none else '—' }}</td>
+        <td>{{ rx.os_axis or '—' }}</td>
+        <td>{{ '%+.2f'|format(rx.os_add) if rx.os_add is not none else '—' }}</td>
+      </tr>
+    </table>
+    </div>
+    {% if rx.notes %}<p style="margin-top:0.75rem;font-size:0.875rem"><strong>Notes:</strong> {{ rx.notes }}</p>{% endif %}
+  </div>
+</div>
+{% endblock %}
