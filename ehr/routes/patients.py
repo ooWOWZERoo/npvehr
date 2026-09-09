@@ -9,49 +9,12 @@ from ehr.models.database import get_db, Patient, Appointment, EyeExam, Prescript
 from ehr.env_info import EHR_ENV
 from ehr.utils import patient_context, compute_age, display_name
 from ehr.auth.permissions import require_role, PATIENT_EDIT, ROLE_LABELS
+from ehr.services.media import save_patient_photo as _save_photo, delete_patient_photo as _delete_photo_file
 
 router = APIRouter(prefix="/patients", tags=["patients"])
 templates = Jinja2Templates(directory="ehr/templates")
 templates.env.globals["ehr_env"] = EHR_ENV
 templates.env.globals["ROLE_LABELS"] = ROLE_LABELS
-
-UPLOAD_DIR = os.path.join("ehr", "static", "uploads")
-ALLOWED_EXT = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
-
-def _save_photo(upload: UploadFile) -> Optional[str]:
-    if not upload or not upload.filename:
-        return None
-    ext = os.path.splitext(upload.filename)[1].lower()
-    if ext not in ALLOWED_EXT:
-        return None
-    os.makedirs(UPLOAD_DIR, exist_ok=True)
-    fname = f"{uuid.uuid4().hex}{ext}"
-    dest = os.path.join(UPLOAD_DIR, fname)
-    with open(dest, "wb") as f:
-        f.write(upload.file.read())
-    return f"/static/uploads/{fname}"
-
-def _delete_photo_file(photo_path: Optional[str]):
-    """Best-effort delete of a previously-uploaded photo file, given its stored
-    '/static/uploads/<file>' path. Used when a patient's photo is replaced, so old
-    files don't accumulate forever (previously a known, documented gap -- see the
-    spec's orphaned-upload-file item). Deliberately never raises: a missing or
-    already-gone file, a permissions issue, or a path outside the upload dir (which
-    should not happen given how photo_path is always generated, but is checked
-    defensively) all just result in the delete being skipped rather than the
-    request failing -- losing a stale file is far less harmful than a 500 on save."""
-    if not photo_path or not photo_path.startswith("/static/uploads/"):
-        return
-    fname = os.path.basename(photo_path)
-    full_path = os.path.join(UPLOAD_DIR, fname)
-    try:
-        # Defensive check: resolved path must still be inside UPLOAD_DIR.
-        if os.path.commonpath([os.path.abspath(full_path), os.path.abspath(UPLOAD_DIR)]) != os.path.abspath(UPLOAD_DIR):
-            return
-        if os.path.isfile(full_path):
-            os.remove(full_path)
-    except OSError:
-        pass  # best-effort; never let cleanup failure block saving the patient record
 
 def _parse_balance(raw: str):
     """Parse the manually-entered balance_due form field. Blank -> None (even/no

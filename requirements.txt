@@ -9,3 +9,6 @@ python-multipart>=0.0.9
 # Postgres driver for DATABASE_URL in deployed environments (e.g. Neon).
 # Not used locally, where DATABASE_URL is unset and the app falls back to SQLite.
 psycopg[binary]>=3.1.0
+# Patient photo storage in deployed environments (e.g. Vercel). Not used locally,
+# where CLOUDINARY_URL is unset and photos are saved to ehr/static/uploads/ instead.
+cloudinary>=1.36.0
