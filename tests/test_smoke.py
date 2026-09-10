@@ -176,6 +176,34 @@ def test_glaucoma_focus_toggle_composer_and_trend_view(logged_in_page, live_serv
     assert page.locator("text=No glaucoma tracking recorded").is_visible()
 
 
+def test_binocular_vision_focus_toggle_and_composer(logged_in_page, live_server):
+    """Binocular Vision / Pediatrics (ehr/templates/exams/form.html) -- the
+    fourth Visit Focus chip shows/hides its section like the existing three,
+    and the composer's binocular clauses populate Assessment & Plan from the
+    strabismus/home-exercise fields."""
+    page = logged_in_page
+    page.goto(live_server + "/exams/new")
+    binocular_section = page.locator("#focus-binocular")
+    assert not binocular_section.is_visible()
+    page.locator('.focus-toggle[data-target="focus-binocular"]').check()
+    assert binocular_section.is_visible()
+
+    page.fill('input[name="bv_primary_diagnosis_code"]', "H51.11")
+    page.locator('select[name="bv_strabismus_present"]').select_option("Yes")
+    page.locator('select[name="bv_strabismus_direction"]').select_option("Esotropia")
+    assessment = page.locator("#assessment").input_value()
+    assert "H51.11" in assessment
+    assert "strabismus present (Esotropia)" in assessment
+
+    page.locator('input[name="bv_assigned_home_exercises"][value="Brock String"]').check()
+    page.fill('input[name="bv_therapy_session_number"]', "4")
+    page.locator('select[name="bv_follow_up_interval"]').select_option("2 weeks")
+    plan = page.locator("#plan").input_value()
+    assert "Brock String" in plan
+    assert "session 4" in plan
+    assert "2 weeks" in plan
+
+
 def test_new_prescription_form_loads(logged_in_page, live_server):
     page = logged_in_page
     page.goto(live_server + "/prescriptions/new")

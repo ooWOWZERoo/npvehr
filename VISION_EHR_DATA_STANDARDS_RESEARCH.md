@@ -136,9 +136,9 @@ The trend view is a new patient-workspace tab (`GET /patients/{id}/glaucoma-tren
 | diagnostic_orders | String (multi-value) | e.g. "OCT RNFL", "Humphrey VF 24-2" |
 | follow_up_interval, clinical_notes | String / Text | |
 
-### 5.4 Binocular Vision & Pediatrics (Vision Therapy) dashboard
+### 5.4 Binocular Vision & Pediatrics (Vision Therapy) dashboard — **implemented in v2.17**
 
-A new table, e.g. `BinocularVisionAssessment`.
+Built as an `exam_id`-FK child row (`BinocularVisionAssessment`), same shape as `AnteriorSegmentAssessment`/`GlaucomaTracking` — one row per exam. Unlike §5.3's Glaucoma dashboard, nothing in this field list asks for cross-visit trending beyond `therapy_session_number` (a plain "session N of M" counter, not a chart), so this stayed a single-visit-snapshot dashboard: a fourth Visit Focus chip, a form section, and a conditional detail card, no new trend-view route. `strabismus_present` is captured as a tri-state Yes/No dropdown rather than a checkbox, since a confirmed-absent finding is clinically distinct from one simply not yet assessed.
 
 | Field | Translated type | Notes |
 | --- | --- | --- |
@@ -245,4 +245,5 @@ The source document includes a sample ASC X12 EDI 837 segment sequence and a CMS
 8. ~~The free-text `EyeExam.assessment`/`plan` fields (§12.5) have no connection to any of the structured Assessment fields built in §5.1/§5.2 — a clinician has to separately re-type in prose what they already selected as chips/dropdowns. The source document's dropped "Auto-Generated Clinical Note Output Summary" concept (see §5.1's correction note above) addresses exactly this: auto-populate `assessment`/`plan` with a draft narrative synthesized from the structured fields, left editable rather than locked.~~ **Done, v2.12** — see the baseline spec's §12.5c. Two further diagnosis-driven refinements to this composer (ICD-10 auto-suggestion, diagnosis-driven recall interval) are recorded as candidates in §7 below, from a later reviewed document.
 9. **New, v2.13:** §6's billing/claims/EDI material remains target-state only, same treatment as §5.6 — revisit only with a real clearinghouse/payer relationship and compliance review, not attempted here. **Not started.**
 10. ~~§7's two compatible ideas (ICD-10 auto-suggestion, diagnosis-driven recall interval) are candidates for a future narrow slice extending the existing v2.12 composer.~~ **Done, v2.15** — see the baseline spec's §12.5c.
-11. ~~Build the third dashboard (§5.3's Posterior Segment / Glaucoma Tracking), including the longitudinal IOP trend view it wants beyond the other dashboards' single-visit-snapshot shape.~~ **Done, v2.16** — see §5.3 and the baseline spec's §12.5e. §5.4-§5.5 (Binocular Vision, Pre/Post-Op) remain undone; each adds one more Visit Focus chip by the same pattern.
+11. ~~Build the third dashboard (§5.3's Posterior Segment / Glaucoma Tracking), including the longitudinal IOP trend view it wants beyond the other dashboards' single-visit-snapshot shape.~~ **Done, v2.16** — see §5.3 and the baseline spec's §12.5e.
+12. ~~Build the fourth dashboard (§5.4's Binocular Vision & Pediatrics / Vision Therapy).~~ **Done, v2.17** — see §5.4 and the baseline spec's §12.5f. §5.5 (Pre/Post-Op Co-Management) remains undone; it adds one more Visit Focus chip by the same pattern.

@@ -20,6 +20,7 @@
       <label class="test-chip"><input type="checkbox" class="focus-toggle" data-target="focus-refractive" checked> Comprehensive / Refractive</label>
       <label class="test-chip"><input type="checkbox" class="focus-toggle" data-target="focus-anterior"> Anterior Segment / Dry Eye</label>
       <label class="test-chip"><input type="checkbox" class="focus-toggle" data-target="focus-glaucoma"> Posterior Segment / Glaucoma</label>
+      <label class="test-chip"><input type="checkbox" class="focus-toggle" data-target="focus-binocular"> Binocular Vision / Pediatrics</label>
     </div>
     <div class="section-title">Visual Acuity</div>
     <div class="table-responsive">
@@ -176,6 +177,50 @@
       <div class="form-group"><label>Clinical Notes</label><input name="gt_clinical_notes"></div>
     </div>
     </div>
+    <div id="focus-binocular">
+    <div class="section-title">Binocular Vision / Pediatrics Assessment <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; structured diagnosis fields (VISION_EHR_DATA_STANDARDS_RESEARCH.md 5.4)</span></div>
+    <div class="form-row cols-3">
+      <div class="form-group"><label>Primary Diagnosis Code</label><input name="bv_primary_diagnosis_code" placeholder="H51.11"></div>
+      <div class="form-group"><label>Strabismus Present?</label>
+        <select name="bv_strabismus_present"><option value="">&mdash;</option><option>Yes</option><option>No</option></select>
+      </div>
+      <div class="form-group"><label>Strabismus Direction</label>
+        <select name="bv_strabismus_direction"><option value="">&mdash;</option><option>Exotropia</option><option>Esotropia</option><option>Hypertropia</option></select>
+      </div>
+    </div>
+    <div class="form-row cols-2">
+      <div class="form-group"><label>Phoria, Distance (&Delta;)</label><input name="bv_phoria_distance_diopters" type="number" placeholder="Negative = Exo, Positive = Eso"></div>
+      <div class="form-group"><label>Phoria, Near (&Delta;)</label><input name="bv_phoria_near_diopters" type="number" placeholder="Negative = Exo, Positive = Eso"></div>
+    </div>
+    <div class="form-row cols-2">
+      <div class="form-group"><label>NPC Break (cm)</label><input name="bv_npc_break_cm" type="number" step="0.5" min="0"></div>
+      <div class="form-group"><label>NPC Recovery (cm)</label><input name="bv_npc_recovery_cm" type="number" step="0.5" min="0"></div>
+    </div>
+    <div class="table-responsive">
+    <table class="exam-table">
+      <tr><th></th><th>Accommodation Amplitude (D)</th></tr>
+      {% for eye in ['od', 'os'] %}
+      <tr><td>{{ eye|upper }}</td><td><input name="bv_accommodation_amplitude_{{ eye }}" type="number" step="0.25" min="0"></td></tr>
+      {% endfor %}
+    </table>
+    </div>
+    <div class="form-group"><label>Assigned Home Exercises</label></div>
+    <div class="test-chip-list">
+      {% for ex in ['Brock String', 'Lifesaver Card', 'Pencil Push-Ups', 'Barrel Cards'] %}
+      <label class="test-chip"><input type="checkbox" name="bv_assigned_home_exercises" value="{{ ex }}"> {{ ex }}</label>
+      {% endfor %}
+    </div>
+    <div class="form-row cols-3">
+      <div class="form-group"><label>Therapy Session #</label><input name="bv_therapy_session_number" type="number" min="1" placeholder="e.g. 4 of 12"></div>
+      <div class="form-group"><label>Therapy Compliance</label>
+        <select name="bv_therapy_compliance_rating"><option value="">&mdash;</option><option>Excellent</option><option>Good</option><option>Fair</option><option>Poor</option></select>
+      </div>
+      <div class="form-group"><label>Follow-up Interval</label>
+        <select name="bv_follow_up_interval"><option value="">&mdash;</option><option>1 week</option><option>2 weeks</option><option>1 month</option><option>3 months</option></select>
+      </div>
+    </div>
+    <div class="form-group"><label>Clinical Notes</label><input name="bv_clinical_notes"></div>
+    </div>
     <div class="section-title">Assessment &amp; Plan <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; auto-filled from the structured fields above as you fill them in; edit freely</span></div>
     <div class="form-row cols-2">
       <div class="form-group"><label>Assessment</label><textarea name="assessment" id="assessment"></textarea></div>
@@ -283,6 +328,17 @@ var ICD10_BY_DX = {
         parts.push(s3);
       }
     }
+    if (isFocusOn('focus-binocular')) {
+      var bvCode = fieldValue('bv_primary_diagnosis_code'), bvStrab = fieldValue('bv_strabismus_present'),
+          bvDir = fieldValue('bv_strabismus_direction');
+      if (bvCode || bvStrab) {
+        var s4 = 'Binocular vision dysfunction' + (bvCode ? ' (' + bvCode + ')' : '');
+        if (bvStrab === 'Yes') s4 += ', strabismus present' + (bvDir ? ' (' + bvDir + ')' : '');
+        else if (bvStrab === 'No') s4 += ', no strabismus';
+        s4 += '.';
+        parts.push(s4);
+      }
+    }
     return parts.join(' ');
   }
 
@@ -318,6 +374,12 @@ var ICD10_BY_DX = {
       if (orders.length) parts.push('Order ' + orders.join(', ') + '.');
       if (gtFu) parts.push('Follow up in ' + gtFu + '.');
     }
+    if (isFocusOn('focus-binocular')) {
+      var exercises = checkedValues('bv_assigned_home_exercises'), bvFu = fieldValue('bv_follow_up_interval'),
+          sessionNum = fieldValue('bv_therapy_session_number');
+      if (exercises.length) parts.push('Vision therapy: ' + exercises.join(', ') + (sessionNum ? ' (session ' + sessionNum + ')' : '') + '.');
+      if (bvFu) parts.push('Follow up in ' + bvFu + '.');
+    }
     if (!parts.length) {
       var weeks = fieldValue('follow_up_weeks');
       if (weeks) parts.push('Follow up in ' + weeks + ' weeks.');
@@ -338,6 +400,7 @@ var ICD10_BY_DX = {
   document.querySelectorAll(
     '#focus-refractive input, #focus-refractive select, #focus-anterior input, #focus-anterior select, ' +
     '#focus-glaucoma input, #focus-glaucoma select, ' +
+    '#focus-binocular input, #focus-binocular select, ' +
     '.focus-toggle, [name="follow_up_weeks"]'
   ).forEach(function (el) {
     // 'change' covers selects/checkboxes immediately; 'input' is also needed

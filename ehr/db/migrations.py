@@ -651,6 +651,35 @@ def migration_017_create_glaucoma_trackings(conn):
         "ON glaucoma_trackings (exam_id)"
     ))
 
+# ---------------------------------------------------------------------------
+# Migration: 018 -- create `binocular_vision_assessments`
+# (VISION_EHR_DATA_STANDARDS_RESEARCH.md 5.4), reviewed in v2.9, built in
+# v2.17. Brand-new table -- plain CREATE TABLE IF NOT EXISTS, same pattern as
+# migrations 016/017.
+# ---------------------------------------------------------------------------
+def migration_018_create_binocular_vision_assessments(conn):
+    conn.execute(text(f"""
+        CREATE TABLE IF NOT EXISTS binocular_vision_assessments (
+            id {_pk_ddl(conn)},
+            exam_id INTEGER NOT NULL,
+            primary_diagnosis_code VARCHAR,
+            phoria_distance_diopters INTEGER, phoria_near_diopters INTEGER,
+            strabismus_present BOOLEAN,
+            strabismus_direction VARCHAR,
+            npc_break_cm FLOAT, npc_recovery_cm FLOAT,
+            accommodation_amplitude_od FLOAT, accommodation_amplitude_os FLOAT,
+            assigned_home_exercises VARCHAR,
+            therapy_session_number INTEGER,
+            therapy_compliance_rating VARCHAR,
+            follow_up_interval VARCHAR,
+            clinical_notes TEXT
+        )
+    """))
+    conn.execute(text(
+        "CREATE INDEX IF NOT EXISTS ix_binocular_vision_assessments_exam "
+        "ON binocular_vision_assessments (exam_id)"
+    ))
+
 # Ordered list of (id, function). Adding new migrations: append, never edit past entries.
 COLUMN_MIGRATIONS = [
     ("001_appointment_columns", migration_001_appointment_columns),
@@ -665,6 +694,7 @@ COLUMN_MIGRATIONS = [
     ("015_refractive_assessment_and_plan", migration_015_refractive_assessment_and_plan),
     ("016_create_anterior_segment_assessments", migration_016_create_anterior_segment_assessments),
     ("017_create_glaucoma_trackings", migration_017_create_glaucoma_trackings),
+    ("018_create_binocular_vision_assessments", migration_018_create_binocular_vision_assessments),
 ]
 POST_CREATE_ALL_MIGRATIONS = [
     ("002_seed_appointment_types", migration_002_seed_appointment_types),

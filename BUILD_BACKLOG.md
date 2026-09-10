@@ -1,6 +1,6 @@
 # New Path Vision EHR — Master Build Backlog
 
-**Status:** Living tracking document. **Baseline as of:** spec v2.16 / research doc v2.16 (2026-09-10).
+**Status:** Living tracking document. **Baseline as of:** spec v2.17 / research doc v2.17 (2026-09-10).
 
 ## Purpose and how to use this document
 
@@ -19,7 +19,8 @@ This consolidates every outstanding build item, investigation, and test scattere
 ## 0. In Progress / Up Next
 
 - [x] **ICD-10 auto-suggestion + diagnosis-driven recall interval** — extends the v2.12 Assessment & Plan composer. **Done, v2.15** — see baseline spec §12.5d, research doc §7.2.
-- [x] **Posterior Segment & Glaucoma Tracking dashboard, with trend view** — third of five clinical dashboards. **Done, v2.16** — see baseline spec §12.5e, research doc §5.3. Pick the next item from the sections below.
+- [x] **Posterior Segment & Glaucoma Tracking dashboard, with trend view** — third of five clinical dashboards. **Done, v2.16** — see baseline spec §12.5e, research doc §5.3.
+- [x] **Binocular Vision & Pediatrics (Vision Therapy) dashboard** — fourth of five clinical dashboards. **Done, v2.17** — see baseline spec §12.5f, research doc §5.4. Pick the next item from the sections below.
 
 ---
 
@@ -36,8 +37,8 @@ Three of five dashboards from the original reviewed requirements document remain
   - [x] Seed data (two glaucoma-tracking exams, 6 months apart, same demo patient)
   - [x] Playwright coverage (`test_glaucoma_focus_toggle_composer_and_trend_view`)
   - [x] Spec update
-- [ ] **§5.4 Binocular Vision & Pediatrics (Vision Therapy) dashboard.** Phoria (distance/near), NPC break/recovery, accommodation amplitude, home exercises, therapy session/compliance tracking. Lower visit volume, more specialty/pediatric-focused than the other four.
-  - [ ] Schema, migration, routes, templates, seed, tests, spec (same 7-step pattern)
+- [x] **§5.4 Binocular Vision & Pediatrics (Vision Therapy) dashboard. Done, v2.17** — see baseline spec §12.5f. No trend view needed (nothing in this field list asks for cross-visit trending beyond a plain session-number counter).
+  - [x] Schema, migration, routes, templates, seed, tests, spec (same 7-step pattern)
 - [ ] **§5.5 Pre-/Post-Operative Co-Management dashboard.** The most structurally different of the five — the source document models it as **one row per follow-up visit along a timeline** (Day 1, Week 1, Month 1, Month 3...), which doesn't fit the "one row per exam" shape every other dashboard uses. Needs its own design pass before the standard 7-step pattern applies cleanly:
   - [ ] Decide the per-visit-row vs. single-row-with-mutable-milestone modeling question (research doc §5.5 already leans toward per-visit-row, matching this app's append-only audit style — confirm before building)
   - [ ] Schema, migration, routes, templates, seed, tests, spec

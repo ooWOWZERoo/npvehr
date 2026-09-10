@@ -461,6 +461,7 @@ class EyeExam(Base):
     prescriptions = relationship("Prescription", back_populates="exam")
     anterior_segment_assessments = relationship("AnteriorSegmentAssessment", back_populates="exam", cascade="all, delete-orphan")
     glaucoma_trackings = relationship("GlaucomaTracking", back_populates="exam", cascade="all, delete-orphan")
+    binocular_vision_assessments = relationship("BinocularVisionAssessment", back_populates="exam", cascade="all, delete-orphan")
 
 class Refraction(Base):
     __tablename__ = "refractions"
@@ -529,6 +530,30 @@ class GlaucomaTracking(Base):
     follow_up_interval = Column(String)
     clinical_notes = Column(Text)
     exam = relationship("EyeExam", back_populates="glaucoma_trackings")
+
+class BinocularVisionAssessment(Base):
+    """Binocular Vision & Pediatrics (Vision Therapy) structured Assessment &
+    Plan (VISION_EHR_DATA_STANDARDS_RESEARCH.md 5.4), the fourth of five
+    clinical dashboards reviewed in v2.9 -- built in v2.17. Same exam_id-FK
+    child-row shape as AnteriorSegmentAssessment/GlaucomaTracking (one row per
+    exam) -- unlike Glaucoma, this dashboard's own field list has no
+    longitudinal-trending ask beyond therapy_session_number, so it stays a
+    single-visit-snapshot dashboard, no trend view."""
+    __tablename__ = "binocular_vision_assessments"
+    id = Column(Integer, primary_key=True, index=True)
+    exam_id = Column(Integer, ForeignKey("eye_exams.id"), nullable=False)
+    primary_diagnosis_code = Column(String)  # free-text, e.g. 'H51.11' (Convergence insufficiency)
+    phoria_distance_diopters = Column(Integer); phoria_near_diopters = Column(Integer)  # Negative = Exo, Positive = Eso
+    strabismus_present = Column(Boolean)
+    strabismus_direction = Column(String)  # Exotropia / Esotropia / Hypertropia
+    npc_break_cm = Column(Float); npc_recovery_cm = Column(Float)  # Near Point of Convergence
+    accommodation_amplitude_od = Column(Float); accommodation_amplitude_os = Column(Float)  # Diopters
+    assigned_home_exercises = Column(String)  # comma-delimited, e.g. 'Brock String, Lifesaver Card'
+    therapy_session_number = Column(Integer)  # e.g. session 4 of 12
+    therapy_compliance_rating = Column(String)  # Excellent / Good / Fair / Poor
+    follow_up_interval = Column(String)
+    clinical_notes = Column(Text)
+    exam = relationship("EyeExam", back_populates="binocular_vision_assessments")
 
 class Prescription(Base):
     __tablename__ = "prescriptions"

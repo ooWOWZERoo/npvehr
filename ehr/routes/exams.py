@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
-from ehr.models.database import get_db, EyeExam, Refraction, AnteriorSegmentAssessment, GlaucomaTracking, Patient, Provider
+from ehr.models.database import get_db, EyeExam, Refraction, AnteriorSegmentAssessment, GlaucomaTracking, BinocularVisionAssessment, Patient, Provider
 from ehr.env_info import EHR_ENV
 from ehr.utils import patient_context
 from ehr.auth.permissions import require_role, EXAM_VIEW, EXAM_EDIT, ROLE_LABELS
@@ -19,6 +19,10 @@ def _f(v):
 def _i(v):
     try: return int(v) if v and str(v).strip() else None
     except: return None
+def _b(v):
+    # Tri-state: "Yes"/"No" dropdown, not a checkbox -- an unset finding is
+    # clinically different from a confirmed-absent one.
+    return {"Yes": True, "No": False}.get(v)
 
 @router.get("/new", response_class=HTMLResponse, dependencies=[Depends(require_role(*EXAM_EDIT))])
 def new_exam_form(request: Request, patient_id: int = None, db: Session = Depends(get_db)):
@@ -93,6 +97,19 @@ async def create_exam(request: Request, db: Session = Depends(get_db)):
         follow_up_interval=g("gt_follow_up_interval"), clinical_notes=g("gt_clinical_notes"))
     if any(v not in (None, "") for v in gt_fields.values()):
         db.add(GlaucomaTracking(exam_id=exam.id, **gt_fields))
+    # Binocular Vision & Pediatrics (Vision Therapy) assessment (5.4) -- same
+    # all-optional rule.
+    bv_fields = dict(
+        primary_diagnosis_code=g("bv_primary_diagnosis_code"),
+        phoria_distance_diopters=_i(g("bv_phoria_distance_diopters")), phoria_near_diopters=_i(g("bv_phoria_near_diopters")),
+        strabismus_present=_b(g("bv_strabismus_present")), strabismus_direction=g("bv_strabismus_direction"),
+        npc_break_cm=_f(g("bv_npc_break_cm")), npc_recovery_cm=_f(g("bv_npc_recovery_cm")),
+        accommodation_amplitude_od=_f(g("bv_accommodation_amplitude_od")), accommodation_amplitude_os=_f(g("bv_accommodation_amplitude_os")),
+        assigned_home_exercises=gl("bv_assigned_home_exercises"),
+        therapy_session_number=_i(g("bv_therapy_session_number")), therapy_compliance_rating=g("bv_therapy_compliance_rating"),
+        follow_up_interval=g("bv_follow_up_interval"), clinical_notes=g("bv_clinical_notes"))
+    if any(v not in (None, "") for v in bv_fields.values()):
+        db.add(BinocularVisionAssessment(exam_id=exam.id, **bv_fields))
     db.commit()
     return RedirectResponse(f"/exams/{exam.id}", status_code=303)
 

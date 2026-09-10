@@ -2,7 +2,7 @@ import secrets
 from datetime import datetime, timedelta
 from ehr.models.database import (init_db, engine, SessionLocal, Provider, Patient, Appointment, EyeExam,
     Refraction, Prescription, AppointmentStatus, AppointmentType, AppointmentTypeVersion, User,
-    ProviderAvailabilityTemplate, AnteriorSegmentAssessment, GlaucomaTracking)
+    ProviderAvailabilityTemplate, AnteriorSegmentAssessment, GlaucomaTracking, BinocularVisionAssessment)
 from ehr.db.migrations import run_column_migrations, run_post_create_all_migrations
 from ehr.auth.security import hash_password
 from ehr.auth.permissions import SYSTEM_ADMINISTRATOR, OPTOMETRIST_PROVIDER, FRONT_DESK, ROLE_LABELS
@@ -233,6 +233,29 @@ def seed_demo_data(db):
         vf_reliability_od="Reliable", vf_reliability_os="Reliable",
         prescribed_glaucoma_meds="Latanoprost 0.005% QHS OU",
         diagnostic_orders="OCT RNFL, Humphrey VF 24-2", follow_up_interval="6 months"))
+
+    # Binocular Vision / Pediatrics (Vision Therapy) exam
+    # (VISION_EHR_DATA_STANDARDS_RESEARCH.md 5.4) for the youngest demo
+    # patient (Emma Brown), a fitting narrative choice for a convergence
+    # insufficiency / vision therapy case.
+    binocular_exam = EyeExam(
+        patient_id=pts[4].id, provider_id=p2.id, exam_date="2026-08-20",
+        chief_complaint="Eyestrain and headaches with reading, teacher noted losing place",
+        od_sc="20/20", os_sc="20/20", od_cc="20/20", os_cc="20/20",
+        cover_test="Exophoria at near, orthophoria at distance",
+        assessment="Convergence insufficiency OU.",
+        plan="Vision therapy: Brock String, Pencil Push-Ups (session 4). Follow up in 2 weeks.",
+        diagnosis_codes="H51.11", follow_up_weeks=2,
+    )
+    db.add(binocular_exam); db.flush()
+    db.add(BinocularVisionAssessment(exam_id=binocular_exam.id,
+        primary_diagnosis_code="H51.11", phoria_distance_diopters=0, phoria_near_diopters=-12,
+        strabismus_present=False,
+        npc_break_cm=12.0, npc_recovery_cm=18.0,
+        accommodation_amplitude_od=8.0, accommodation_amplitude_os=8.5,
+        assigned_home_exercises="Brock String, Pencil Push-Ups",
+        therapy_session_number=4, therapy_compliance_rating="Good",
+        follow_up_interval="2 weeks"))
 
     db.commit(); db.close()
     print("Seeded database.")
