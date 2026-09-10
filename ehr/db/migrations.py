@@ -465,6 +465,49 @@ def migration_011_seed_resources_and_requirements(conn):
         """), {"vid": version_id, "rid": resource_id})
 
 # ---------------------------------------------------------------------------
+# Migration: 014 -- create `provider_availability_templates`/
+# `provider_availability_exceptions` tables. Brand-new tables, plain CREATE
+# TABLE IF NOT EXISTS (same convention as 006/007) -- these are the
+# provider-scoped counterpart to the resource-scoped AvailabilityTemplate/
+# AvailabilityException tables, and power the real open-slot availability
+# search (ehr/services/scheduling.py's find_open_slots). See
+# ProviderAvailabilityTemplate's docstring in ehr/models/database.py for why
+# this is a separate table rather than a nullable provider_id added to the
+# existing resource-scoped tables.
+# ---------------------------------------------------------------------------
+def migration_014_create_provider_availability_tables(conn):
+    conn.execute(text(f"""
+        CREATE TABLE IF NOT EXISTS provider_availability_templates (
+            id {_pk_ddl(conn)},
+            provider_id INTEGER NOT NULL,
+            day_of_week INTEGER NOT NULL,
+            start_time VARCHAR NOT NULL,
+            end_time VARCHAR NOT NULL,
+            effective_from VARCHAR,
+            effective_through VARCHAR,
+            active BOOLEAN DEFAULT TRUE
+        )
+    """))
+    conn.execute(text(
+        "CREATE INDEX IF NOT EXISTS ix_provider_availability_templates_provider_day "
+        "ON provider_availability_templates (provider_id, day_of_week)"
+    ))
+    conn.execute(text(f"""
+        CREATE TABLE IF NOT EXISTS provider_availability_exceptions (
+            id {_pk_ddl(conn)},
+            provider_id INTEGER NOT NULL,
+            start_at TIMESTAMP NOT NULL,
+            end_at TIMESTAMP NOT NULL,
+            exception_type VARCHAR DEFAULT 'blocked',
+            reason VARCHAR
+        )
+    """))
+    conn.execute(text(
+        "CREATE INDEX IF NOT EXISTS ix_provider_availability_exceptions_provider_window "
+        "ON provider_availability_exceptions (provider_id, start_at, end_at)"
+    ))
+
+# ---------------------------------------------------------------------------
 # Migration: 012 -- create `users`, `user_sessions`, `auth_audit_events` tables
 # (real-authentication pass). Brand-new tables -- plain CREATE TABLE IF NOT
 # EXISTS is safe/idempotent even though create_all() would also create these
@@ -538,6 +581,7 @@ COLUMN_MIGRATIONS = [
     ("010_patient_mrn_uniqueness", migration_010_patient_mrn_uniqueness),
     ("012_create_auth_tables", migration_012_create_auth_tables),
     ("013_appointment_created_updated_by", migration_013_appointment_created_updated_by),
+    ("014_create_provider_availability_tables", migration_014_create_provider_availability_tables),
 ]
 POST_CREATE_ALL_MIGRATIONS = [
     ("002_seed_appointment_types", migration_002_seed_appointment_types),

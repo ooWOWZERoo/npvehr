@@ -205,3 +205,84 @@ def suggest_relationship(db, patient_id: int, appointment_date_str: str) -> str:
             .filter(EyeExam.patient_id == patient_id, EyeExam.exam_date < appointment_date_str)
             .first())
     return "established" if exam else "new"
+
+
+def find_open_slots(db, provider_id: int, target_date, duration_minutes: int,
+                     exclude_appointment_id: int = None):
+    """Real open-slot search for one provider on one calendar date. Returns a
+    list of available start datetimes where a duration_minutes-long
+    appointment fits with no conflict, walked at SLOT_UNIT_MINUTES resolution.
+
+    Building blocks, all reused rather than reimplemented: this provider's
+    ProviderAvailabilityTemplate rows for that day-of-week are the base open
+    window(s); find_closure() rules out a whole-day practice closure;
+    overlapping ProviderAvailabilityException ('blocked') windows and every
+    conflicting appointment's occupied interval (via the same
+    compute_occupied_interval/intervals_overlap/ACTIVE_STATUSES machinery
+    find_provider_conflict already uses) are subtracted from what's left.
+
+    target_date is a datetime.date. Day-of-week alignment: Python's
+    date.weekday() (Monday=0..Sunday=6) matches this schema's day_of_week
+    convention exactly, so no conversion is needed."""
+    from ehr.models.database import ProviderAvailabilityTemplate, ProviderAvailabilityException, Appointment
+
+    day_start = datetime.combine(target_date, datetime.min.time())
+    day_end = day_start + timedelta(days=1)
+
+    if find_closure(db, day_start):
+        return []
+
+    date_str = target_date.isoformat()
+    day_of_week = target_date.weekday()
+    rows = (db.query(ProviderAvailabilityTemplate)
+            .filter(ProviderAvailabilityTemplate.provider_id == provider_id,
+                    ProviderAvailabilityTemplate.day_of_week == day_of_week,
+                    ProviderAvailabilityTemplate.active == True)
+            .all())
+    windows = []
+    for row in rows:
+        if row.effective_from and date_str < row.effective_from:
+            continue
+        if row.effective_through and date_str > row.effective_through:
+            continue
+        start_h, start_m = (int(x) for x in row.start_time.split(":"))
+        end_h, end_m = (int(x) for x in row.end_time.split(":"))
+        windows.append((day_start.replace(hour=start_h, minute=start_m),
+                         day_start.replace(hour=end_h, minute=end_m)))
+    if not windows:
+        return []
+
+    blockers = []
+    exceptions = (db.query(ProviderAvailabilityException)
+                  .filter(ProviderAvailabilityException.provider_id == provider_id,
+                          ProviderAvailabilityException.exception_type == "blocked")
+                  .all())
+    for exc in exceptions:
+        if intervals_overlap(exc.start_at, exc.end_at, day_start, day_end):
+            blockers.append((exc.start_at, exc.end_at))
+
+    appt_q = db.query(Appointment).filter(Appointment.provider_id == provider_id,
+                                           Appointment.status.in_(list(ACTIVE_STATUSES)))
+    if exclude_appointment_id is not None:
+        appt_q = appt_q.filter(Appointment.id != exclude_appointment_id)
+    for appt in appt_q.all():
+        appt_status = appt.status.value if hasattr(appt.status, "value") else appt.status
+        if appt_status not in ACTIVE_STATUSES:
+            continue
+        occ_start, _end, occ_end = compute_occupied_interval(
+            appt.scheduled_at, appt.duration_minutes or 0,
+            appt.buffer_before_minutes or 0, appt.buffer_after_minutes or 0)
+        if intervals_overlap(occ_start, occ_end, day_start, day_end):
+            blockers.append((occ_start, occ_end))
+
+    slots = []
+    slot_step = timedelta(minutes=SLOT_UNIT_MINUTES)
+    duration_delta = timedelta(minutes=duration_minutes)
+    for window_start, window_end in windows:
+        cursor = window_start
+        while cursor + duration_delta <= window_end:
+            candidate_end = cursor + duration_delta
+            if not any(intervals_overlap(cursor, candidate_end, b_start, b_end) for b_start, b_end in blockers):
+                slots.append(cursor)
+            cursor += slot_step
+    return slots

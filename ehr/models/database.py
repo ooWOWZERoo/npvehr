@@ -308,6 +308,47 @@ class AvailabilityException(Base):
     )
 
 
+class ProviderAvailabilityTemplate(Base):
+    """A provider's recurring weekly working hours -- the provider-scoped
+    counterpart to AvailabilityTemplate above, which is resource-scoped only
+    (exam lanes/rooms/devices) and has no way to represent a provider's own
+    hours. Kept as a separate table rather than adding a nullable provider_id
+    to AvailabilityTemplate: that table's resource_id is NOT NULL, and this
+    app's migration runner only ever does ADD COLUMN/CREATE TABLE IF NOT
+    EXISTS, never a table rebuild, so loosening an existing NOT NULL
+    constraint isn't a pattern available here. Powers the real open-slot
+    availability search (ehr/services/scheduling.py's find_open_slots)."""
+    __tablename__ = "provider_availability_templates"
+    id = Column(Integer, primary_key=True, index=True)
+    provider_id = Column(Integer, ForeignKey("providers.id"), nullable=False)
+    day_of_week = Column(Integer, nullable=False)  # 0=Monday .. 6=Sunday
+    start_time = Column(String, nullable=False)  # 'HH:MM'
+    end_time = Column(String, nullable=False)
+    effective_from = Column(String)
+    effective_through = Column(String)
+    active = Column(Boolean, default=True)
+
+    __table_args__ = (
+        Index("ix_provider_availability_templates_provider_day", "provider_id", "day_of_week"),
+    )
+
+
+class ProviderAvailabilityException(Base):
+    """Provider-scoped counterpart to AvailabilityException above (e.g. a
+    provider's one-off block for a meeting, vacation, or personal appointment)."""
+    __tablename__ = "provider_availability_exceptions"
+    id = Column(Integer, primary_key=True, index=True)
+    provider_id = Column(Integer, ForeignKey("providers.id"), nullable=False)
+    start_at = Column(DateTime, nullable=False)
+    end_at = Column(DateTime, nullable=False)
+    exception_type = Column(String, default="blocked")  # 'blocked' | 'extra_availability'
+    reason = Column(String)
+
+    __table_args__ = (
+        Index("ix_provider_availability_exceptions_provider_window", "provider_id", "start_at", "end_at"),
+    )
+
+
 class PracticeClosure(Base):
     """Practice-wide Holidays/Closures (spec: Holidays/Closures admin screen).
 

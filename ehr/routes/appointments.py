@@ -326,11 +326,35 @@ def week_view(request: Request, date_str: str = None, provider_id: int = None,
 
 
 @router.get("/availability", response_class=HTMLResponse)
-def availability(request: Request, provider_id: int = Form(None), db: Session = Depends(get_db)):
-    # Simplified per spec 19.2: full slot search UI is deferred (see report); this
-    # endpoint exists so the route contract is satisfied and returns a usable page.
+def availability(request: Request, provider_id: int = None, appointment_type_version_id: int = None,
+                  relationship: str = None, date_str: str = None, db: Session = Depends(get_db)):
+    """Real open-slot search (spec 19.2) -- see ehr/services/scheduling.py's
+    find_open_slots. Previously a placeholder page with no logic at all; the
+    old version also read provider_id via Form(None) on a GET route, which
+    never actually receives a value (a GET <form> submits the query string,
+    not a request body, which is what Form() reads) -- these are now plain
+    query parameters, which FastAPI binds from the query string by default."""
+    providers = db.query(Provider).all()
+    types = _bookable_type_versions(db)
+    target_date = date.fromisoformat(date_str) if date_str else date.today()
+    slots, version, error = [], None, None
+    if provider_id and appointment_type_version_id and relationship:
+        version = db.query(AppointmentTypeVersion).filter(
+            AppointmentTypeVersion.id == appointment_type_version_id).first()
+        if not version or not version.active:
+            error = "Selected appointment type is not available for booking."
+        elif relationship not in ("new", "established"):
+            error = "Patient relationship must be 'new' or 'established'."
+        else:
+            try:
+                duration_minutes = sched.compute_duration_minutes(version, relationship)
+                slots = sched.find_open_slots(db, provider_id, target_date, duration_minutes)
+            except ValueError as e:
+                error = str(e)
     return templates.TemplateResponse(request, "appointments/availability.html", {
-        "providers": db.query(Provider).all(), "provider_id": provider_id})
+        "providers": providers, "types": types, "provider_id": provider_id,
+        "appointment_type_version_id": appointment_type_version_id, "relationship": relationship,
+        "target_date": target_date, "slots": slots, "version": version, "error": error})
 
 
 @router.get("/new", response_class=HTMLResponse)

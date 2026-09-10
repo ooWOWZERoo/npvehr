@@ -1,7 +1,8 @@
 import secrets
 from datetime import datetime, timedelta
 from ehr.models.database import (init_db, engine, SessionLocal, Provider, Patient, Appointment, EyeExam,
-    Refraction, Prescription, AppointmentStatus, AppointmentType, AppointmentTypeVersion, User)
+    Refraction, Prescription, AppointmentStatus, AppointmentType, AppointmentTypeVersion, User,
+    ProviderAvailabilityTemplate)
 from ehr.db.migrations import run_column_migrations, run_post_create_all_migrations
 from ehr.auth.security import hash_password
 from ehr.auth.permissions import SYSTEM_ADMINISTRATOR, OPTOMETRIST_PROVIDER, FRONT_DESK, ROLE_LABELS
@@ -71,6 +72,16 @@ def seed_demo_data(db):
     p1 = Provider(first_name="Sarah", last_name="Chen", license_number="OD-12345", npi="1234567890")
     p2 = Provider(first_name="Marcus", last_name="Rivera", license_number="OD-67890", npi="0987654321")
     db.add_all([p1, p2]); db.flush()
+
+    # Default Mon-Fri 9am-5pm working hours for both seeded providers, so the
+    # open-slot availability search (ehr/services/scheduling.py's
+    # find_open_slots, /appointments/availability) has real data to search
+    # against immediately rather than returning "no availability" until an
+    # admin manually configures hours first.
+    for provider in (p1, p2):
+        for day in range(5):  # 0=Monday .. 4=Friday
+            db.add(ProviderAvailabilityTemplate(provider_id=provider.id, day_of_week=day,
+                start_time="09:00", end_time="17:00", active=True))
     pts = [
         Patient(first_name="Alice", last_name="Johnson", date_of_birth="1985-03-15", gender="F",
                 phone="555-0101", email="alice@example.com", address="123 Main St", city="Springfield",

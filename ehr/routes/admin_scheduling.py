@@ -5,7 +5,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from ehr.models.database import (get_db, AppointmentType, AppointmentTypeVersion, AppointmentTypeColorRule,
     DiagnosticTest, Resource, AvailabilityTemplate, AppointmentTypeAuditEvent, AppointmentAuditEvent, Appointment,
-    PracticeClosure)
+    PracticeClosure, Provider, ProviderAvailabilityTemplate)
 from ehr.services import scheduling as sched
 from ehr.env_info import EHR_ENV
 from ehr.auth.permissions import require_role, ADMIN_SCHEDULING_VIEW, ADMIN_SCHEDULING_EDIT, ROLE_LABELS
@@ -327,6 +327,28 @@ def create_availability(resource_id: int = Form(...), day_of_week: int = Form(..
         end_time=end_time, active=True))
     db.commit()
     return RedirectResponse("/admin/scheduling/availability", status_code=303)
+
+
+@router.get("/provider-availability", response_class=HTMLResponse, dependencies=[Depends(require_role(*ADMIN_SCHEDULING_VIEW))])
+def list_provider_availability(request: Request, db: Session = Depends(get_db)):
+    """Provider-scoped counterpart to /availability above (which is
+    resource-scoped only). Powers the real open-slot availability search
+    (ehr/services/scheduling.py's find_open_slots, /appointments/availability)."""
+    templates_ = (db.query(ProviderAvailabilityTemplate)
+                  .order_by(ProviderAvailabilityTemplate.provider_id, ProviderAvailabilityTemplate.day_of_week)
+                  .all())
+    return templates.TemplateResponse(request, "admin/scheduling/provider_availability.html",
+        {"templates_": templates_, "providers": db.query(Provider).all(),
+         "day_names": ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"]})
+
+
+@router.post("/provider-availability/new", dependencies=[Depends(require_role(*ADMIN_SCHEDULING_EDIT))])
+def create_provider_availability(provider_id: int = Form(...), day_of_week: int = Form(...),
+    start_time: str = Form(...), end_time: str = Form(...), db: Session = Depends(get_db)):
+    db.add(ProviderAvailabilityTemplate(provider_id=provider_id, day_of_week=day_of_week, start_time=start_time,
+        end_time=end_time, active=True))
+    db.commit()
+    return RedirectResponse("/admin/scheduling/provider-availability", status_code=303)
 
 
 @router.get("/holidays", response_class=HTMLResponse, dependencies=[Depends(require_role(*ADMIN_SCHEDULING_VIEW))])

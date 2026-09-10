@@ -3,19 +3,52 @@
 {% block content %}
 <div class="page-header"><h1>Provider Availability</h1><a href="/appointments/calendar" class="btn btn-secondary">Back to Calendar</a></div>
 <div class="card">
-  <form method="get">
-    <div class="form-group"><label>Provider</label>
+  <form method="get" style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:flex-end">
+    <div class="form-group" style="margin:0"><label>Provider</label>
       <select name="provider_id" onchange="this.form.submit()"><option value="">Choose a provider&hellip;</option>
         {% for p in providers %}<option value="{{ p.id }}" {{ 'selected' if provider_id == p.id }}>Dr. {{ p.last_name }}</option>{% endfor %}</select>
     </div>
+    <div class="form-group" style="margin:0"><label>Appointment Type</label>
+      <select name="appointment_type_version_id" onchange="this.form.submit()"><option value="">Choose a type&hellip;</option>
+        {% for t in types %}<option value="{{ t.id }}" {{ 'selected' if appointment_type_version_id == t.id }}>{{ t.display_name }}</option>{% endfor %}</select>
+    </div>
+    <div class="form-group" style="margin:0"><label>Relationship</label>
+      <select name="relationship" onchange="this.form.submit()"><option value="">Choose&hellip;</option>
+        <option value="new" {{ 'selected' if relationship == 'new' }}>New</option>
+        <option value="established" {{ 'selected' if relationship == 'established' }}>Established</option></select>
+    </div>
+    <div class="form-group" style="margin:0"><label>Date</label>
+      <input type="date" name="date_str" value="{{ target_date.isoformat() }}" onchange="this.form.submit()">
+    </div>
   </form>
-  <p style="color:#64748b;font-size:0.875rem">
-    This simplified availability view is deferred (see implementation report): the underlying
-    AvailabilityTemplate / AvailabilityException schema and the provider-conflict service (spec 11-12)
-    are implemented and enforced on every save, but a full open-slot search UI was out of scope for
-    this pass. Use the Day or Week calendar and the "+ New Appointment" flow, which will reject
-    conflicting times server-side with a clear message.
-  </p>
-  <p><a href="/appointments/day{% if provider_id %}?provider_id={{ provider_id }}{% endif %}" class="btn btn-secondary btn-sm">View Day Calendar</a></p>
 </div>
+
+{% if error %}
+<div class="card"><p style="color:#b91c1c">{{ error }}</p></div>
+{% elif not (provider_id and appointment_type_version_id and relationship) %}
+<div class="card">
+  <p style="color:#64748b;font-size:0.875rem">
+    Choose a provider, appointment type, and patient relationship above to search for open slots on
+    {{ target_date.strftime('%B %d, %Y') }}.
+  </p>
+</div>
+{% else %}
+<div class="card">
+  <h3>Open Slots &mdash; Dr. {{ providers|selectattr('id', 'equalto', provider_id)|map(attribute='last_name')|first }},
+    {{ version.display_name }} ({{ 'New' if relationship == 'new' else 'Established' }}), {{ target_date.strftime('%B %d, %Y') }}</h3>
+  {% if slots %}
+  <div class="slot-grid" style="display:flex;flex-wrap:wrap;gap:0.5rem">
+    {% for slot in slots %}
+    <a href="/appointments/new?date={{ target_date.isoformat() }}" class="btn btn-secondary btn-sm">{{ slot.strftime('%I:%M %p') }}</a>
+    {% endfor %}
+  </div>
+  <p style="font-size:0.8rem;color:#64748b;margin-top:1rem">
+    Each time links to the new-appointment form for {{ target_date.strftime('%B %d, %Y') }} -- select this provider,
+    type, and the exact time shown here when booking (the form does not yet pre-fill provider/type/time, only the date).
+  </p>
+  {% else %}
+  <p style="color:#64748b">No open slots for this provider on this date &mdash; fully booked, outside working hours, or the practice is closed.</p>
+  {% endif %}
+</div>
+{% endif %}
 {% endblock %}

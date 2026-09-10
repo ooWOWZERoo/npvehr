@@ -2,7 +2,8 @@
   <a href="/admin/scheduling/appointment-types" class="{{ 'active' if '/appointment-types' in request.url.path }}">Appointment Types</a>
   <a href="/admin/scheduling/tests" class="{{ 'active' if '/tests' in request.url.path }}">Diagnostic Tests</a>
   <a href="/admin/scheduling/resources" class="{{ 'active' if '/resources' in request.url.path }}">Resources</a>
-  <a href="/admin/scheduling/availability" class="{{ 'active' if '/availability' in request.url.path }}">Availability Templates</a>
+  <a href="/admin/scheduling/availability" class="{{ 'active' if request.url.path.endswith('/availability') }}">Availability Templates</a>
+  <a href="/admin/scheduling/provider-availability" class="{{ 'active' if '/provider-availability' in request.url.path }}">Provider Availability</a>
   <a href="/admin/scheduling/holidays" class="{{ 'active' if '/holidays' in request.url.path }}">Holidays / Closures</a>
   <a href="/admin/scheduling/audit" class="{{ 'active' if '/audit' in request.url.path }}">Scheduling Audit</a>
 </div>
