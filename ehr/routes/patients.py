@@ -1,7 +1,7 @@
 import os, uuid
 from datetime import datetime
 from typing import Optional
-from fastapi import APIRouter, Depends, Request, Form, UploadFile, File
+from fastapi import APIRouter, Depends, Request, Form, UploadFile, File, Response
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
@@ -9,7 +9,8 @@ from ehr.models.database import get_db, Patient, Appointment, EyeExam, Prescript
 from ehr.env_info import EHR_ENV
 from ehr.utils import patient_context, compute_age, display_name
 from ehr.auth.permissions import require_role, PATIENT_EDIT, ROLE_LABELS
-from ehr.services.media import save_patient_photo as _save_photo, delete_patient_photo as _delete_photo_file
+from ehr.services.media import (save_patient_photo as _save_photo, delete_patient_photo as _delete_photo_file,
+    get_photo_bytes as _get_photo_bytes)
 
 router = APIRouter(prefix="/patients", tags=["patients"])
 templates = Jinja2Templates(directory="ehr/templates")
@@ -216,6 +217,25 @@ def patient_detail(request: Request, patient_id: int, db: Session = Depends(get_
         "recent_prescriptions": recent_rx,
     })
     return templates.TemplateResponse(request, "patients/overview.html", ctx)
+
+@router.get("/{patient_id}/photo")
+def patient_photo(patient_id: int, db: Session = Depends(get_db)):
+    """Serves a patient's photo bytes directly, gated by the same session
+    auth as every other route in this router (applied at inclusion in
+    ehr/app.py) -- rather than the browser holding a URL (Cloudinary or, in
+    the original baseline, a local /static/uploads/ path) that works for
+    anyone who has it, forever, with no auth check at all. Patient.photo_path
+    itself never leaves the server as a browser-facing URL; templates point
+    <img> tags at this route instead."""
+    p = db.query(Patient).filter(Patient.id == patient_id).first()
+    if not p or not p.photo_path:
+        return HTMLResponse(status_code=404, content="")
+    result = _get_photo_bytes(p.photo_path)
+    if result is None:
+        return HTMLResponse(status_code=404, content="")
+    data, content_type = result
+    return Response(content=data, media_type=content_type,
+                     headers={"Cache-Control": "private, max-age=300"})
 
 @router.get("/{patient_id}/edit", response_class=HTMLResponse)
 def edit_patient_form(request: Request, patient_id: int, db: Session = Depends(get_db)):

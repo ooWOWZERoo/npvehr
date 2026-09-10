@@ -13,7 +13,7 @@
     <div class="form-row cols-2" style="align-items:center">
       <div class="form-group" style="margin-bottom:0">
         {% if patient and patient.photo_path %}
-          <img src="{{ patient.photo_path }}" alt="Patient photo" class="patient-photo-preview">
+          <img src="/patients/{{ patient.id }}/photo" alt="Patient photo" class="patient-photo-preview">
         {% else %}
           <div class="patient-photo-placeholder">No Photo</div>
         {% endif %}

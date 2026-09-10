@@ -35,7 +35,7 @@
       <td>
         <a href="/patients/{{ p.id }}" class="patient-name-cell">
           {% if p.photo_path %}
-            <img src="{{ p.photo_path }}" alt="" class="patient-thumb">
+            <img src="/patients/{{ p.id }}/photo" alt="" class="patient-thumb">
           {% else %}
             <span class="patient-thumb-placeholder">{{ p.first_name[0] }}{{ p.last_name[0] }}</span>
           {% endif %}

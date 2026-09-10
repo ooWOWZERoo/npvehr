@@ -160,7 +160,7 @@
       <div class="patient-context-strip">
         <div class="pcs-photo">
           {% if context_patient.photo_path %}
-            <img src="{{ context_patient.photo_path }}" alt="" class="patient-thumb">
+            <img src="/patients/{{ context_patient.id }}/photo" alt="" class="patient-thumb">
           {% else %}
             <span class="patient-thumb-placeholder">{{ context_patient.first_name[0] }}{{ context_patient.last_name[0] }}</span>
           {% endif %}
