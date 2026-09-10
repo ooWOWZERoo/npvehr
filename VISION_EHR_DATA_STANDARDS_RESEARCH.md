@@ -177,6 +177,60 @@ The source document also describes: e-prescribing via NCPDP SCRIPT (drug identif
 
 These are all **real external integrations or a genuinely new inventory subsystem**, not internal refactors — none are implemented, and none are being attempted without actual vendor accounts/agreements, consistent with how DICOM device integration (§4.3) is already treated. They are recorded here purely as target-state requirements so a future session that does pursue e-prescribing, lab ordering, or inventory doesn't have to re-derive the field-level detail from scratch. The baseline spec's Capability Boundary (§19) has been updated to list these explicitly as not present, rather than simply never having discussed them.
 
+## 6. Billing, Claims, and Insurance (target-state only, from a second uploaded requirements document, v2.13)
+
+**Source:** a second uploaded requirements document (`NPVEHR_Reqs2.docx`), reviewed and reconciled here. Same character as §5's source: async FastAPI/React/Postgres-only DDL assumed throughout — translated into this app's plain-column, server-rendered conventions below, literal code dropped. The document also contained a few paragraphs of accidentally-included web-search-result blurbs (unrelated blog snippets) mixed into otherwise-genuine content; those were discarded as noise, not reconciled as requirements.
+
+This domain — insurance eligibility, billing, claims, payments — is explicitly listed as not present in the baseline spec's Capability Boundary (§19), and carries materially higher compliance and financial stakes than any dashboard in §5: a real EDI 837 transaction or NCCI/LCD rule implemented incorrectly can cause claim rejections, compliance violations, or improper billing, not just a wrong on-screen value. **Everything below is recorded as target-state documentation only, requiring a real clearinghouse/payer relationship and compliance review before any build is attempted** — the same posture as e-prescribing/lab integration (§5.6), one step more cautious given the added regulatory weight. This app also remains marked "do not use with real patient data" (see the baseline spec's go-live notice), which alone rules out a real build of this domain for now regardless of technical readiness.
+
+### 6.1 Billing invoice / claim line shape
+
+| Field | Translated type | Notes |
+| --- | --- | --- |
+| billing_status | String | Draft / Ready for Clearinghouse / Submitted / Paid / Denied / Appealed / Pending Conflict |
+| primary_insurance_payer_id, insured_policy_number | String | e.g. payer name/ID, policy number |
+| prior_authorization_number | String, nullable | CMS-1500 Box 23 |
+| dx_pointer_1/2/3 | String, nullable | ICD-10 codes — CMS-1500 Box 21 diagnosis pointers |
+| total_charged_amount, insurance_expected_reimbursement, patient_copay_responsibility | Float | Money amounts |
+| **Service line** (child rows): charge_type | String | Product Checkout / Clinical Service Procedure |
+| cpt_hcpcs_code, modifier_1, modifier_2 | String | e.g. `92014`, `RT`/`LT` |
+| linked_dx_pointers | String (multi-value) | Which of the invoice's diagnosis pointers this line supports |
+| unit_count, unit_charge_amount | Integer / Float | |
+| inventory_item_identifier | String, nullable | Links a line to a UPC/SKU (§5.6's inventory tables) for cost reporting |
+
+### 6.2 Code-conflict rule matrices (a reusable pattern independent of the billing domain)
+
+Two lookup tables, so coding rules can be updated as billing law changes without a code deploy:
+- **CCI/mutually-exclusive-code edits**: `primary_cpt`, `conflicting_cpt`, `allowed_with_modifier_59` (Boolean), `error_message`.
+- **Medical necessity / LCD**: `cpt_code`, `allowed_icd10_prefix` — which CPT codes are billable for which ICD-10 diagnosis families.
+
+The lookup-table-over-hardcoded-Python approach itself is sound practice regardless of whether this domain is ever built — it mirrors this app's existing preference for data-driven configuration (e.g. `AppointmentTypeColorRule`) over conditional logic.
+
+### 6.3 Checkout-block workflow (concept only)
+
+A "Pending Conflict" status plus an `unresolved_conflicts` log (conflict type, error message, remediation suggestion, resolved flag) that blocks front-desk checkout until addressed, surfacing the specific rule violated and what fixes it (e.g. "apply Modifier -59" or "remove one of two mutually exclusive procedures"). Recorded as a workflow description, not a schema commitment — a real implementation would need this integrated with wherever checkout/payment actually happens, which doesn't exist in this app today.
+
+### 6.4 EDI 837 (X12) and CMS-1500 generation — compliance-gated, not a formatting exercise
+
+The source document includes a sample ASC X12 EDI 837 segment sequence and a CMS-1500 field mapping. **These are illustrative only, not a certified transaction** — matching the source document's own segment structure does not make a real, payer-accepted claim; that requires a genuine clearinghouse relationship, payer-specific companion guides, and compliance testing this project has no path to today. If this domain is ever pursued, the field-level shapes above are a reasonable starting point for the *internal* data model, but the EDI/CMS-1500 generation step itself is a distinct, separately-scoped effort requiring real business relationships, not an engineering task alone.
+
+## 7. Reconciling a third uploaded document — conflicts with shipped work, and two compatible ideas (v2.13)
+
+**Source:** a third uploaded requirements document (`NPVEHRReqs3.docx`). Unlike §5/§6's source documents, this one explicitly references this app's real table names (`eye_exams`, `refractions`, `anterior_segment_assessments`) and file paths (`ehr/db/migrations.py`, `tests/test_smoke.py`) — it was evidently produced with visibility into this project (e.g. screenshots or output fed to another tool), not written cold. Most of its proposals conflict with or duplicate what's already shipped rather than extending it.
+
+### 7.1 Conflicts — documented so they aren't reintroduced later
+
+- **Server-round-trip narrative composer.** Proposes a `/api/exams/compute-narrative-and-scrub` endpoint that recomputes Assessment/Plan text via a `fetch()` call on every field change. The v2.12 composer (baseline spec §12.5c) already does this **client-side**, instantly, with no network round-trip and no new endpoint. **Do not adopt** — the existing approach is faster and simpler for the same result.
+- **Flat refraction fields on `EyeExam`.** Assumes `exam.manifest_sphere_od`-style flat columns. In reality, refraction values live in the separate `Refraction` child table keyed by `refraction_type` (`habitual`/`manifest`/`cycloplegic`, v2.8) — not flat columns on `EyeExam`. Any future work in this area must build on the real shape, not this document's assumed one.
+- **Duplicate biomicroscopy table.** Proposes a new `exam_biomicroscopy_records` table for slit-lamp/fundus findings. `EyeExam` already has these as flat columns (`sl_lids_od/os`, `sl_cornea_od/os`, `sl_lens_od/os`, `fundus_disc_od/os`, `fundus_macula_od/os`, `fundus_vessels_od/os`, `fundus_periphery_od/os`) since before v1.0. A parallel table would create two sources of truth for the same data — **do not build this table**.
+- **Non-conforming migration pattern.** Its sample migration function signature (`def migration_017(inspector, engine)`) doesn't match this app's actual convention (`def migration_NNN(conn)`, using the module-level `_table_exists`/`_add_column_if_missing`/`_pk_ddl` helpers in `ehr/db/migrations.py`), and its "dialect-agnostic" DDL hardcodes SQLite's `INTEGER PRIMARY KEY AUTOINCREMENT` unconditionally — which would fail on Postgres. Any future migration must follow the real pattern, not this one.
+- **Conflating clinical and billing concerns.** Bundles claims-scrubbing into the same endpoint as clinical narrative generation. These should stay separate — a concrete instance of why §6 (billing) is scoped as its own future domain, not woven into the exam-entry workflow.
+
+### 7.2 Two compatible ideas — candidates for a future narrow slice, not built this round
+
+- **ICD-10 auto-suggestion.** A small lookup keyed on (diagnosis, laterality) — e.g. Myopia+OD → `H52.11`, +OS → `H52.12`, +OU → `H52.13` — to *suggest*, not force, a value into the existing free-text `diagnosis_codes` field. Would extend the v2.12 composer function directly (no new endpoint). Still subject to the existing terminology-server deferral (§4.4): a hardcoded lookup for a handful of common diagnoses is much narrower than real ICD-10 code-set integration, and should be scoped as exactly that narrow a thing if picked up.
+- **Diagnosis-driven recall interval.** Vary the composer's auto-suggested follow-up interval by diagnosis — e.g. a shorter recall when "Suspect Glaucoma" is checked as a secondary finding, vs. the current flat default. A small rule extension to the existing Plan-composing function in `exams/form.html`, not a schema change.
+
 ## Next steps (partially started — see status notes)
 
 1. Decide whether/when to align the `EyeExam`/`Refraction`/`Prescription` schema toward FHIR's `Observation`+`VisionPrescription` shape, given this is a significant, non-backward-compatible data-model change. **Not started.** This also now governs §5's five dashboards above, which are deliberately not FHIR-mapped yet either.
@@ -186,4 +240,6 @@ These are all **real external integrations or a genuinely new inventory subsyste
 5. ~~Pick one of §5's five dashboards to actually scope and build (most likely §5.1's Refractive Assessment & Plan fields, since it extends the `Refraction`/`Prescription` work already shipped in v2.8 rather than introducing a wholly new table).~~ **Done, v2.10** — see §5.1.
 6. **New, v2.9:** §5.6's e-prescribing/lab-integration/inventory material remains target-state only; revisit only once real vendor relationships or credentials exist to integrate against. **Not started.**
 7. ~~Build a second dashboard (§5.2's Anterior Segment / Dry Eye), and, since that's the first dashboard to join Refractive Assessment on the same exam form, design how a clinician picks which Assessment & Plan section(s) apply to a given visit.~~ **Done, v2.11** — see §5.2 and the baseline spec's §12.5b (Visit Focus navigation model). §5.3–§5.5 (Glaucoma, Binocular Vision, Pre/Post-Op) remain undone; each adds one more Visit Focus chip by the same pattern, no changes to the toggle mechanism itself.
-8. **New:** the free-text `EyeExam.assessment`/`plan` fields (§12.5) have no connection to any of the structured Assessment fields built in §5.1/§5.2 — a clinician has to separately re-type in prose what they already selected as chips/dropdowns. The source document's dropped "Auto-Generated Clinical Note Output Summary" concept (see §5.1's correction note above) addresses exactly this: auto-populate `assessment`/`plan` with a draft narrative synthesized from the structured fields, left editable rather than locked. Scoped for a near-term build. **Not started.**
+8. ~~The free-text `EyeExam.assessment`/`plan` fields (§12.5) have no connection to any of the structured Assessment fields built in §5.1/§5.2 — a clinician has to separately re-type in prose what they already selected as chips/dropdowns. The source document's dropped "Auto-Generated Clinical Note Output Summary" concept (see §5.1's correction note above) addresses exactly this: auto-populate `assessment`/`plan` with a draft narrative synthesized from the structured fields, left editable rather than locked.~~ **Done, v2.12** — see the baseline spec's §12.5c. Two further diagnosis-driven refinements to this composer (ICD-10 auto-suggestion, diagnosis-driven recall interval) are recorded as candidates in §7 below, from a later reviewed document.
+9. **New, v2.13:** §6's billing/claims/EDI material remains target-state only, same treatment as §5.6 — revisit only with a real clearinghouse/payer relationship and compliance review, not attempted here. **Not started.**
+10. **New, v2.13:** §7's two compatible ideas (ICD-10 auto-suggestion, diagnosis-driven recall interval) are candidates for a future narrow slice extending the existing v2.12 composer. **Not started.**
