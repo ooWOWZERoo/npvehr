@@ -24,8 +24,22 @@ uvicorn ehr.app:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 The app expects to be run from this directory (paths to the database, templates, and static
-assets are relative to the working directory). On first run it seeds a local SQLite database
-(`ehr.db`) with demo data and four demo login accounts — printed to the console on first seed.
+assets are relative to the working directory). On first run against an empty database (local
+SQLite by default, or a fresh Postgres database via `DATABASE_URL`) it auto-seeds demo data and
+four demo login accounts — printed to the console the first time. This is idempotent and runs on
+every startup, so it's a no-op once a database already has accounts in it.
+
+## Testing
+
+End-to-end tests (Playwright, driven via pytest) launch the real app against a
+throwaway, freshly-seeded SQLite database and exercise it in a real browser --
+login, auth redirects, and the main navigation destinations.
+
+```bash
+pip install -r requirements.txt -r requirements-dev.txt
+playwright install chromium   # first time only, downloads the browser
+pytest
+```
 
 ## Structure
 

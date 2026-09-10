@@ -20,7 +20,7 @@
     <button onclick="window.print()">&#128424; Print</button>
     <a href="/prescriptions/{{ rx.id }}">&larr; Back</a>
   </div>
-  <div class="hdr"><img src="/static/img/logo.svg" alt="New Path Vision" style="height:40px;display:block;margin:0 auto 0.5rem"><h2>New Path Vision EHR</h2><p>{{ rx.rx_type|title }} Prescription</p></div>
+  <div class="hdr"><h2>New Path Vision EHR</h2><p>{{ rx.rx_type|title }} Prescription</p></div>
   <p><strong>Patient:</strong> {{ rx.patient.last_name }}, {{ rx.patient.first_name }}&nbsp;&nbsp;<strong>DOB:</strong> {{ rx.patient.date_of_birth or '—' }}</p>
   <p><strong>Provider:</strong> Dr. {{ rx.provider.last_name }}&nbsp;&nbsp;<strong>Issued:</strong> {{ rx.issue_date or '—' }}&nbsp;&nbsp;<strong>Expires:</strong> {{ rx.expiry_date or '—' }}</p>
   <table>

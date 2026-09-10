@@ -1,5 +1,14 @@
+# Used for local `pip install -r requirements.txt`. Vercel deployments build
+# from the [project.dependencies] list in pyproject.toml instead (its uv-based
+# build requires a [project] table there) -- keep the two lists in sync.
 fastapi>=0.111.0
 uvicorn[standard]>=0.30.0
 sqlalchemy>=2.0.0
 jinja2>=3.1.0
 python-multipart>=0.0.9
+# Postgres driver for DATABASE_URL in deployed environments (e.g. Neon).
+# Not used locally, where DATABASE_URL is unset and the app falls back to SQLite.
+psycopg[binary]>=3.1.0
+# Patient photo storage in deployed environments (e.g. Vercel). Not used locally,
+# where CLOUDINARY_URL is unset and photos are saved to ehr/static/uploads/ instead.
+cloudinary>=1.36.0

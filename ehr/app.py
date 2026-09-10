@@ -4,8 +4,9 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from datetime import datetime
-from ehr.models.database import init_db, engine, get_db, Patient, Appointment, EyeExam, Prescription, AppointmentStatus
+from ehr.models.database import init_db, engine, get_db, SessionLocal, Patient, Appointment, EyeExam, Prescription, AppointmentStatus
 from ehr.db.migrations import run_column_migrations, run_post_create_all_migrations
+from ehr.db.seed import seed_demo_data
 from ehr.env_info import EHR_ENV
 from ehr.routes import patients, appointments, exams, prescriptions, admin_scheduling, store_ops, auth as auth_routes
 from ehr.auth.deps import get_current_user, LoginRedirect
@@ -51,6 +52,14 @@ def startup():
     run_column_migrations(engine)
     init_db()
     run_post_create_all_migrations(engine)
+    # Auto-seed demo login accounts (and, on a fully empty database, demo
+    # clinical data) if none exist yet -- so a fresh database (e.g. a new
+    # Neon database wired up via DATABASE_URL, which nothing else populates)
+    # is usable immediately without a separate manual `python -m ehr.db.seed`
+    # step. seed_demo_data() checks for existing rows before creating
+    # anything, so this is a cheap no-op on every subsequent startup once a
+    # database is already seeded.
+    seed_demo_data(SessionLocal())
 
 @app.get("/", response_class=HTMLResponse)
 def dashboard(request: Request, db: Session = Depends(get_db), user=Depends(get_current_user)):

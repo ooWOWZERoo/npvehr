@@ -3,16 +3,28 @@
 Alembic is intentionally not used here -- this whole application is a single
 self-contained script, and a full migration framework would be disproportionate.
 Instead each migration is a small Python function that:
-  1. Checks current schema state via sqlite_master / PRAGMA table_info.
+  1. Checks current schema state via sqlalchemy.inspect (dialect-agnostic).
   2. Applies raw ALTER TABLE / CREATE TABLE / data SQL only if not already applied.
   3. Is safe to run every time the app starts (idempotent), and is recorded by id
      in the `schema_migrations` table so it never re-runs.
+
+Runs against both SQLite (local dev, DATABASE_URL unset) and Postgres (e.g. Neon,
+in deployed environments) -- see _is_postgres()/_pk_ddl() below for the handful of
+places DDL genuinely differs between the two.
 
 Run order: add columns to existing tables -> create_all() for brand-new tables
 (called by the caller in between) -> data seed migrations -> legacy backfill.
 """
 from datetime import datetime
-from sqlalchemy import text
+from sqlalchemy import text, inspect
+
+def _is_postgres(conn) -> bool:
+    return conn.engine.dialect.name == "postgresql"
+
+def _pk_ddl(conn) -> str:
+    """Autoincrementing integer primary key fragment, dialect-appropriate.
+    SQLite: AUTOINCREMENT keyword. Postgres: SERIAL (no AUTOINCREMENT keyword)."""
+    return "SERIAL PRIMARY KEY" if _is_postgres(conn) else "INTEGER PRIMARY KEY AUTOINCREMENT"
 
 def _ensure_migrations_table(conn):
     conn.execute(text("""
@@ -31,15 +43,18 @@ def _mark_applied(conn, migration_id: str):
                  {"id": migration_id, "ts": datetime.utcnow().isoformat()})
 
 def _table_exists(conn, table_name: str) -> bool:
-    row = conn.execute(text("SELECT name FROM sqlite_master WHERE type='table' AND name=:n"),
-                        {"n": table_name}).fetchone()
-    return row is not None
+    # sqlalchemy.inspect works against either dialect (sqlite_master / pg_catalog
+    # are both abstracted away), unlike the raw sqlite_master query this replaced.
+    return inspect(conn).has_table(table_name)
 
 def _existing_columns(conn, table_name: str):
-    rows = conn.execute(text(f"PRAGMA table_info({table_name})")).fetchall()
-    return {r[1] for r in rows}  # r[1] = column name
+    return {c["name"] for c in inspect(conn).get_columns(table_name)}
 
 def _add_column_if_missing(conn, table_name: str, column_name: str, ddl_type_and_default: str):
+    # ddl_type_and_default must be dialect-neutral SQL: use TIMESTAMP (not SQLite's
+    # DATETIME) and TRUE/FALSE (not 0/1) for booleans -- both read fine on SQLite
+    # (which has flexible type affinity and, since 3.23, TRUE/FALSE keywords) and
+    # on Postgres (which requires them).
     cols = _existing_columns(conn, table_name)
     if column_name not in cols:
         conn.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {ddl_type_and_default}"))
@@ -55,27 +70,36 @@ def migration_001_appointment_columns(conn):
         ("patient_relationship_at_booking", "VARCHAR DEFAULT 'established'"),
         ("patient_relationship_source", "VARCHAR DEFAULT 'automatic'"),
         ("patient_relationship_override_reason", "TEXT"),
-        ("is_follow_up", "BOOLEAN DEFAULT 0"),
-        ("scheduled_end_at", "DATETIME"),
+        ("is_follow_up", "BOOLEAN DEFAULT FALSE"),
+        ("scheduled_end_at", "TIMESTAMP"),
         ("buffer_before_minutes", "INTEGER DEFAULT 0"),
         ("buffer_after_minutes", "INTEGER DEFAULT 0"),
         ("arrival_lead_minutes", "INTEGER DEFAULT 0"),
         ("resolved_color", "VARCHAR"),
         ("resolved_color_reason", "VARCHAR"),
-        ("duration_overridden", "BOOLEAN DEFAULT 0"),
+        ("duration_overridden", "BOOLEAN DEFAULT FALSE"),
         ("duration_override_reason", "TEXT"),
-        ("conflict_overridden", "BOOLEAN DEFAULT 0"),
+        ("conflict_overridden", "BOOLEAN DEFAULT FALSE"),
         ("conflict_override_reason", "TEXT"),
-        ("updated_at", "DATETIME"),
+        ("updated_at", "TIMESTAMP"),
     ]
     for col, ddl in new_columns:
         _add_column_if_missing(conn, "appointments", col, ddl)
     # Backfill scheduled_end_at from legacy duration_minutes where still null.
-    conn.execute(text("""
-        UPDATE appointments
-        SET scheduled_end_at = datetime(scheduled_at, '+' || COALESCE(duration_minutes, 30) || ' minutes')
-        WHERE scheduled_end_at IS NULL
-    """))
+    # SQLite's datetime() and Postgres's interval arithmetic aren't
+    # cross-compatible, so this one statement is dialect-branched.
+    if _is_postgres(conn):
+        conn.execute(text("""
+            UPDATE appointments
+            SET scheduled_end_at = scheduled_at + (COALESCE(duration_minutes, 30) || ' minutes')::interval
+            WHERE scheduled_end_at IS NULL
+        """))
+    else:
+        conn.execute(text("""
+            UPDATE appointments
+            SET scheduled_end_at = datetime(scheduled_at, '+' || COALESCE(duration_minutes, 30) || ' minutes')
+            WHERE scheduled_end_at IS NULL
+        """))
 
 SEED_COLOR = {
     "red": "#DC2626", "teal": "#0F766E", "dark_blue": "#1E3A5F",
@@ -117,12 +141,14 @@ def migration_002_seed_appointment_types(conn):
         # is_system_seeded=0 here: these are ordinary, admin-editable catalog types that merely
         # ship pre-populated (spec 8.1). Only LEGACY_UNCLASSIFIED (migration 004) is a true
         # system-only, non-bookable type.
-        cur = conn.execute(text("""
+        # Boolean columns must bind as Python bool / SQL TRUE-FALSE, not 0/1 --
+        # Postgres rejects an implicit int->boolean cast that SQLite allows.
+        type_id = conn.execute(text("""
             INSERT INTO appointment_types (code, created_at, created_by_user_id, is_system_seeded, active)
-            VALUES (:code, :now, NULL, 0, 1)
-        """), {"code": code, "now": now})
-        type_id = cur.lastrowid
-        cur2 = conn.execute(text("""
+            VALUES (:code, :now, NULL, FALSE, TRUE)
+            RETURNING id
+        """), {"code": code, "now": now}).scalar_one()
+        version_id = conn.execute(text("""
             INSERT INTO appointment_type_versions
             (appointment_type_id, version_number, internal_name, display_name, calendar_abbreviation,
              description, service_line, display_order, allows_new, allows_established,
@@ -130,14 +156,14 @@ def migration_002_seed_appointment_types(conn):
              arrival_lead_minutes, base_color, staff_bookable, patient_bookable, effective_from,
              effective_through, active, change_reason, created_at, created_by_user_id)
             VALUES (:tid, 1, :internal, :display, :abbr, :descr, :line, :order, :allow_new, :allow_est,
-             :new_dur, :est_dur, 0, 0, 0, :base_color, 1, 0, :eff, NULL, :active, 'Initial seed', :now, NULL)
+             :new_dur, :est_dur, 0, 0, 0, :base_color, TRUE, FALSE, :eff, NULL, :active, 'Initial seed', :now, NULL)
+            RETURNING id
         """), {
             "tid": type_id, "internal": internal, "display": display, "abbr": abbr,
             "descr": f"System-seeded {display} appointment type.", "line": line, "order": order,
-            "allow_new": int(allow_new), "allow_est": int(allow_est), "new_dur": new_dur, "est_dur": est_dur,
-            "base_color": base_color, "eff": now[:10], "active": int(active), "now": now,
-        })
-        version_id = cur2.lastrowid
+            "allow_new": bool(allow_new), "allow_est": bool(allow_est), "new_dur": new_dur, "est_dur": est_dur,
+            "base_color": base_color, "eff": now[:10], "active": bool(active), "now": now,
+        }).scalar_one()
         if code == "MED_EYE_EVAL":
             # Medical color precedence, exactly as specified in section 9.3.
             rules = [
@@ -147,13 +173,15 @@ def migration_002_seed_appointment_types(conn):
                 (4, "established", 0, 3, None, SEED_COLOR["dark_blue"], "established_3_plus_tests"),
             ]
             for pri, rel, fu, mn, mx, color, reason in rules:
+                # fu is 0/1/None in the table above (None = "don't care"); is_follow_up
+                # is a real boolean column, so normalize before binding.
                 conn.execute(text("""
                     INSERT INTO appointment_type_color_rules
                     (appointment_type_version_id, priority, patient_relationship, is_follow_up,
                      minimum_countable_tests, maximum_countable_tests, color, reason_code)
                     VALUES (:vid, :pri, :rel, :fu, :mn, :mx, :color, :reason)
-                """), {"vid": version_id, "pri": pri, "rel": rel, "fu": fu, "mn": mn, "mx": mx,
-                          "color": color, "reason": reason})
+                """), {"vid": version_id, "pri": pri, "rel": rel, "fu": None if fu is None else bool(fu),
+                          "mn": mn, "mx": mx, "color": color, "reason": reason})
         elif code == "COMP_VISION":
             for pri, rel, color, reason in [
                 (1, "new", SEED_COLOR["dark_purple"], "new_patient"),
@@ -186,7 +214,7 @@ def migration_003_seed_diagnostic_tests(conn):
             INSERT INTO diagnostic_tests (code, display_name, calendar_abbreviation, active,
                 counts_toward_color, default_duration_minutes, display_order)
             VALUES (:code, :name, :abbr, :active, :counts, :dur, :order)
-        """), {"code": code, "name": name, "abbr": abbr, "active": active, "counts": counts,
+        """), {"code": code, "name": name, "abbr": abbr, "active": bool(active), "counts": bool(counts),
                   "dur": dur, "order": order})
 
 def migration_004_legacy_appointment_type(conn):
@@ -197,11 +225,11 @@ def migration_004_legacy_appointment_type(conn):
     if row:
         return
     now = datetime.utcnow().isoformat()
-    cur = conn.execute(text("""
+    type_id = conn.execute(text("""
         INSERT INTO appointment_types (code, created_at, created_by_user_id, is_system_seeded, active)
-        VALUES ('LEGACY_UNCLASSIFIED', :now, NULL, 1, 0)
-    """), {"now": now})
-    type_id = cur.lastrowid
+        VALUES ('LEGACY_UNCLASSIFIED', :now, NULL, TRUE, FALSE)
+        RETURNING id
+    """), {"now": now}).scalar_one()
     conn.execute(text("""
         INSERT INTO appointment_type_versions
         (appointment_type_id, version_number, internal_name, display_name, calendar_abbreviation,
@@ -210,8 +238,8 @@ def migration_004_legacy_appointment_type(conn):
          arrival_lead_minutes, base_color, staff_bookable, patient_bookable, effective_from,
          effective_through, active, change_reason, created_at, created_by_user_id)
         VALUES (:tid, 1, 'Legacy/Unclassified Appointment', 'Legacy/Unclassified Appointment', 'LEGACY',
-         'System type preserving pre-migration appointment records. Not bookable.', 'Legacy', 9999, 1, 1,
-         NULL, NULL, 0, 0, 0, '#94A3B8', 0, 0, :eff, NULL, 1, 'Migration 22.2', :now, NULL)
+         'System type preserving pre-migration appointment records. Not bookable.', 'Legacy', 9999, TRUE, TRUE,
+         NULL, NULL, 0, 0, 0, '#94A3B8', FALSE, FALSE, :eff, NULL, TRUE, 'Migration 22.2', :now, NULL)
     """), {"tid": type_id, "eff": now[:10], "now": now})
 
 def migration_005_backfill_legacy_appointments(conn):
@@ -273,27 +301,27 @@ def migration_005_backfill_legacy_appointments(conn):
 # databases must not depend on create_all() alone.
 # ---------------------------------------------------------------------------
 def migration_006_create_practice_closures(conn):
-    conn.execute(text("""
+    conn.execute(text(f"""
         CREATE TABLE IF NOT EXISTS practice_closures (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id {_pk_ddl(conn)},
             closure_date VARCHAR NOT NULL UNIQUE,
             label VARCHAR NOT NULL,
             notes TEXT,
-            created_at DATETIME
+            created_at TIMESTAMP
         )
     """))
 
 def migration_007_create_daily_closings(conn):
-    conn.execute(text("""
+    conn.execute(text(f"""
         CREATE TABLE IF NOT EXISTS daily_closings (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id {_pk_ddl(conn)},
             posting_date VARCHAR NOT NULL,
             payment_type VARCHAR NOT NULL,
             calculated_amount FLOAT DEFAULT 0.0,
             actual_amount FLOAT DEFAULT 0.0,
             variance FLOAT DEFAULT 0.0,
             explanation TEXT,
-            created_at DATETIME
+            created_at TIMESTAMP
         )
     """))
     conn.execute(text("CREATE INDEX IF NOT EXISTS ix_daily_closings_posting_date ON daily_closings (posting_date)"))
@@ -340,7 +368,7 @@ def migration_010_patient_mrn_uniqueness(conn):
         return  # brand-new database; create_all() creates the unique index directly.
     conn.execute(text(
         "CREATE TABLE IF NOT EXISTS mrn_deduplication_log ("
-        "id INTEGER PRIMARY KEY AUTOINCREMENT, patient_id INTEGER NOT NULL, "
+        f"id {_pk_ddl(conn)}, patient_id INTEGER NOT NULL, "
         "cleared_mrn VARCHAR NOT NULL, occurred_at TEXT NOT NULL)"
     ))
     # Normalize blank/whitespace-only MRNs to NULL so they don't collide with each other.
@@ -401,11 +429,11 @@ def migration_011_seed_resources_and_requirements(conn):
             row = conn.execute(text("SELECT id FROM resources WHERE code = :c"), {"c": code}).fetchone()
             ids[code] = row[0]
             continue
-        cur = conn.execute(text("""
+        ids[code] = conn.execute(text("""
             INSERT INTO resources (code, display_name, resource_class, exclusive, active)
-            VALUES (:code, :name, :cls, 1, 1)
-        """), {"code": code, "name": name, "cls": cls})
-        ids[code] = cur.lastrowid
+            VALUES (:code, :name, :cls, TRUE, TRUE)
+            RETURNING id
+        """), {"code": code, "name": name, "cls": cls}).scalar_one()
 
     def _current_type_version_id(code):
         row = conn.execute(text("""
@@ -433,7 +461,7 @@ def migration_011_seed_resources_and_requirements(conn):
         conn.execute(text("""
             INSERT INTO appointment_type_resource_requirements
             (appointment_type_version_id, resource_id, resource_pool_code, required, offset_minutes, duration_minutes)
-            VALUES (:vid, :rid, NULL, 1, 0, NULL)
+            VALUES (:vid, :rid, NULL, TRUE, 0, NULL)
         """), {"vid": version_id, "rid": resource_id})
 
 # ---------------------------------------------------------------------------
@@ -444,42 +472,42 @@ def migration_011_seed_resources_and_requirements(conn):
 # EXISTING databases must not depend on create_all() alone.
 # ---------------------------------------------------------------------------
 def migration_012_create_auth_tables(conn):
-    conn.execute(text("""
+    conn.execute(text(f"""
         CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id {_pk_ddl(conn)},
             email VARCHAR NOT NULL UNIQUE,
             password_hash VARCHAR NOT NULL,
             password_salt VARCHAR NOT NULL,
             first_name VARCHAR NOT NULL,
             last_name VARCHAR NOT NULL,
             role VARCHAR NOT NULL,
-            active BOOLEAN NOT NULL DEFAULT 1,
-            created_at DATETIME,
-            last_login_at DATETIME
+            active BOOLEAN NOT NULL DEFAULT TRUE,
+            created_at TIMESTAMP,
+            last_login_at TIMESTAMP
         )
     """))
     conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_users_email ON users (email)"))
-    conn.execute(text("""
+    conn.execute(text(f"""
         CREATE TABLE IF NOT EXISTS user_sessions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id {_pk_ddl(conn)},
             user_id INTEGER NOT NULL,
             session_token VARCHAR NOT NULL UNIQUE,
-            created_at DATETIME,
-            last_seen_at DATETIME,
-            expires_at DATETIME NOT NULL,
-            revoked BOOLEAN NOT NULL DEFAULT 0
+            created_at TIMESTAMP,
+            last_seen_at TIMESTAMP,
+            expires_at TIMESTAMP NOT NULL,
+            revoked BOOLEAN NOT NULL DEFAULT FALSE
         )
     """))
     conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_user_sessions_token ON user_sessions (session_token)"))
     conn.execute(text("CREATE INDEX IF NOT EXISTS ix_user_sessions_user_revoked ON user_sessions (user_id, revoked)"))
-    conn.execute(text("""
+    conn.execute(text(f"""
         CREATE TABLE IF NOT EXISTS auth_audit_events (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id {_pk_ddl(conn)},
             event_type VARCHAR NOT NULL,
             user_id INTEGER,
             actor_email_attempted VARCHAR,
             ip_address VARCHAR,
-            occurred_at DATETIME,
+            occurred_at TIMESTAMP,
             detail TEXT
         )
     """))
@@ -507,7 +535,8 @@ POST_CREATE_ALL_MIGRATIONS = [
 def run_column_migrations(engine):
     """Phase 1: ALTER TABLE migrations on pre-existing tables. Must run BEFORE create_all()."""
     with engine.begin() as conn:
-        conn.execute(text("PRAGMA foreign_keys=ON"))
+        if not _is_postgres(conn):
+            conn.execute(text("PRAGMA foreign_keys=ON"))  # Postgres enforces FKs unconditionally.
         _ensure_migrations_table(conn)
         for migration_id, func in COLUMN_MIGRATIONS:
             if not _applied(conn, migration_id):

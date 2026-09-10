@@ -38,12 +38,16 @@ def _seed_users(db):
     return created
 
 
-def seed():
-    run_column_migrations(engine)
-    init_db()
-    run_post_create_all_migrations(engine)
-    db = SessionLocal()
-
+def seed_demo_data(db):
+    """The actual seeding logic (accounts, then demo providers/patients/
+    appointments/exam data), separate from running migrations first -- so it
+    can be called both by the seed() CLI entrypoint below (which does run
+    migrations, for a completely fresh setup) and from ehr/app.py's startup
+    hook (which has already just run them, on every process start, and would
+    otherwise re-run them a second time here for no benefit). Fully
+    idempotent either way: every step below checks for existing rows first,
+    so calling this on every app startup against an already-seeded database
+    is a cheap no-op, not a risk of duplicate data."""
     # User accounts are seeded independently of Provider/Patient seeding below,
     # so an existing (pre-auth) database that already has patients/providers but
     # no users yet still gets usable login accounts on upgrade.
@@ -141,6 +145,17 @@ def seed():
         os_sphere=-2.50, os_cylinder=-0.50, os_axis=175))
     db.commit(); db.close()
     print("Seeded database.")
+
+
+def seed():
+    """CLI entrypoint (`python -m ehr.db.seed`): run migrations against a
+    completely fresh database, then seed it. See seed_demo_data() above for
+    the part of this also invoked automatically on every app startup."""
+    run_column_migrations(engine)
+    init_db()
+    run_post_create_all_migrations(engine)
+    seed_demo_data(SessionLocal())
+
 
 if __name__ == "__main__":
     seed()
