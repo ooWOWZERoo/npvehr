@@ -96,9 +96,9 @@ Extends the existing `EyeExam`/`Refraction`/`Prescription` tables (§12.5–§12
 | Recall Interval | String | 3 Months / 6 Months / 1 Year / 2 Years |
 | Patient Education Tags | String (multi-value) | 20-20-20 Rule, UV Protection, Contact Lens hygiene |
 
-### 5.2 Anterior Segment & Ocular Surface Disease (Dry Eye) dashboard
+### 5.2 Anterior Segment & Ocular Surface Disease (Dry Eye) dashboard — **implemented in v2.11**
 
-A new encounter-scoped table, e.g. `AnteriorSegmentAssessment` (`patient_id`, `exam_id` FKs), following this app's existing pattern of `Refraction`/`AppointmentAuditEvent`-style child tables rather than widening `EyeExam` itself.
+A new encounter-scoped table, `AnteriorSegmentAssessment` (`exam_id` FK, mirroring `Refraction`'s exam-scoped child-row shape exactly rather than also carrying a redundant `patient_id`), following this app's existing pattern of `Refraction`-style child tables rather than widening `EyeExam` itself. **Built in v2.11** exactly as scoped below: migration `016_create_anterior_segment_assessments`, a new form section on the exam form (grading scales as `<select>` dropdowns, consistent with this app's existing dropdown convention rather than the source document's button-group UI), and a conditionally-shown detail-page card. This dashboard also introduced the **Visit Focus** navigation model (checkboxes at the top of the new-exam form that reveal each dashboard's Assessment & Plan section) needed once a second dashboard joined Refractive Assessment on the same form — see the baseline spec's §12.5b.
 
 | Field | Translated type | Notes |
 | --- | --- | --- |
@@ -181,5 +181,6 @@ These are all **real external integrations or a genuinely new inventory subsyste
 2. If pursued, sequence it similarly to past big builds in this project: a scoping conversation first (how much of this to adopt now vs. defer), then a background-agent build with migration + verification, then a living-spec update. **Not started.**
 3. ~~Consider starting narrow: e.g., just add explicit habitual/manifest/cycloplegic refraction types (a small, high-value slice) before attempting full FHIR/DICOM/terminology alignment.~~ **Done, v2.8** — see the baseline spec's §12.6a.
 4. This is a genuinely large scope (FHIR resource modeling, DICOM listener service, a terminology server/code-set integration) — likely multiple future sessions' worth of work, not a single round. Item 3 above was the first such slice; items 1-2 and the DICOM/terminology work remain fully open.
-5. ~~Pick one of §5's five dashboards to actually scope and build (most likely §5.1's Refractive Assessment & Plan fields, since it extends the `Refraction`/`Prescription` work already shipped in v2.8 rather than introducing a wholly new table).~~ **Done, v2.10** — see §5.1. §5.2–§5.5 (Anterior Segment, Glaucoma, Binocular Vision, Pre/Post-Op) remain undone.
+5. ~~Pick one of §5's five dashboards to actually scope and build (most likely §5.1's Refractive Assessment & Plan fields, since it extends the `Refraction`/`Prescription` work already shipped in v2.8 rather than introducing a wholly new table).~~ **Done, v2.10** — see §5.1.
 6. **New, v2.9:** §5.6's e-prescribing/lab-integration/inventory material remains target-state only; revisit only once real vendor relationships or credentials exist to integrate against. **Not started.**
+7. ~~Build a second dashboard (§5.2's Anterior Segment / Dry Eye), and, since that's the first dashboard to join Refractive Assessment on the same exam form, design how a clinician picks which Assessment & Plan section(s) apply to a given visit.~~ **Done, v2.11** — see §5.2 and the baseline spec's §12.5b (Visit Focus navigation model). §5.3–§5.5 (Glaucoma, Binocular Vision, Pre/Post-Op) remain undone; each adds one more Visit Focus chip by the same pattern, no changes to the toggle mechanism itself.

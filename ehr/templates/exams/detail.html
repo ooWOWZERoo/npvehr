@@ -82,6 +82,39 @@
   <dt>Secondary Findings</dt><dd>{{ exam.refractive_secondary_findings or '—' }}</dd>
 </dl></div>
 {% endif %}
+{% if exam.anterior_segment_assessments %}
+{% set asa = exam.anterior_segment_assessments[0] %}
+<div class="card" style="margin-top:1rem"><h3>Anterior Segment / Dry Eye Assessment</h3>
+  <dl class="dl-grid">
+    <dt>Diagnosis</dt><dd>{{ asa.primary_diagnosis_code or '—' }}</dd>
+    <dt>Severity</dt><dd>{{ asa.severity or '—' }}</dd>
+  </dl>
+  <div class="table-responsive">
+  <table class="exam-table">
+    <tr><th></th><th>Conj. Injection</th><th>Corneal Staining</th><th>MGD Expression</th><th>TBUT (sec)</th><th>Schirmer (mm)</th></tr>
+    <tr><td>OD</td>
+      <td>{{ asa.conjunctival_injection_od or '—' }}</td>
+      <td>{{ asa.corneal_staining_od or '—' }}</td>
+      <td>{{ asa.mgd_expression_od or '—' }}</td>
+      <td>{{ asa.tbut_seconds_od if asa.tbut_seconds_od is not none else '—' }}</td>
+      <td>{{ asa.schirmer_mm_od if asa.schirmer_mm_od is not none else '—' }}</td>
+    </tr>
+    <tr><td>OS</td>
+      <td>{{ asa.conjunctival_injection_os or '—' }}</td>
+      <td>{{ asa.corneal_staining_os or '—' }}</td>
+      <td>{{ asa.mgd_expression_os or '—' }}</td>
+      <td>{{ asa.tbut_seconds_os if asa.tbut_seconds_os is not none else '—' }}</td>
+      <td>{{ asa.schirmer_mm_os if asa.schirmer_mm_os is not none else '—' }}</td>
+    </tr>
+  </table>
+  </div>
+  <dl class="dl-grid" style="margin-top:0.75rem">
+    <dt>Plan Therapeutics</dt><dd>{{ asa.plan_therapeutics or '—' }}</dd>
+    <dt>Follow-up</dt><dd>{{ asa.follow_up_interval or '—' }}</dd>
+    {% if asa.clinical_notes %}<dt>Notes</dt><dd>{{ asa.clinical_notes }}</dd>{% endif %}
+  </dl>
+</div>
+{% endif %}
 <div class="card" style="margin-top:1rem"><h3>Assessment &amp; Plan</h3>
   <div class="form-row cols-2">
     <div><strong>Assessment</strong><p>{{ exam.assessment or '—' }}</p></div>

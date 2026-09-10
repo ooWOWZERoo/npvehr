@@ -2,7 +2,7 @@ import secrets
 from datetime import datetime, timedelta
 from ehr.models.database import (init_db, engine, SessionLocal, Provider, Patient, Appointment, EyeExam,
     Refraction, Prescription, AppointmentStatus, AppointmentType, AppointmentTypeVersion, User,
-    ProviderAvailabilityTemplate)
+    ProviderAvailabilityTemplate, AnteriorSegmentAssessment)
 from ehr.db.migrations import run_column_migrations, run_post_create_all_migrations
 from ehr.auth.security import hash_password
 from ehr.auth.permissions import SYSTEM_ADMINISTRATOR, OPTOMETRIST_PROVIDER, FRONT_DESK, ROLE_LABELS
@@ -164,6 +164,30 @@ def seed_demo_data(db):
         lens_type="Progressive", lens_material="Polycarbonate",
         lens_treatments="Anti-Reflective Coating, Blue Light Filter",
         recall_interval="1 Year", patient_education_tags="20-20-20 Rule, UV Protection"))
+
+    # Second demo exam -- Anterior Segment / Dry Eye visit focus, distinct
+    # from the comprehensive/refractive exam above, demonstrating the
+    # Visit Focus navigation model with a different assessment type.
+    dry_eye_exam = EyeExam(
+        patient_id=pts[1].id, provider_id=p2.id, exam_date="2026-09-05",
+        chief_complaint="Gritty, burning eyes for several weeks",
+        od_sc="20/25", os_sc="20/25", od_cc="20/20", os_cc="20/20",
+        iop_od=15.0, iop_os=15.5, iop_method="Non-contact",
+        sl_lids_od="Mild MGD capping", sl_lids_os="Mild MGD capping",
+        sl_cornea_od="Punctate staining inferior third", sl_cornea_os="Punctate staining inferior third",
+        assessment="Moderate dry eye disease OU, MGD-associated.",
+        plan="Preservative-free tears QID, warm compresses BID. RTC 2 weeks.",
+        diagnosis_codes="H04.123", follow_up_weeks=2,
+    )
+    db.add(dry_eye_exam); db.flush()
+    db.add(AnteriorSegmentAssessment(exam_id=dry_eye_exam.id,
+        primary_diagnosis_code="H04.123", severity="Moderate",
+        conjunctival_injection_od="1+", conjunctival_injection_os="1+",
+        corneal_staining_od="2+", corneal_staining_os="2+",
+        mgd_expression_od="2+", mgd_expression_os="2+",
+        tbut_seconds_od=6, tbut_seconds_os=5, schirmer_mm_od=8, schirmer_mm_os=7,
+        plan_therapeutics="Preservative-Free Tears, Warm Compresses",
+        follow_up_interval="2 weeks"))
     db.commit(); db.close()
     print("Seeded database.")
 

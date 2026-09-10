@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
-from ehr.models.database import get_db, EyeExam, Refraction, Patient, Provider
+from ehr.models.database import get_db, EyeExam, Refraction, AnteriorSegmentAssessment, Patient, Provider
 from ehr.env_info import EHR_ENV
 from ehr.utils import patient_context
 from ehr.auth.permissions import require_role, EXAM_VIEW, EXAM_EDIT, ROLE_LABELS
@@ -64,6 +64,20 @@ async def create_exam(request: Request, db: Session = Depends(get_db)):
             od_axis=_i(g(f"{prefix}_od_axis")), od_add=_f(g(f"{prefix}_od_add")), od_va=g(f"{prefix}_od_va"),
             os_sphere=os_sphere, os_cylinder=_f(g(f"{prefix}_os_cylinder")),
             os_axis=_i(g(f"{prefix}_os_axis")), os_add=_f(g(f"{prefix}_os_add")), os_va=g(f"{prefix}_os_va")))
+    # Anterior Segment / Dry Eye assessment (5.2) -- only created if at least
+    # one of its fields was actually filled in, same "any subset, all
+    # optional" rule as the refraction rows above.
+    asa_fields = dict(
+        primary_diagnosis_code=g("asa_primary_diagnosis_code"), severity=g("asa_severity"),
+        conjunctival_injection_od=g("asa_conjunctival_injection_od"), conjunctival_injection_os=g("asa_conjunctival_injection_os"),
+        corneal_staining_od=g("asa_corneal_staining_od"), corneal_staining_os=g("asa_corneal_staining_os"),
+        mgd_expression_od=g("asa_mgd_expression_od"), mgd_expression_os=g("asa_mgd_expression_os"),
+        tbut_seconds_od=_i(g("asa_tbut_seconds_od")), tbut_seconds_os=_i(g("asa_tbut_seconds_os")),
+        schirmer_mm_od=_i(g("asa_schirmer_mm_od")), schirmer_mm_os=_i(g("asa_schirmer_mm_os")),
+        plan_therapeutics=gl("asa_plan_therapeutics"), follow_up_interval=g("asa_follow_up_interval"),
+        clinical_notes=g("asa_clinical_notes"))
+    if any(v not in (None, "") for v in asa_fields.values()):
+        db.add(AnteriorSegmentAssessment(exam_id=exam.id, **asa_fields))
     db.commit()
     return RedirectResponse(f"/exams/{exam.id}", status_code=303)
 

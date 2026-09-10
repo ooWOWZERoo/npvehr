@@ -15,6 +15,11 @@
       <div class="form-group"><label>Exam Date*</label><input name="exam_date" type="date" value="{{ today }}" required></div>
     </div>
     <div class="form-group"><label>Chief Complaint</label><textarea name="chief_complaint"></textarea></div>
+    <div class="section-title">Visit Focus <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; choose which assessment area(s) apply to this visit; more than one can apply</span></div>
+    <div class="test-chip-list">
+      <label class="test-chip"><input type="checkbox" class="focus-toggle" data-target="focus-refractive" checked> Comprehensive / Refractive</label>
+      <label class="test-chip"><input type="checkbox" class="focus-toggle" data-target="focus-anterior"> Anterior Segment / Dry Eye</label>
+    </div>
     <div class="section-title">Visual Acuity</div>
     <div class="table-responsive">
     <table class="exam-table">
@@ -60,6 +65,7 @@
       <tr><td>OS</td><td><input name="fundus_disc_os"></td><td><input name="fundus_macula_os"></td><td><input name="fundus_vessels_os"></td><td><input name="fundus_periphery_os"></td></tr>
     </table>
     </div>
+    <div id="focus-refractive">
     <div class="section-title">Refractive Assessment <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; structured diagnosis fields (VISION_EHR_DATA_STANDARDS_RESEARCH.md 5.1)</span></div>
     <div class="test-chip-list">
       {% for dx in ['Myopia', 'Hyperopia', 'Astigmatism', 'Presbyopia', 'Anisometropia', 'Emmetropia'] %}
@@ -80,6 +86,42 @@
       <label class="test-chip"><input type="checkbox" name="refractive_secondary_findings" value="{{ finding }}"> {{ finding }}</label>
       {% endfor %}
     </div>
+    </div>
+    <div id="focus-anterior">
+    <div class="section-title">Anterior Segment / Dry Eye Assessment <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; structured diagnosis fields (VISION_EHR_DATA_STANDARDS_RESEARCH.md 5.2)</span></div>
+    <div class="form-row cols-2">
+      <div class="form-group"><label>Primary Diagnosis Code</label><input name="asa_primary_diagnosis_code" placeholder="H04.123"></div>
+      <div class="form-group"><label>Severity</label>
+        <select name="asa_severity"><option value="">&mdash;</option><option>Mild</option><option>Moderate</option><option>Severe</option></select>
+      </div>
+    </div>
+    <div class="table-responsive">
+    <table class="exam-table">
+      <tr><th></th><th>Conj. Injection</th><th>Corneal Staining</th><th>MGD Expression</th><th>TBUT (sec)</th><th>Schirmer (mm)</th></tr>
+      {% for eye in ['od', 'os'] %}
+      <tr><td>{{ eye|upper }}</td>
+        <td><select name="asa_conjunctival_injection_{{ eye }}"><option value="">&mdash;</option>{% for g in ['0','1+','2+','3+','4+'] %}<option>{{ g }}</option>{% endfor %}</select></td>
+        <td><select name="asa_corneal_staining_{{ eye }}"><option value="">&mdash;</option>{% for g in ['0','1+','2+','3+','4+'] %}<option>{{ g }}</option>{% endfor %}</select></td>
+        <td><select name="asa_mgd_expression_{{ eye }}"><option value="">&mdash;</option>{% for g in ['0','1+','2+','3+','4+'] %}<option>{{ g }}</option>{% endfor %}</select></td>
+        <td><input name="asa_tbut_seconds_{{ eye }}" type="number" min="0"></td>
+        <td><input name="asa_schirmer_mm_{{ eye }}" type="number" min="0"></td>
+      </tr>
+      {% endfor %}
+    </table>
+    </div>
+    <div class="form-group"><label>Plan Therapeutics</label></div>
+    <div class="test-chip-list">
+      {% for t in ['Preservative-Free Tears', 'Warm Compresses', 'Topical Steroid', 'Restasis/Xiidra'] %}
+      <label class="test-chip"><input type="checkbox" name="asa_plan_therapeutics" value="{{ t }}"> {{ t }}</label>
+      {% endfor %}
+    </div>
+    <div class="form-row cols-2">
+      <div class="form-group"><label>Follow-up Interval</label>
+        <select name="asa_follow_up_interval"><option value="">&mdash;</option><option>24 hours</option><option>1 week</option><option>2 weeks</option><option>1 month</option><option>3 months</option></select>
+      </div>
+      <div class="form-group"><label>Clinical Notes</label><input name="asa_clinical_notes"></div>
+    </div>
+    </div>
     <div class="section-title">Assessment &amp; Plan</div>
     <div class="form-row cols-2">
       <div class="form-group"><label>Assessment</label><textarea name="assessment"></textarea></div>
@@ -92,4 +134,18 @@
     <div class="form-actions"><button type="submit" class="btn btn-primary">Save Exam</button></div>
   </form>
 </div>
+<script>
+// Visit Focus: checking a chip reveals its dashboard's Assessment & Plan
+// section; unchecking hides it. Purely client-side (nothing is stored) --
+// what actually renders on the saved exam's detail page is driven by which
+// fields were filled in, not which chips were checked here. Extends to
+// future dashboards by adding one more .focus-toggle checkbox + wrapped div;
+// no changes needed here.
+document.querySelectorAll('.focus-toggle').forEach(function (cb) {
+  var target = document.getElementById(cb.dataset.target);
+  function sync() { target.hidden = !cb.checked; }
+  cb.addEventListener('change', sync);
+  sync();
+});
+</script>
 {% endblock %}

@@ -591,6 +591,34 @@ def migration_015_refractive_assessment_and_plan(conn):
         _add_column_if_missing(conn, "prescriptions", "recall_interval", "VARCHAR")
         _add_column_if_missing(conn, "prescriptions", "patient_education_tags", "VARCHAR")
 
+# ---------------------------------------------------------------------------
+# Migration: 016 -- create `anterior_segment_assessments`
+# (VISION_EHR_DATA_STANDARDS_RESEARCH.md 5.2), reviewed in v2.9, built in
+# v2.11. Brand-new table -- plain CREATE TABLE IF NOT EXISTS, same pattern as
+# migration 014.
+# ---------------------------------------------------------------------------
+def migration_016_create_anterior_segment_assessments(conn):
+    conn.execute(text(f"""
+        CREATE TABLE IF NOT EXISTS anterior_segment_assessments (
+            id {_pk_ddl(conn)},
+            exam_id INTEGER NOT NULL,
+            primary_diagnosis_code VARCHAR,
+            severity VARCHAR,
+            conjunctival_injection_od VARCHAR, conjunctival_injection_os VARCHAR,
+            corneal_staining_od VARCHAR, corneal_staining_os VARCHAR,
+            mgd_expression_od VARCHAR, mgd_expression_os VARCHAR,
+            tbut_seconds_od INTEGER, tbut_seconds_os INTEGER,
+            schirmer_mm_od INTEGER, schirmer_mm_os INTEGER,
+            plan_therapeutics VARCHAR,
+            follow_up_interval VARCHAR,
+            clinical_notes TEXT
+        )
+    """))
+    conn.execute(text(
+        "CREATE INDEX IF NOT EXISTS ix_anterior_segment_assessments_exam "
+        "ON anterior_segment_assessments (exam_id)"
+    ))
+
 # Ordered list of (id, function). Adding new migrations: append, never edit past entries.
 COLUMN_MIGRATIONS = [
     ("001_appointment_columns", migration_001_appointment_columns),
@@ -603,6 +631,7 @@ COLUMN_MIGRATIONS = [
     ("013_appointment_created_updated_by", migration_013_appointment_created_updated_by),
     ("014_create_provider_availability_tables", migration_014_create_provider_availability_tables),
     ("015_refractive_assessment_and_plan", migration_015_refractive_assessment_and_plan),
+    ("016_create_anterior_segment_assessments", migration_016_create_anterior_segment_assessments),
 ]
 POST_CREATE_ALL_MIGRATIONS = [
     ("002_seed_appointment_types", migration_002_seed_appointment_types),

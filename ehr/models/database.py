@@ -459,6 +459,7 @@ class EyeExam(Base):
     provider = relationship("Provider", back_populates="eye_exams")
     refractions = relationship("Refraction", back_populates="exam", cascade="all, delete-orphan")
     prescriptions = relationship("Prescription", back_populates="exam")
+    anterior_segment_assessments = relationship("AnteriorSegmentAssessment", back_populates="exam", cascade="all, delete-orphan")
 
 class Refraction(Base):
     __tablename__ = "refractions"
@@ -475,6 +476,30 @@ class Refraction(Base):
     os_sphere = Column(Float); os_cylinder = Column(Float); os_axis = Column(Integer)
     os_add = Column(Float); os_va = Column(String)
     exam = relationship("EyeExam", back_populates="refractions")
+
+class AnteriorSegmentAssessment(Base):
+    """Anterior Segment / Ocular Surface Disease (Dry Eye) structured Assessment
+    & Plan (VISION_EHR_DATA_STANDARDS_RESEARCH.md 5.2), the second of five
+    clinical dashboards reviewed in v2.9 -- built in v2.11. Unlike Refraction's
+    three types, one exam is expected to have at most one row here; modeled as
+    a child table (rather than columns on EyeExam) since this is a distinct
+    encounter-scoped assessment, matching Refraction's existing exam_id-FK
+    child-row shape."""
+    __tablename__ = "anterior_segment_assessments"
+    id = Column(Integer, primary_key=True, index=True)
+    exam_id = Column(Integer, ForeignKey("eye_exams.id"), nullable=False)
+    primary_diagnosis_code = Column(String)  # free-text, e.g. 'H04.123' -- same treatment as EyeExam.diagnosis_codes
+    severity = Column(String)  # Mild / Moderate / Severe
+    # Objective grading scale for all three *_od/_os pairs below: '0', '1+', '2+', '3+', '4+'
+    conjunctival_injection_od = Column(String); conjunctival_injection_os = Column(String)
+    corneal_staining_od = Column(String); corneal_staining_os = Column(String)
+    mgd_expression_od = Column(String); mgd_expression_os = Column(String)  # Meibomian Gland Dysfunction
+    tbut_seconds_od = Column(Integer); tbut_seconds_os = Column(Integer)  # Tear Break-Up Time
+    schirmer_mm_od = Column(Integer); schirmer_mm_os = Column(Integer)
+    plan_therapeutics = Column(String)  # comma-delimited: Preservative-Free Tears, Warm Compresses, Topical Steroid, Restasis/Xiidra
+    follow_up_interval = Column(String)
+    clinical_notes = Column(Text)
+    exam = relationship("EyeExam", back_populates="anterior_segment_assessments")
 
 class Prescription(Base):
     __tablename__ = "prescriptions"

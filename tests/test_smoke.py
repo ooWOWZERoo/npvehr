@@ -58,6 +58,26 @@ def test_new_exam_form_loads(logged_in_page, live_server):
     assert "/login" not in page.url
 
 
+def test_visit_focus_toggle_shows_hides_assessment_sections(logged_in_page, live_server):
+    """The Visit Focus checkboxes (ehr/templates/exams/form.html) are the one
+    behavior curl-based route checks can't confirm -- this is real client-side
+    JS, not server-rendered conditionals. Comprehensive/Refractive starts
+    checked+visible and Anterior Segment starts unchecked+hidden; toggling
+    each checkbox should flip its section's visibility."""
+    page = logged_in_page
+    page.goto(live_server + "/exams/new")
+    refractive_section = page.locator("#focus-refractive")
+    anterior_section = page.locator("#focus-anterior")
+    assert refractive_section.is_visible()
+    assert not anterior_section.is_visible()
+
+    page.locator('.focus-toggle[data-target="focus-anterior"]').check()
+    assert anterior_section.is_visible()
+
+    page.locator('.focus-toggle[data-target="focus-refractive"]').uncheck()
+    assert not refractive_section.is_visible()
+
+
 def test_new_prescription_form_loads(logged_in_page, live_server):
     page = logged_in_page
     page.goto(live_server + "/prescriptions/new")
