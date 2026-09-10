@@ -53,3 +53,4 @@ pytest
 - `ehr/auth/` — authentication, session management, role permissions, audit logging
 - `ehr/templates/` — Jinja2 templates
 - `ehr/static/` — CSS, JS, logo, patient photo uploads
+
