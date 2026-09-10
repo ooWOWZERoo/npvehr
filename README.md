@@ -1,14 +1,17 @@
 # New Path Vision EHR
 
-Local Python/FastAPI optometry practice EHR prototype.
+Python/FastAPI optometry practice EHR prototype. Deployed on Vercel, backed by Neon (Postgres)
+and Cloudinary (patient photo storage); also runs entirely locally against SQLite with no
+external services configured.
 
 **Start here:** `NEW_PATH_VISION_EHR_BASELINE_PRODUCT_DEFINITION_AND_SPECIFICATION.md` is the living
 specification — the authoritative record of what's implemented, what's placeholder, and what's
 explicitly deferred. Read the go-live safety notice at the top of that document before doing
-anything with real patient data: authentication now exists (v2.4), but compliant hosting,
-encryption, and backups do not yet, and none of the three real-infrastructure decisions in this
-repo's next phase (Neon/Vercel/Cloudinary) satisfy HIPAA requirements on their own or without a
-signed BAA at an appropriate plan tier — confirm with compliance counsel before any real PHI.
+anything with real patient data: authentication (v2.4) and TLS/encryption-at-rest/a documented
+backup procedure (v2.5, §38) are now in place, but **no Business Associate Agreement is signed
+with Vercel, Neon, or Cloudinary** — that's a legal/procurement action, not an engineering one,
+and it alone still blocks go-live regardless of everything else here. Confirm with compliance
+counsel before any real PHI.
 
 `VISION_EHR_DATA_STANDARDS_RESEARCH.md` is reference material on eye-care-specific EHR data
 standards (FHIR, IHE, DICOM, SNOMED/LOINC/ICD-10) for a future clinical-data-model rework — not
@@ -52,6 +55,7 @@ pytest
   operations/orders/claims/catalog
 - `ehr/auth/` — authentication, session management, role permissions, audit logging
 - `ehr/templates/` — Jinja2 templates
-- `ehr/static/` — CSS, JS, logo, patient photo uploads
+- `ehr/static/` — CSS, JS, local-dev patient photo uploads
+- `ehr/services/media.py` — patient photo storage (local disk or Cloudinary, by `CLOUDINARY_URL`)
 
 

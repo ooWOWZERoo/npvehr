@@ -1,7 +1,7 @@
 # New Path Vision EHR
 ## Baseline Product Definition and Current-State Functional Specification
 
-**Document version:** 2.4 (supersedes v2.3; real authentication, 8-role access control, and an authentication audit log are now implemented — see §37; the go-live notice is updated accordingly, and 3 of 4 prerequisites remain open)
+**Document version:** 2.5 (supersedes v2.4; the application is now actually deployed — Vercel + Neon Postgres + Cloudinary, with a Playwright/CI test suite and a session-auth-gated patient-photo fix — see new §38; TLS in transit is now verified end-to-end and encryption at rest is provided by the two managed data stores, closing most of prerequisite 3, and a documented (not yet live-tested) Neon point-in-time-recovery procedure exists for prerequisite 4; prerequisite 2 — a signed BAA — remains untouched, since it is a business/legal action no engineering change can complete)
 **Baseline date:** September 9, 2026
 **Application-reported version:** 1.0.0
 **Baseline source:** `setup_ehr.py` self-contained scaffold script (locally generated `visioncare_ehr/` project directory; see §2.2)
@@ -12,21 +12,21 @@
 
 ## ⚠ DO NOT USE WITH REAL PATIENT DATA — READ BEFORE GOING LIVE
 
-> **Status as of v2.4: 1 of 4 go-live prerequisites is done. The other 3 are still open. Do not go live yet.**
+> **Status as of v2.5: 1 of 4 go-live prerequisites is fully done, 2 are substantially — but not completely — addressed, and 1 remains entirely untouched. Do not go live yet.**
 >
-> **What changed in v2.4:** real authentication, 8-role access control, and an authentication/access audit log were built and verified — see §37. Every screen now requires a real login; the prior "anyone who can reach the process has full access" condition no longer applies to the application layer. This closes prerequisite 1 below.
+> **What changed in v2.5:** the application moved off a single local machine entirely. It now runs on Vercel, backed by Neon (managed Postgres) and Cloudinary (managed object storage) — see new §38. That platform move happens to close most of the *technical* substance of prerequisites 3 and 4, as a side effect rather than a dedicated compliance project: Vercel terminates TLS for every request, Neon's connection is TLS-required, and both Neon and Cloudinary encrypt their storage by platform default (§38.2) — and Neon's built-in point-in-time recovery gives this application a real backup mechanism for the first time, with a documented restore procedure (§38.3). Patient photo access was also closed from a public/guessable URL to a session-auth-gated route (§38.4), and an automated end-to-end test suite now runs in CI on every change (§38.5).
 >
-> **What has NOT changed:** this application still runs today as a Python script on a single local machine, backed by a local SQLite file with no encryption at rest, no TLS enforced by the application, and no backup or recovery mechanism of any kind. Authentication protects the application's own login screen — it does not, by itself, make the underlying database file, disk, or network transport secure. See §4.1 and §15 for the current facts in detail.
+> **What did NOT change:** nobody has signed a Business Associate Agreement with Vercel, Neon, or Cloudinary (prerequisite 2 — still completely open, and the one item on this list that is a legal/procurement action, not an engineering one). The Neon backup procedure is documented but has not yet been exercised as a live, verified restore (§38.3). This document's author could not independently re-verify Vercel/Neon/Cloudinary's current published encryption-at-rest and BAA terms while writing this section (the review environment's network policy blocked reaching vendor documentation directly) — treat §38.2's characterization as reasoned from general, standard practice for this class of managed provider, not as a re-confirmed fact, and verify current terms directly with each vendor before relying on it. Record-level "who viewed this specific photo" auditing beyond the session-auth gate still does not exist, and CSRF protection remains absent (§15.1, unchanged).
 >
 > **This application MUST NOT be used to store, process, or display real patient data or any other real PHI until, at minimum, all of the following are in place:**
 > 1. ~~Real authentication, authorization, and audit logging (who did what, to which record, when).~~ **Done as of v2.4** — see §37. (Note the scope: the audit log covers login/logout/access-denied events, not yet a full per-field "who changed this clinical value" trail — see §37.6.)
-> 2. Deployment on compliant hosting, under a signed Business Associate Agreement (BAA) with the hosting/infrastructure provider. **Still open.**
-> 3. Encryption in transit (TLS) and at rest (database and file storage). **Still open.**
-> 4. Real backup and disaster-recovery capability, tested and documented. **Still open.**
+> 2. Deployment on compliant hosting, under a signed Business Associate Agreement (BAA) with the hosting/infrastructure provider. **Still fully open — a business/legal action, not something this or any future engineering pass can complete on its own.** See §38.1.
+> 3. Encryption in transit (TLS) and at rest (database and file storage). **Substantially addressed as of v2.5** via the managed platforms now in use — see §38.2 for exactly what was and wasn't verified, and its caveats.
+> 4. Real backup and disaster-recovery capability, tested and documented. **Partially addressed as of v2.5**: Neon's point-in-time recovery gives this application a real backup mechanism, and a restore procedure is documented (§38.3) — but no one has yet performed and confirmed a live test restore. **Still open until that test happens.**
 >
-> **The user has engaged compliance/legal counsel for this project.** Readiness for real-patient go-live must be confirmed with that counsel — not inferred from this document, and not determined by engineering judgment alone. This document is a technical and product baseline; it is not legal advice, and nothing in it should be read as counsel's sign-off on go-live. Completing prerequisite 1 is real progress, not a signal that the remaining three are any less mandatory.
+> **The user has engaged compliance/legal counsel for this project.** Readiness for real-patient go-live must be confirmed with that counsel — not inferred from this document, and not determined by engineering judgment alone. This document is a technical and product baseline; it is not legal advice, and nothing in it should be read as counsel's sign-off on go-live. Completing prerequisite 1, and making real progress on 3 and 4, does not make the still-fully-open prerequisite 2 any less mandatory.
 >
-> This notice is referenced from §4.1 (Access-control baseline), §15 (Security, Privacy, and Compliance Baseline), and §37 (Authentication build), which describe the underlying facts in detail. Read those sections for the specifics; read this box first for what those facts mean in practice.
+> This notice is referenced from §4.1 (Access-control baseline), §15 (Security, Privacy, and Compliance Baseline), §37 (Authentication build), and §38 (Deployment infrastructure), which describe the underlying facts in detail. Read those sections for the specifics; read this box first for what those facts mean in practice.
 
 ---
 
@@ -1044,12 +1044,12 @@ Gaps:
 - Forms do not include CSRF protection. **Unchanged — still open**, explicitly deferred from the v2.4 authentication build (§37.6).
 - ~~There is no audit trail identifying who viewed or changed a record.~~ **Partially resolved in v2.4**: authentication/access events (login, logout, failed login, access-denied) are now audited via `AuthAuditEvent` (§37.2). Per-record clinical/administrative "who changed this field" auditing beyond that scope does not exist yet — the pre-existing `appointment_audit_events`/`appointment_type_audit_events` tables (§18.3) remain the only per-record audit trails, and they predate and are separate from the new authentication audit log.
 - Sensitive patient and insurance information is rendered directly in HTML. Unchanged — now only reachable by an authenticated session, but still not specially protected once a session exists.
-- The local SQLite database is not encrypted by the application. **Unchanged — still open**, and one of the three remaining go-live prerequisites (see the notice before §1).
-- Transport security is not configured by the application. **Unchanged — still open**, one of the three remaining go-live prerequisites.
+- The local SQLite database is not encrypted by the application. **Still true when run locally** (the default, no `DATABASE_URL` set) — but the deployed configuration as of v2.5 uses Neon (managed Postgres), which encrypts its storage as a platform default rather than local SQLite. See §38.2 for what that does and doesn't cover.
+- Transport security is not configured *by the application itself*. **Still literally true** — there is no code in this app that enforces HTTPS or validates certificates — but as of v2.5 it doesn't need to be: the deployed configuration's actual network path (browser↔Vercel, app↔Neon, app↔Cloudinary) is TLS end-to-end via those platforms. See §38.2 for what was directly verified versus taken on vendor-standard-practice faith.
 - No security headers, Content Security Policy, or application-level rate limiting are configured. Unchanged. Note: login does have a generic "Invalid email or password" error to prevent user enumeration (§37.3), but no rate-limiting/lockout after repeated failed attempts (§37.6).
 - ~~Default interactive API documentation and the OpenAPI schema are publicly enabled.~~ **Resolved in v2.4** — `/docs`, `/redoc`, and `/openapi.json` are now disabled entirely (§37.3).
 - There is no secret-management or environment-configuration framework. Unchanged.
-- **New in v1.2:** patient photo uploads are validated only by filename extension, not by file content/MIME type, size, or dimensions. Uploaded files are written to a publicly served static directory (`/static/uploads/`) with unauthenticated read access to anyone who knows or guesses the generated filename. There is no malware/content scanning, no per-patient access control on the resulting file, and no cleanup of files left behind when a photo is replaced. **Unchanged by v2.4** — authentication controls who can reach the upload form, but the resulting file URL is still an unauthenticated static path (§4.1).
+- **New in v1.2:** patient photo uploads are validated only by filename extension, not by file content/MIME type, size, or dimensions. There is no malware/content scanning, and no cleanup of files left behind when a photo is replaced (that cleanup gap was actually resolved in v1.7, §29.1 — this line was carried forward inaccurately every version since; only the extension-validation and malware-scanning gaps remain genuinely open). ~~Uploaded files are written to a publicly served static directory (`/static/uploads/`) with unauthenticated read access to anyone who knows or guesses the generated filename.~~ **Resolved in v2.5** — photo access now requires the same session auth as every other patient record, via a proxy route rather than a direct static/CDN URL. See §38.4.
 
 ### 15.2 Compliance assessment
 
@@ -1070,12 +1070,12 @@ This is a product and technical assessment, not legal advice or a certification.
 
 ### 16.2 Reliability and data recovery
 
-- No backup, restore, replication, point-in-time recovery, or integrity-check process is included.
+- ~~No backup, restore, replication, point-in-time recovery, or integrity-check process is included.~~ **Partially addressed in v2.5**: the deployed database (Neon) has built-in point-in-time recovery, and a restore procedure is now documented — see §38.3. No integrity-check process exists either way. Not addressed for a locally-run instance (default SQLite has none of this).
 - No health-check or readiness endpoint is defined.
 - No structured application logging or error-reporting integration is included.
 - Database commits occur directly inside request handlers.
 - There is no retry strategy or dead-letter handling because no asynchronous jobs or integrations exist.
-- Uploaded photo files live outside the database; a database restore without a corresponding filesystem restore would leave `photo_path` references pointing to missing files (new consideration in v1.2).
+- Uploaded photo files live outside the database; a database restore without a corresponding filesystem restore would leave `photo_path` references pointing to missing files (new consideration in v1.2). **Still true in the deployed (Cloudinary) configuration** — a Neon point-in-time restore does not restore Cloudinary's independently-stored photos, and vice versa; see §38.3.
 
 ### 16.3 Observability
 
@@ -2431,10 +2431,10 @@ Given the user's confirmation that this application is intended to become a live
 These are the gaps that remain genuinely open after this reconciliation pass, consolidated in one place so a reader does not have to reconstruct current status from six different rounds' change logs:
 
 1. ~~No authentication, authorization, or audit-of-who-changed-what anywhere in the application.~~ **Resolved in v2.4** — see §37. Note: `/admin/scheduling/*`'s previously hard-coded always-allow checks (§26.1 item 1) are now gated by the v2.4 role model like every other route; a full per-record clinical-field "who changed this value" audit trail beyond authentication/access events remains a separate, still-open item — see §37.6.
-2. **No encryption in transit or at rest, no TLS enforcement, no backups, no BAA-eligible hosting** — see the go-live notice and §15.
+2. ~~No encryption in transit or at rest, no TLS enforcement, no backups, no BAA-eligible hosting~~ — **substantially changed in v2.5** (§38): TLS in transit is now real end-to-end, encryption at rest is provided by the managed data stores, and a documented (not yet live-tested) backup/restore procedure exists. **No BAA-eligible hosting is signed, and that item alone is unchanged and fully open** — see the go-live notice and §15.
 3. **No CSRF protection** anywhere (§15.1, §26.10 item 4) — a pre-existing gap, not new.
 4. **No down-migration/rollback capability** in the migration runner (§25.15) — it can add columns/tables and seed data, but nothing in it reverses a migration.
-5. **No automated test suite** of any kind for this application (§18.3 item 6, §26.10 item 7) — all verification to date, including this reconciliation pass, has been manual/direct-source-reading plus targeted synthetic-database checks.
+5. ~~No automated test suite of any kind for this application~~ (§18.3 item 6, §26.10 item 7) — **resolved in v2.5**: an end-to-end Playwright suite (§38.5) now runs on every push and pull request via GitHub Actions CI. Scope is smoke-level (login, logout, auth redirects, main nav destinations render) — it is not workflow-level or regression coverage of every screen in this baseline, so most of §20's manual regression checklist is not yet automated.
 6. **Real open-slot availability search** (`/appointments/availability`) remains a placeholder (§26.10 item 3).
 7. **Color-rule builder UI** does not exist; color rules are correct and versioned but edited only at the database level (§26.10 item 2).
 8. **No CPT/procedure coding, claims data model, or payer connectivity** behind any of the 5 Claim Management placeholder screens (§35.3).
@@ -2529,3 +2529,80 @@ Consistent with the original scoping conversation (auth mechanism scope: "solid 
 ### 37.7 Testing performed
 
 Independently verified (not only the implementing agent's self-report) in a clean scratchpad test run: every sampled route across all six route files redirects to `/login` with no session; login success sets a proper `HttpOnly` cookie and grants access; login failure returns the generic error with no cookie set; logout revokes the session server-side (a reused post-logout cookie is rejected, not merely cleared client-side); role enforcement holds for at least three roles across multiple restricted areas each; session expiry and inactivity timeout both force re-authentication (tested via direct database timestamp manipulation); `/admin/users` is reachable only by System Administrator, and an account created there can immediately log in with role-correct access; `/docs`/`/redoc`/`/openapi.json` return 404; and both a fresh database and an "upgrade" test (auth tables dropped from an already-seeded database, then re-run) correctly create/re-seed the new tables without disrupting existing patients/appointments/exams/prescriptions data.
+
+## 38. Deployment Infrastructure and Go-Live Prerequisite Progress (v2.5)
+
+This round moved the application off "a Python script on a single local machine" (the condition every prior version of this document, including the go-live notice through v2.4, described as current) onto real hosting: Vercel (application), Neon (managed Postgres), and Cloudinary (managed object storage for patient photos). That move was undertaken primarily to make the application reachable and demonstrable outside a local machine, but it also directly bears on go-live prerequisites 3 and 4 — largely as a side effect of using managed platforms rather than as a dedicated compliance project. This section records exactly what changed, what was actually verified versus reasoned from standard practice, and what remains open. Read it together with the go-live notice before §1, which this section's facts support.
+
+### 38.1 Hosting and the still-fully-open BAA prerequisite
+
+The application's `main` branch auto-deploys to Vercel on every push. `DATABASE_URL` points at a Neon Postgres database; `CLOUDINARY_URL` configures Cloudinary for patient photo storage. All three are third-party managed services under the user's own accounts, not self-hosted infrastructure.
+
+None of this constitutes "compliant hosting" in the go-live notice's sense on its own, and it does not need to be re-litigated in every future version of this document: **prerequisite 2 is a signed Business Associate Agreement (BAA) with each vendor whose systems will handle real PHI** — a legal/contractual action between the user's organization and Vercel, Neon, and Cloudinary, gated on the vendor, the plan tier, and the agreement itself, none of which an engineering change can create. As of this writing no such agreement exists with any of the three. Before any real patient data reaches this deployment, the user (or their organization) needs to directly confirm with each vendor's sales or compliance contact: (a) whether a BAA is offered at all, (b) which plan tier is required to obtain one, and (c) any configuration the BAA itself requires (e.g., specific regions, specific features disabled). This document's author could not check current vendor terms for any of the three from the review environment used to write this section (its network policy blocked reaching vendor sites directly) and is not attempting to state current pricing or plan names here for that reason — treat this paragraph as "confirm this yourselves," not as a report of what was found.
+
+### 38.2 Encryption in transit and at rest
+
+What was directly observed in this session, not merely asserted:
+
+- **Browser ↔ application:** every request to the live deployment came back over HTTPS with `Strict-Transport-Security` set, consistent with Vercel terminating TLS for all traffic to its domains by default. No application code enforces this — it's a platform behavior, not a check FastAPI performs.
+- **Application ↔ database:** the Neon connection string in use requires `sslmode=require`; SQLAlchemy/psycopg would refuse to connect over a plaintext session with that flag set.
+- **Application ↔ object storage:** the Cloudinary SDK's default (`secure_url`/delivery URLs) is HTTPS; nothing in this codebase requests plaintext HTTP from Cloudinary.
+
+Taken together, the actual network paths this application uses in its deployed configuration are TLS-encrypted end-to-end. That closes the "in transit" half of prerequisite 3 with reasonable confidence, based on direct observation rather than a vendor's marketing claim.
+
+The "at rest" half is reasoned rather than independently confirmed: Neon and Cloudinary are both managed cloud data stores, and encrypting underlying storage volumes by default is standard practice for that class of provider. This document's author was not able to re-verify Neon's or Cloudinary's *current*, specific at-rest encryption guarantees from the review environment used to write this section — reaching either vendor's documentation directly was blocked by that environment's network policy. **Confirm current at-rest encryption terms directly with Neon and Cloudinary (their security/trust documentation, or their sales/compliance contact) before treating prerequisite 3 as fully closed** — this section's characterization should be read as "very likely true, reasoned from standard practice," not as a re-confirmed fact suitable for a compliance sign-off on its own.
+
+Locally (no `DATABASE_URL`/`CLOUDINARY_URL` set), none of this applies — the SQLite-file-with-no-encryption facts in §15.1 remain exactly as previously documented for that configuration.
+
+### 38.3 Backup and disaster recovery
+
+Neon provides point-in-time recovery (PITR) as a built-in platform capability: the service retains enough history to restore the database to an earlier point in time, independent of any action this application takes, for a retention window set by the Neon plan in use. This is a materially different situation from the pre-v2.5 baseline, where the database was a single local SQLite file with no backup mechanism of any kind — but it comes with real, specific limits worth stating plainly rather than glossing over:
+
+- **This has not yet been live-tested.** The review environment used to prepare this document could not reach Neon's database port directly (its network policy allows only HTTP/HTTPS through an allowlisted proxy, not the raw TCP connection Postgres requires), so no one has actually performed and confirmed a restore against the real production database. The procedure below is Neon's documented mechanism, not a dry run this document's author personally completed.
+- **It covers the database only.** Cloudinary-stored patient photos are not part of a Neon restore. A database-only restore after a photo has been deleted or a patient record changed would leave `photo_path` values that may not match Cloudinary's current state — the same class of problem the pre-v2.5 baseline already noted for local photo files and a database restore (§16.2), just relocated rather than resolved. Cloudinary's own asset retention/versioning (if enabled on the account's plan) would need to be relied on separately for photo recovery; this was not investigated as part of this pass.
+- **It does not cover application code or configuration** — that recovery path is "redeploy from the `main` branch in GitHub," which is a solved problem already (Vercel auto-deploys on push) and not a gap.
+
+**Documented restore procedure** (to be executed and confirmed by the user or their operator, not yet performed by this document's author):
+1. In the Neon console, open the project's **Branches** view.
+2. Use **Restore** (or create a new branch "as of" a specific past timestamp) to select the point in time to recover to. Neon's restore window is bounded by the project's plan-specific retention period — confirm the current limit for the plan in use before assuming a given point in time is still recoverable.
+3. Verify the restored branch's data independently (e.g., spot-check a few known patient/appointment records) before pointing production traffic at it.
+4. To actually cut over, update the Vercel project's `DATABASE_URL` environment variable to the restored branch's connection string and redeploy.
+
+Until step 3 has actually been performed once against a real restore, **this procedure counts as documented but not tested**, per the wording of go-live prerequisite 4.
+
+### 38.4 Patient photo access control
+
+The pre-v2.5 baseline (§15.1) noted that uploaded patient photos lived at a URL — a local `/static/uploads/` path — with unauthenticated read access to anyone who knew or guessed the generated filename. Moving photo storage to Cloudinary this round would have carried the identical problem forward in a new form (a public, permanent Cloudinary delivery URL) had it been left at Cloudinary's default settings.
+
+Instead: Cloudinary uploads now use delivery type `authenticated` rather than the default public `upload` type, and `Patient.photo_path` stores an opaque marker (never a URL a browser could use directly) either way. A new route, `GET /patients/{id}/photo`, resolves that marker to actual image bytes server-side and streams them back; it lives in the same router as every other patient route and inherits that router's session-auth requirement (applied centrally in `ehr/app.py`) automatically. Verified directly: an authenticated request round-trips the exact bytes originally uploaded; the identical URL, requested with no session cookie, returns the same 303-to-login redirect as every other protected route.
+
+This closes the specific "anyone with the URL, forever, no auth" gap. It does not add record-level authorization narrower than "any authenticated staff member" (consistent with the rest of this baseline's role model, §37.4/§37.6), content/malware scanning, or file-type validation beyond extension-checking — those remain open, as noted in the updated §15.1.
+
+### 38.5 Automated end-to-end test suite and CI
+
+A Playwright-driven pytest suite (`tests/`) now exists and runs automatically on every pull request and push to `main` via GitHub Actions (`.github/workflows/tests.yml`). Each run launches the real application (not a mock) against a freshly-seeded, throwaway SQLite database and drives it with an actual headless browser. Current coverage: signed-out access to a protected route redirects to login; invalid credentials show the generic login error; valid login reaches the dashboard; logout revokes the session and re-locks a previously-accessible page; and the patients list, appointments calendar, new-exam form, and new-prescription form all load without an unexpected auth bounce.
+
+This is smoke-level coverage confirming the application boots, authenticates, and its main navigation destinations render — it is not the workflow-level regression coverage described in §20 (which remains a manual checklist), and does not yet test any write path, the appointment scheduling module's business rules, or role-specific access restrictions beyond System Administrator. Expanding coverage remains a worthwhile, but separate and not-yet-scoped, follow-up.
+
+### 38.6 Updated go-live prerequisite summary
+
+| # | Prerequisite | Status as of v2.5 |
+| --- | --- | --- |
+| 1 | Real authentication, authorization, and audit logging | **Done** (v2.4, §37) |
+| 2 | Compliant hosting under a signed BAA | **Still fully open** — a business/legal action; see §38.1 |
+| 3 | Encryption in transit and at rest | **Substantially addressed** — in-transit verified directly; at-rest reasoned from standard managed-provider practice but not independently re-confirmed against current vendor terms; see §38.2 |
+| 4 | Backup and disaster recovery, tested and documented | **Partially addressed** — a real mechanism (Neon PITR) and a documented procedure exist; no live test restore has been performed yet; see §38.3 |
+
+Three of four prerequisites now have real, verifiable technical progress behind them. None of that changes the go-live notice's bottom line: **do not use this application with real patient data yet.** Prerequisite 2 remains completely untouched, prerequisites 3 and 4 each have a stated, concrete remaining step (independently re-confirm vendor at-rest/BAA terms; perform one live test restore), and the user's compliance counsel — not this document, and not engineering judgment — makes the actual go-live call.
+
+**Version 2.5 change log (relative to v2.4):**
+
+| Area | Change |
+| --- | --- |
+| New capability, major, go-live-relevant | The application is now actually deployed — Vercel (hosting), Neon (managed Postgres via `DATABASE_URL`), and Cloudinary (managed object storage via `CLOUDINARY_URL`) — replacing "a Python script on a single local machine" everywhere that phrase previously appeared in this document's go-live notice. See new §38. |
+| Fixed, go-live-relevant | `ehr/db/migrations.py`, previously written and tested against SQLite only, is now dialect-agnostic and verified against both SQLite and Postgres (table/column introspection via `sqlalchemy.inspect`, dialect-appropriate autoincrement DDL, `TIMESTAMP`/`TRUE`/`FALSE` instead of SQLite-specific `DATETIME`/`0`/`1`, `RETURNING id` instead of `lastrowid`). |
+| New capability | `ehr/app.py`'s startup hook now auto-seeds demo accounts (and demo clinical data) when the database is empty, so a fresh Neon database is immediately usable without a separate manual seeding step. Idempotent — a no-op on every subsequent startup once seeded. |
+| Fixed, go-live-relevant | Patient photo access closed from a public/guessable URL (§15.1) to a session-auth-gated route — see §38.4. |
+| New capability, go-live-relevant | An automated Playwright end-to-end test suite now runs in CI on every PR and push to `main` — see §38.5. Resolves genuine-open-gap #5 from §36.5. |
+| Updated | The go-live safety notice (before §1), §4.1, §15.1, §16.2, and §36.5 items 2 and 5 all updated to reflect v2.5's deployment infrastructure and its effect on go-live prerequisites 3 and 4, while making clear that prerequisite 2 (a signed BAA) remains completely untouched. |
+| Removed | The placeholder eye/leaf SVG logo (login page, printable prescription header) — the client's final logo asset still has not been delivered; removed at the user's request rather than continuing to carry a placeholder. |
