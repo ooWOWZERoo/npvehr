@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
-from ehr.models.database import get_db, EyeExam, Refraction, AnteriorSegmentAssessment, Patient, Provider
+from ehr.models.database import get_db, EyeExam, Refraction, AnteriorSegmentAssessment, GlaucomaTracking, Patient, Provider
 from ehr.env_info import EHR_ENV
 from ehr.utils import patient_context
 from ehr.auth.permissions import require_role, EXAM_VIEW, EXAM_EDIT, ROLE_LABELS
@@ -78,6 +78,21 @@ async def create_exam(request: Request, db: Session = Depends(get_db)):
         clinical_notes=g("asa_clinical_notes"))
     if any(v not in (None, "") for v in asa_fields.values()):
         db.add(AnteriorSegmentAssessment(exam_id=exam.id, **asa_fields))
+    # Posterior Segment / Glaucoma tracking (5.3) -- same all-optional rule.
+    gt_fields = dict(
+        primary_diagnosis_code=g("gt_primary_diagnosis_code"),
+        target_iop_od=_i(g("gt_target_iop_od")), target_iop_os=_i(g("gt_target_iop_os")),
+        iop_current_od=_i(g("gt_iop_current_od")), iop_current_os=_i(g("gt_iop_current_os")),
+        iop_time_measured=g("gt_iop_time_measured"), iop_method=g("gt_iop_method"),
+        cup_disc_ratio_od=_f(g("gt_cup_disc_ratio_od")), cup_disc_ratio_os=_f(g("gt_cup_disc_ratio_os")),
+        nerve_tissue_status_od=g("gt_nerve_tissue_status_od"), nerve_tissue_status_os=g("gt_nerve_tissue_status_os"),
+        oct_rnfl_average_microns_od=_i(g("gt_oct_rnfl_average_microns_od")), oct_rnfl_average_microns_os=_i(g("gt_oct_rnfl_average_microns_os")),
+        visual_field_md_db_od=_f(g("gt_visual_field_md_db_od")), visual_field_md_db_os=_f(g("gt_visual_field_md_db_os")),
+        vf_reliability_od=g("gt_vf_reliability_od"), vf_reliability_os=g("gt_vf_reliability_os"),
+        prescribed_glaucoma_meds=gl("gt_prescribed_glaucoma_meds"), diagnostic_orders=gl("gt_diagnostic_orders"),
+        follow_up_interval=g("gt_follow_up_interval"), clinical_notes=g("gt_clinical_notes"))
+    if any(v not in (None, "") for v in gt_fields.values()):
+        db.add(GlaucomaTracking(exam_id=exam.id, **gt_fields))
     db.commit()
     return RedirectResponse(f"/exams/{exam.id}", status_code=303)
 

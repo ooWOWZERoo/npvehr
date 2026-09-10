@@ -1,0 +1,37 @@
+{% extends "patients/_workspace.html" %}
+{% block wcontent %}
+<div class="card">
+  <h2>Glaucoma Tracking</h2>
+  {% if not gt_rows %}
+  <p style="color:#64748b">No glaucoma tracking recorded for this patient yet.</p>
+  {% else %}
+  {% if chart %}
+  <svg viewBox="0 0 {{ chart.width }} {{ chart.height }}" style="max-width:100%;height:180px;display:block;margin-bottom:0.5rem" role="img" aria-label="Current IOP OD/OS over time">
+    <line x1="0" y1="{{ chart.gridline_y }}" x2="{{ chart.width }}" y2="{{ chart.gridline_y }}" stroke="#e2e8f0" stroke-dasharray="4,4"/>
+    <polyline points="{{ chart.od_points }}" fill="none" stroke="#0f766e" stroke-width="2"/>
+    <polyline points="{{ chart.os_points }}" fill="none" stroke="#b45309" stroke-width="2"/>
+  </svg>
+  <p style="font-size:0.8rem;color:#64748b;margin-top:0">
+    <span style="color:#0f766e">&#9679;</span> OD &nbsp; <span style="color:#b45309">&#9679;</span> OS &nbsp; dashed line: 21 mmHg reference
+  </p>
+  {% endif %}
+  <div class="table-responsive">
+  <table>
+    <thead><tr><th>Date</th><th>Target IOP OD/OS</th><th>Current IOP OD/OS</th><th>Method</th><th>Cup-Disc OD/OS</th><th></th></tr></thead>
+    <tbody>
+    {% for e, gt in gt_rows %}
+    <tr>
+      <td>{{ e.exam_date }}</td>
+      <td>{{ gt.target_iop_od if gt.target_iop_od is not none else '—' }} / {{ gt.target_iop_os if gt.target_iop_os is not none else '—' }}</td>
+      <td>{{ gt.iop_current_od if gt.iop_current_od is not none else '—' }} / {{ gt.iop_current_os if gt.iop_current_os is not none else '—' }}</td>
+      <td>{{ gt.iop_method or '—' }}</td>
+      <td>{{ '%.2f'|format(gt.cup_disc_ratio_od) if gt.cup_disc_ratio_od is not none else '—' }} / {{ '%.2f'|format(gt.cup_disc_ratio_os) if gt.cup_disc_ratio_os is not none else '—' }}</td>
+      <td><a href="/exams/{{ e.id }}" class="btn btn-sm btn-secondary">View Exam</a></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

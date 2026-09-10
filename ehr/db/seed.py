@@ -2,7 +2,7 @@ import secrets
 from datetime import datetime, timedelta
 from ehr.models.database import (init_db, engine, SessionLocal, Provider, Patient, Appointment, EyeExam,
     Refraction, Prescription, AppointmentStatus, AppointmentType, AppointmentTypeVersion, User,
-    ProviderAvailabilityTemplate, AnteriorSegmentAssessment)
+    ProviderAvailabilityTemplate, AnteriorSegmentAssessment, GlaucomaTracking)
 from ehr.db.migrations import run_column_migrations, run_post_create_all_migrations
 from ehr.auth.security import hash_password
 from ehr.auth.permissions import SYSTEM_ADMINISTRATOR, OPTOMETRIST_PROVIDER, FRONT_DESK, ROLE_LABELS
@@ -188,6 +188,52 @@ def seed_demo_data(db):
         tbut_seconds_od=6, tbut_seconds_os=5, schirmer_mm_od=8, schirmer_mm_os=7,
         plan_therapeutics="Preservative-Free Tears, Warm Compresses",
         follow_up_interval="2 weeks"))
+
+    # Two glaucoma-tracking exams for the same demo patient, months apart --
+    # demonstrates the trend view (VISION_EHR_DATA_STANDARDS_RESEARCH.md 5.3)
+    # with real multi-visit data rather than an empty state.
+    glaucoma_exam_1 = EyeExam(
+        patient_id=pts[3].id, provider_id=p1.id, exam_date="2026-03-10",
+        chief_complaint="Routine glaucoma suspect follow-up",
+        od_sc="20/25", os_sc="20/25", od_cc="20/20", os_cc="20/20",
+        iop_od=22.0, iop_os=23.0, iop_method="Goldmann",
+        assessment="Glaucoma suspect OU, IOP borderline elevated.",
+        plan="Continue latanoprost OU. Repeat OCT/VF at next visit.",
+        diagnosis_codes="H40.0011", follow_up_weeks=26,
+    )
+    db.add(glaucoma_exam_1); db.flush()
+    db.add(GlaucomaTracking(exam_id=glaucoma_exam_1.id,
+        primary_diagnosis_code="H40.0011", target_iop_od=18, target_iop_os=18,
+        iop_current_od=22, iop_current_os=23, iop_time_measured="09:15", iop_method="Goldmann Applanation",
+        cup_disc_ratio_od=0.55, cup_disc_ratio_os=0.6,
+        nerve_tissue_status_od="Healthy Rim", nerve_tissue_status_os="Mild inferior thinning",
+        oct_rnfl_average_microns_od=92, oct_rnfl_average_microns_os=88,
+        visual_field_md_db_od=-1.2, visual_field_md_db_os=-1.8,
+        vf_reliability_od="Reliable", vf_reliability_os="Reliable",
+        prescribed_glaucoma_meds="Latanoprost 0.005% QHS OU",
+        diagnostic_orders="OCT RNFL, Humphrey VF 24-2", follow_up_interval="6 months"))
+
+    glaucoma_exam_2 = EyeExam(
+        patient_id=pts[3].id, provider_id=p1.id, exam_date="2026-09-08",
+        chief_complaint="Glaucoma suspect 6-month follow-up",
+        od_sc="20/25", os_sc="20/25", od_cc="20/20", os_cc="20/20",
+        iop_od=19.0, iop_os=20.0, iop_method="Goldmann",
+        assessment="Glaucoma suspect OU, IOP improved on latanoprost.",
+        plan="Continue current regimen. Repeat OCT/VF in 6 months.",
+        diagnosis_codes="H40.0011", follow_up_weeks=26,
+    )
+    db.add(glaucoma_exam_2); db.flush()
+    db.add(GlaucomaTracking(exam_id=glaucoma_exam_2.id,
+        primary_diagnosis_code="H40.0011", target_iop_od=18, target_iop_os=18,
+        iop_current_od=19, iop_current_os=20, iop_time_measured="09:30", iop_method="Goldmann Applanation",
+        cup_disc_ratio_od=0.55, cup_disc_ratio_os=0.6,
+        nerve_tissue_status_od="Healthy Rim", nerve_tissue_status_os="Mild inferior thinning, stable",
+        oct_rnfl_average_microns_od=91, oct_rnfl_average_microns_os=87,
+        visual_field_md_db_od=-1.3, visual_field_md_db_os=-1.9,
+        vf_reliability_od="Reliable", vf_reliability_os="Reliable",
+        prescribed_glaucoma_meds="Latanoprost 0.005% QHS OU",
+        diagnostic_orders="OCT RNFL, Humphrey VF 24-2", follow_up_interval="6 months"))
+
     db.commit(); db.close()
     print("Seeded database.")
 

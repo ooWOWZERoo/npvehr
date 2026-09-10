@@ -460,6 +460,7 @@ class EyeExam(Base):
     refractions = relationship("Refraction", back_populates="exam", cascade="all, delete-orphan")
     prescriptions = relationship("Prescription", back_populates="exam")
     anterior_segment_assessments = relationship("AnteriorSegmentAssessment", back_populates="exam", cascade="all, delete-orphan")
+    glaucoma_trackings = relationship("GlaucomaTracking", back_populates="exam", cascade="all, delete-orphan")
 
 class Refraction(Base):
     __tablename__ = "refractions"
@@ -500,6 +501,34 @@ class AnteriorSegmentAssessment(Base):
     follow_up_interval = Column(String)
     clinical_notes = Column(Text)
     exam = relationship("EyeExam", back_populates="anterior_segment_assessments")
+
+class GlaucomaTracking(Base):
+    """Posterior Segment & Glaucoma Tracking structured Assessment & Plan
+    (VISION_EHR_DATA_STANDARDS_RESEARCH.md 5.3), the third of five clinical
+    dashboards reviewed in v2.9 -- built in v2.16. Kept as an exam_id-FK child
+    row, same shape as Refraction/AnteriorSegmentAssessment, rather than a
+    separate patient-scoped table -- trending across visits (the one thing
+    this dashboard wants that the other two don't) is achieved by querying
+    every row across a patient's exam history (joined via EyeExam.patient_id),
+    not by denormalizing patient_id onto this table."""
+    __tablename__ = "glaucoma_trackings"
+    id = Column(Integer, primary_key=True, index=True)
+    exam_id = Column(Integer, ForeignKey("eye_exams.id"), nullable=False)
+    primary_diagnosis_code = Column(String)  # free-text, e.g. 'H40.1132'
+    target_iop_od = Column(Integer); target_iop_os = Column(Integer)  # mmHg
+    iop_current_od = Column(Integer); iop_current_os = Column(Integer)  # mmHg
+    iop_time_measured = Column(String)  # 'HH:MM' -- IOP varies by time of day
+    iop_method = Column(String)  # Goldmann Applanation / Tono-Pen / iCare
+    cup_disc_ratio_od = Column(Float); cup_disc_ratio_os = Column(Float)  # 0.00-1.00
+    nerve_tissue_status_od = Column(String); nerve_tissue_status_os = Column(String)  # e.g. 'Healthy Rim', 'Inferior thinning'
+    oct_rnfl_average_microns_od = Column(Integer); oct_rnfl_average_microns_os = Column(Integer)
+    visual_field_md_db_od = Column(Float); visual_field_md_db_os = Column(Float)
+    vf_reliability_od = Column(String); vf_reliability_os = Column(String)  # Reliable / Borderline / Unreliable
+    prescribed_glaucoma_meds = Column(String)  # comma-delimited, e.g. 'Latanoprost 0.005% QHS OU'
+    diagnostic_orders = Column(String)  # comma-delimited, e.g. 'OCT RNFL, Humphrey VF 24-2'
+    follow_up_interval = Column(String)
+    clinical_notes = Column(Text)
+    exam = relationship("EyeExam", back_populates="glaucoma_trackings")
 
 class Prescription(Base):
     __tablename__ = "prescriptions"

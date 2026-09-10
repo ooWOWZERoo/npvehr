@@ -619,6 +619,38 @@ def migration_016_create_anterior_segment_assessments(conn):
         "ON anterior_segment_assessments (exam_id)"
     ))
 
+# ---------------------------------------------------------------------------
+# Migration: 017 -- create `glaucoma_trackings`
+# (VISION_EHR_DATA_STANDARDS_RESEARCH.md 5.3), reviewed in v2.9, built in
+# v2.16. Brand-new table -- plain CREATE TABLE IF NOT EXISTS, same pattern as
+# migrations 014/016.
+# ---------------------------------------------------------------------------
+def migration_017_create_glaucoma_trackings(conn):
+    conn.execute(text(f"""
+        CREATE TABLE IF NOT EXISTS glaucoma_trackings (
+            id {_pk_ddl(conn)},
+            exam_id INTEGER NOT NULL,
+            primary_diagnosis_code VARCHAR,
+            target_iop_od INTEGER, target_iop_os INTEGER,
+            iop_current_od INTEGER, iop_current_os INTEGER,
+            iop_time_measured VARCHAR,
+            iop_method VARCHAR,
+            cup_disc_ratio_od FLOAT, cup_disc_ratio_os FLOAT,
+            nerve_tissue_status_od VARCHAR, nerve_tissue_status_os VARCHAR,
+            oct_rnfl_average_microns_od INTEGER, oct_rnfl_average_microns_os INTEGER,
+            visual_field_md_db_od FLOAT, visual_field_md_db_os FLOAT,
+            vf_reliability_od VARCHAR, vf_reliability_os VARCHAR,
+            prescribed_glaucoma_meds VARCHAR,
+            diagnostic_orders VARCHAR,
+            follow_up_interval VARCHAR,
+            clinical_notes TEXT
+        )
+    """))
+    conn.execute(text(
+        "CREATE INDEX IF NOT EXISTS ix_glaucoma_trackings_exam "
+        "ON glaucoma_trackings (exam_id)"
+    ))
+
 # Ordered list of (id, function). Adding new migrations: append, never edit past entries.
 COLUMN_MIGRATIONS = [
     ("001_appointment_columns", migration_001_appointment_columns),
@@ -632,6 +664,7 @@ COLUMN_MIGRATIONS = [
     ("014_create_provider_availability_tables", migration_014_create_provider_availability_tables),
     ("015_refractive_assessment_and_plan", migration_015_refractive_assessment_and_plan),
     ("016_create_anterior_segment_assessments", migration_016_create_anterior_segment_assessments),
+    ("017_create_glaucoma_trackings", migration_017_create_glaucoma_trackings),
 ]
 POST_CREATE_ALL_MIGRATIONS = [
     ("002_seed_appointment_types", migration_002_seed_appointment_types),

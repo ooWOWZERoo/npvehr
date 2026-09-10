@@ -19,6 +19,7 @@
     <div class="test-chip-list">
       <label class="test-chip"><input type="checkbox" class="focus-toggle" data-target="focus-refractive" checked> Comprehensive / Refractive</label>
       <label class="test-chip"><input type="checkbox" class="focus-toggle" data-target="focus-anterior"> Anterior Segment / Dry Eye</label>
+      <label class="test-chip"><input type="checkbox" class="focus-toggle" data-target="focus-glaucoma"> Posterior Segment / Glaucoma</label>
     </div>
     <div class="section-title">Visual Acuity</div>
     <div class="table-responsive">
@@ -122,6 +123,59 @@
       <div class="form-group"><label>Clinical Notes</label><input name="asa_clinical_notes"></div>
     </div>
     </div>
+    <div id="focus-glaucoma">
+    <div class="section-title">Posterior Segment / Glaucoma Assessment <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; structured diagnosis fields (VISION_EHR_DATA_STANDARDS_RESEARCH.md 5.3)</span></div>
+    <div class="form-row cols-3">
+      <div class="form-group"><label>Primary Diagnosis Code</label><input name="gt_primary_diagnosis_code" placeholder="H40.1132"></div>
+      <div class="form-group"><label>IOP Time Measured</label><input name="gt_iop_time_measured" type="time"></div>
+      <div class="form-group"><label>IOP Method</label>
+        <select name="gt_iop_method"><option value="">&mdash;</option><option>Goldmann Applanation</option><option>Tono-Pen</option><option>iCare</option></select>
+      </div>
+    </div>
+    <div class="table-responsive">
+    <table class="exam-table">
+      <tr><th></th><th>Target IOP</th><th>Current IOP</th><th>Cup-Disc Ratio</th><th>Nerve Tissue Status</th></tr>
+      {% for eye in ['od', 'os'] %}
+      <tr><td>{{ eye|upper }}</td>
+        <td><input name="gt_target_iop_{{ eye }}" type="number" min="5" max="40"></td>
+        <td><input name="gt_iop_current_{{ eye }}" type="number" min="0" max="60"></td>
+        <td><input name="gt_cup_disc_ratio_{{ eye }}" type="number" step="0.05" min="0" max="1"></td>
+        <td><input name="gt_nerve_tissue_status_{{ eye }}" placeholder="Healthy Rim"></td>
+      </tr>
+      {% endfor %}
+    </table>
+    </div>
+    <div class="table-responsive">
+    <table class="exam-table">
+      <tr><th></th><th>OCT RNFL (&mu;m)</th><th>Visual Field MD (dB)</th><th>VF Reliability</th></tr>
+      {% for eye in ['od', 'os'] %}
+      <tr><td>{{ eye|upper }}</td>
+        <td><input name="gt_oct_rnfl_average_microns_{{ eye }}" type="number" min="0"></td>
+        <td><input name="gt_visual_field_md_db_{{ eye }}" type="number" step="0.1"></td>
+        <td><select name="gt_vf_reliability_{{ eye }}"><option value="">&mdash;</option><option>Reliable</option><option>Borderline</option><option>Unreliable</option></select></td>
+      </tr>
+      {% endfor %}
+    </table>
+    </div>
+    <div class="form-group"><label>Prescribed Glaucoma Meds</label></div>
+    <div class="test-chip-list">
+      {% for med in ['Latanoprost 0.005% QHS OU', 'Timolol 0.5% BID OU', 'Brimonidine 0.2% TID OU', 'Dorzolamide 2% TID OU'] %}
+      <label class="test-chip"><input type="checkbox" name="gt_prescribed_glaucoma_meds" value="{{ med }}"> {{ med }}</label>
+      {% endfor %}
+    </div>
+    <div class="form-group"><label>Diagnostic Orders</label></div>
+    <div class="test-chip-list">
+      {% for order in ['OCT RNFL', 'Humphrey VF 24-2', 'Gonioscopy', 'Pachymetry'] %}
+      <label class="test-chip"><input type="checkbox" name="gt_diagnostic_orders" value="{{ order }}"> {{ order }}</label>
+      {% endfor %}
+    </div>
+    <div class="form-row cols-2">
+      <div class="form-group"><label>Follow-up Interval</label>
+        <select name="gt_follow_up_interval"><option value="">&mdash;</option><option>1 month</option><option>3 months</option><option>6 months</option><option>1 year</option></select>
+      </div>
+      <div class="form-group"><label>Clinical Notes</label><input name="gt_clinical_notes"></div>
+    </div>
+    </div>
     <div class="section-title">Assessment &amp; Plan <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; auto-filled from the structured fields above as you fill them in; edit freely</span></div>
     <div class="form-row cols-2">
       <div class="form-group"><label>Assessment</label><textarea name="assessment" id="assessment"></textarea></div>
@@ -217,6 +271,18 @@ var ICD10_BY_DX = {
         parts.push(s2);
       }
     }
+    if (isFocusOn('focus-glaucoma')) {
+      var gtIopOd = fieldValue('gt_iop_current_od'), gtIopOs = fieldValue('gt_iop_current_os'),
+          gtTargetOd = fieldValue('gt_target_iop_od'), gtTargetOs = fieldValue('gt_target_iop_os'),
+          gtCode = fieldValue('gt_primary_diagnosis_code');
+      if (gtIopOd || gtIopOs || gtCode) {
+        var s3 = 'Glaucoma' + (gtCode ? ' (' + gtCode + ')' : '');
+        if (gtIopOd || gtIopOs) s3 += ', IOP ' + (gtIopOd || '—') + '/' + (gtIopOs || '—') + ' mmHg';
+        if (gtTargetOd || gtTargetOs) s3 += ' (target ' + (gtTargetOd || '—') + '/' + (gtTargetOs || '—') + ')';
+        s3 += '.';
+        parts.push(s3);
+      }
+    }
     return parts.join(' ');
   }
 
@@ -245,6 +311,13 @@ var ICD10_BY_DX = {
       if (tx.length) parts.push(tx.join(', ') + '.');
       if (fu) parts.push('Follow up in ' + fu + '.');
     }
+    if (isFocusOn('focus-glaucoma')) {
+      var meds = checkedValues('gt_prescribed_glaucoma_meds'), orders = checkedValues('gt_diagnostic_orders'),
+          gtFu = fieldValue('gt_follow_up_interval');
+      if (meds.length) parts.push(meds.join(', ') + '.');
+      if (orders.length) parts.push('Order ' + orders.join(', ') + '.');
+      if (gtFu) parts.push('Follow up in ' + gtFu + '.');
+    }
     if (!parts.length) {
       var weeks = fieldValue('follow_up_weeks');
       if (weeks) parts.push('Follow up in ' + weeks + ' weeks.');
@@ -264,6 +337,7 @@ var ICD10_BY_DX = {
 
   document.querySelectorAll(
     '#focus-refractive input, #focus-refractive select, #focus-anterior input, #focus-anterior select, ' +
+    '#focus-glaucoma input, #focus-glaucoma select, ' +
     '.focus-toggle, [name="follow_up_weeks"]'
   ).forEach(function (el) {
     // 'change' covers selects/checkboxes immediately; 'input' is also needed

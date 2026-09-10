@@ -435,6 +435,53 @@ def patient_orders_exams(request: Request, patient_id: int, db: Session = Depend
     return templates.TemplateResponse(request, "patients/orders_exams_tab.html", ctx)
 
 
+def _build_iop_trend(rows_oldest_first):
+    """rows_oldest_first: list of (EyeExam, GlaucomaTracking) tuples, oldest
+    exam first, already filtered to rows with at least one current-IOP value.
+    Returns ready-made SVG point-string data for a simple inline line chart
+    (no charting library, no CDN dependency -- matches this app's
+    zero-external-JS-dependency convention), or None if nothing to plot.
+    Points are index-spaced on the X axis since visit dates aren't evenly
+    distributed; target IOP is shown in the accompanying table, not layered
+    onto the chart, to keep the one visual signal (current IOP trend) clear."""
+    if not rows_oldest_first:
+        return None
+    width, height, pad_l, pad_r, pad_t, pad_b = 640, 220, 10, 10, 10, 10
+    plot_w, plot_h, y_max = width - pad_l - pad_r, height - pad_t - pad_b, 40  # mmHg chart ceiling
+    n = len(rows_oldest_first)
+    step = plot_w / (n - 1) if n > 1 else 0
+    def x_at(i): return pad_l + i * step
+    def y_at(v): return pad_t + plot_h * (1 - min(v, y_max) / y_max)
+    od_points, os_points = [], []
+    for i, (exam, gt) in enumerate(rows_oldest_first):
+        x = x_at(i)
+        if gt.iop_current_od is not None:
+            od_points.append(f"{x:.1f},{y_at(gt.iop_current_od):.1f}")
+        if gt.iop_current_os is not None:
+            os_points.append(f"{x:.1f},{y_at(gt.iop_current_os):.1f}")
+    return {"width": width, "height": height, "od_points": " ".join(od_points),
+            "os_points": " ".join(os_points), "gridline_y": round(y_at(21), 1)}  # 21 mmHg: common upper-normal reference
+
+
+@router.get("/{patient_id}/glaucoma-trend", response_class=HTMLResponse)
+def patient_glaucoma_trend(request: Request, patient_id: int, db: Session = Depends(get_db)):
+    """Posterior Segment / Glaucoma Tracking's longitudinal view
+    (VISION_EHR_DATA_STANDARDS_RESEARCH.md 5.3) -- the one dashboard of the
+    five that wants trending across visits, unlike the single-visit-snapshot
+    shape used elsewhere. GlaucomaTracking stays exam-scoped (same as
+    Refraction/AnteriorSegmentAssessment); this route just walks a patient's
+    exam history collecting each exam's tracking row, rather than the table
+    itself carrying a redundant patient_id."""
+    p = _get_patient_or_404(db, patient_id)
+    if not p: return HTMLResponse("Not found", status_code=404)
+    ctx = _workspace_ctx(db, p, "glaucoma-trend")
+    exams_oldest_first = sorted(p.eye_exams, key=lambda e: e.exam_date or "")
+    rows_oldest_first = [(e, e.glaucoma_trackings[0]) for e in exams_oldest_first if e.glaucoma_trackings]
+    ctx["gt_rows"] = list(reversed(rows_oldest_first))  # newest first for the table
+    ctx["chart"] = _build_iop_trend([r for r in rows_oldest_first if r[1].iop_current_od is not None or r[1].iop_current_os is not None])
+    return templates.TemplateResponse(request, "patients/glaucoma_trend_tab.html", ctx)
+
+
 @router.get("/{patient_id}/orders/eyeglass", response_class=HTMLResponse)
 def patient_orders_eyeglass(request: Request, patient_id: int, db: Session = Depends(get_db)):
     return _placeholder_tab(request, db, patient_id, "orders-eyeglass", "Eyeglass Order", "&#128083;",

@@ -133,6 +133,49 @@ def test_icd10_suggestion_and_diagnosis_driven_recall_interval(logged_in_page, l
     assert weeks.input_value() == "99"
 
 
+def test_glaucoma_focus_toggle_composer_and_trend_view(logged_in_page, live_server):
+    """Posterior Segment / Glaucoma (ehr/templates/exams/form.html,
+    ehr/templates/patients/glaucoma_trend_tab.html) -- verifies the third
+    Visit Focus chip shows/hides its section like the existing two, the
+    composer's glaucoma clauses populate Assessment & Plan, and the new
+    patient-workspace trend tab renders a populated chart+table for the
+    seeded demo patient (David Wilson, two glaucoma-tracking exams six
+    months apart) and an empty state for a patient with none."""
+    page = logged_in_page
+    page.goto(live_server + "/exams/new")
+    glaucoma_section = page.locator("#focus-glaucoma")
+    assert not glaucoma_section.is_visible()
+    page.locator('.focus-toggle[data-target="focus-glaucoma"]').check()
+    assert glaucoma_section.is_visible()
+
+    page.fill('input[name="gt_primary_diagnosis_code"]', "H40.0011")
+    page.fill('input[name="gt_iop_current_od"]', "24")
+    page.fill('input[name="gt_iop_current_os"]', "25")
+    assert "Glaucoma (H40.0011)" in page.locator("#assessment").input_value()
+    assert "24/25 mmHg" in page.locator("#assessment").input_value()
+
+    page.locator('input[name="gt_prescribed_glaucoma_meds"][value="Latanoprost 0.005% QHS OU"]').check()
+    page.locator('select[name="gt_follow_up_interval"]').select_option("3 months")
+    plan = page.locator("#plan").input_value()
+    assert "Latanoprost" in plan
+    assert "3 months" in plan
+
+    # Patient-workspace trend view: seeded demo patient (David Wilson) has
+    # two glaucoma-tracking exams -- populated table + non-empty chart.
+    page.goto(live_server + "/patients/")
+    page.locator("a", has_text="Wilson").first.click()
+    page.locator('a[href$="/glaucoma-trend"]').click()
+    assert "glaucoma-trend" in page.url
+    assert page.locator("table tbody tr").count() >= 2
+    assert page.locator("svg polyline").count() == 2
+
+    # A patient with no glaucoma-tracking history sees the empty state instead.
+    page.goto(live_server + "/patients/")
+    page.locator("a", has_text="Johnson").first.click()
+    page.locator('a[href$="/glaucoma-trend"]').click()
+    assert page.locator("text=No glaucoma tracking recorded").is_visible()
+
+
 def test_new_prescription_form_loads(logged_in_page, live_server):
     page = logged_in_page
     page.goto(live_server + "/prescriptions/new")
