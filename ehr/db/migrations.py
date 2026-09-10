@@ -514,6 +514,20 @@ def migration_012_create_auth_tables(conn):
     conn.execute(text("CREATE INDEX IF NOT EXISTS ix_auth_audit_occurred_at ON auth_audit_events (occurred_at)"))
     conn.execute(text("CREATE INDEX IF NOT EXISTS ix_auth_audit_user ON auth_audit_events (user_id)"))
 
+# ---------------------------------------------------------------------------
+# Migration: 013 -- add `appointments.created_by_user_id`/`updated_by_user_id`.
+# Deferred since v1.3 (spec 18.2) for lack of a User model; that model exists
+# now (migration 012, v2.4), so this closes that deferral. Plain nullable
+# INTEGER columns, no physical FK enforcement attempted via ALTER TABLE (SQLite
+# can't add one this way; the ORM-level ForeignKey is enough for a fresh
+# create_all() database and for query-time joins either way).
+# ---------------------------------------------------------------------------
+def migration_013_appointment_created_updated_by(conn):
+    if not _table_exists(conn, "appointments"):
+        return  # brand-new database; create_all() will create the full table with these columns.
+    _add_column_if_missing(conn, "appointments", "created_by_user_id", "INTEGER")
+    _add_column_if_missing(conn, "appointments", "updated_by_user_id", "INTEGER")
+
 # Ordered list of (id, function). Adding new migrations: append, never edit past entries.
 COLUMN_MIGRATIONS = [
     ("001_appointment_columns", migration_001_appointment_columns),
@@ -523,6 +537,7 @@ COLUMN_MIGRATIONS = [
     ("009_patient_preferred_name_mrn", migration_009_patient_preferred_name_mrn),
     ("010_patient_mrn_uniqueness", migration_010_patient_mrn_uniqueness),
     ("012_create_auth_tables", migration_012_create_auth_tables),
+    ("013_appointment_created_updated_by", migration_013_appointment_created_updated_by),
 ]
 POST_CREATE_ALL_MIGRATIONS = [
     ("002_seed_appointment_types", migration_002_seed_appointment_types),

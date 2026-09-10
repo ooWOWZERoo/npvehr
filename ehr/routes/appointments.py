@@ -5,11 +5,12 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from ehr.models.database import (get_db, Appointment, Patient, Provider, AppointmentStatus, AppointmentType,
-    AppointmentTypeVersion, DiagnosticTest, AppointmentTest, AppointmentAuditEvent, AppointmentResourceReservation)
+    AppointmentTypeVersion, DiagnosticTest, AppointmentTest, AppointmentAuditEvent, AppointmentResourceReservation, User)
 from ehr.services import scheduling as sched
 from ehr.env_info import EHR_ENV
 from ehr.utils import patient_context
 from ehr.auth.permissions import require_role, APPOINTMENT_EDIT, ROLE_LABELS
+from ehr.auth.deps import get_current_user
 
 router = APIRouter(prefix="/appointments", tags=["appointments"])
 templates = Jinja2Templates(directory="ehr/templates")
@@ -346,7 +347,7 @@ def create_appointment(request: Request, patient_id: int = Form(...), provider_i
     duration_override: str = Form(""), duration_override_reason: str = Form(""),
     conflict_override: bool = Form(False), conflict_override_reason: str = Form(""),
     reason: str = Form(""), notes: str = Form(""), test_ids: list = Form([]),
-    db: Session = Depends(get_db)):
+    db: Session = Depends(get_db), user: User = Depends(get_current_user)):
 
     version = db.query(AppointmentTypeVersion).filter(AppointmentTypeVersion.id == appointment_type_version_id).first()
     posted = dict(patient_id=patient_id, provider_id=provider_id, appointment_type_version_id=appointment_type_version_id,
@@ -374,7 +375,8 @@ def create_appointment(request: Request, patient_id: int = Form(...), provider_i
     appt = Appointment(patient_id=patient_id, reason=reason, notes=notes,
         patient_relationship_source=relationship_source,
         patient_relationship_override_reason=relationship_override_reason or None,
-        status=AppointmentStatus.scheduled)
+        status=AppointmentStatus.scheduled,
+        created_by_user_id=user.id, updated_by_user_id=user.id)
 
     duration_override_val = int(duration_override) if duration_override else None
     try:
@@ -425,7 +427,7 @@ def update_appointment(request: Request, appt_id: int, provider_id: int = Form(.
     duration_override: str = Form(""), duration_override_reason: str = Form(""),
     conflict_override: bool = Form(False), conflict_override_reason: str = Form(""),
     reason: str = Form(""), notes: str = Form(""), status: str = Form(None), test_ids: list = Form([]),
-    db: Session = Depends(get_db)):
+    db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     a = db.query(Appointment).filter(Appointment.id == appt_id).first()
     if not a: return HTMLResponse("Not found", status_code=404)
 
@@ -469,6 +471,7 @@ def update_appointment(request: Request, appt_id: int, provider_id: int = Form(.
     if old_type != version.id:
         _audit(db, a.id, "type_changed", field_name="appointment_type_version_id", old_value=old_type, new_value=version.id)
     a.updated_at = datetime.utcnow()
+    a.updated_by_user_id = user.id
     db.commit()
     return RedirectResponse(f"/appointments/{a.id}", status_code=303)
 
@@ -476,7 +479,7 @@ def update_appointment(request: Request, appt_id: int, provider_id: int = Form(.
 @router.post("/{appt_id}/reschedule", dependencies=[Depends(require_role(*APPOINTMENT_EDIT))])
 def reschedule_appointment(appt_id: int, scheduled_at: str = Form(...),
     conflict_override: bool = Form(False), conflict_override_reason: str = Form(""),
-    db: Session = Depends(get_db)):
+    db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     a = db.query(Appointment).filter(Appointment.id == appt_id).first()
     if not a: return HTMLResponse("Not found", status_code=404)
     version = a.appointment_type_version
@@ -495,12 +498,14 @@ def reschedule_appointment(appt_id: int, scheduled_at: str = Form(...),
     _sync_resource_reservations(db, a, version)
     _audit(db, a.id, "rescheduled", field_name="scheduled_at", old_value=old_when, new_value=when)
     a.updated_at = datetime.utcnow()
+    a.updated_by_user_id = user.id
     db.commit()
     return RedirectResponse(f"/appointments/{appt_id}", status_code=303)
 
 
 @router.post("/{appt_id}/status", dependencies=[Depends(require_role(*APPOINTMENT_EDIT))])
-def update_status(appt_id: int, status: str = Form(...), db: Session = Depends(get_db)):
+def update_status(appt_id: int, status: str = Form(...), db: Session = Depends(get_db),
+                   user: User = Depends(get_current_user)):
     a = db.query(Appointment).filter(Appointment.id == appt_id).first()
     if not a: return HTMLResponse("Not found", status_code=404)
     try:
@@ -510,6 +515,7 @@ def update_status(appt_id: int, status: str = Form(...), db: Session = Depends(g
     old_status = a.status
     a.status = new_status
     a.updated_at = datetime.utcnow()
+    a.updated_by_user_id = user.id
     _audit(db, a.id, "status_changed", field_name="status",
            old_value=old_status.value if old_status else None, new_value=new_status.value)
     db.commit()

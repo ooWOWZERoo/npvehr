@@ -115,11 +115,20 @@ class Appointment(Base):
     conflict_overridden = Column(Boolean, default=False)
     conflict_override_reason = Column(Text)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    # created_by_user_id / updated_by_user_id: deferred until a User/auth model exists (see spec 18.2).
+    # Attribution (spec 18.2's deferral resolved now that a User/auth model exists,
+    # v2.4): set explicitly by the route on create/edit/reschedule, not by an ORM
+    # default -- there's no reliable way to get "the current request's user" from
+    # inside a Column default. Nullable: legacy/pre-migration appointments have no
+    # attributable user, and both stay unset if a mutation never happens through
+    # one of those routes.
+    created_by_user_id = Column(Integer, ForeignKey("users.id"))
+    updated_by_user_id = Column(Integer, ForeignKey("users.id"))
 
     patient = relationship("Patient", back_populates="appointments")
     provider = relationship("Provider", back_populates="appointments")
     appointment_type_version = relationship("AppointmentTypeVersion")
+    created_by = relationship("User", foreign_keys=[created_by_user_id])
+    updated_by = relationship("User", foreign_keys=[updated_by_user_id])
     tests = relationship("AppointmentTest", back_populates="appointment", cascade="all, delete-orphan")
     resource_reservations = relationship("AppointmentResourceReservation", back_populates="appointment", cascade="all, delete-orphan")
     audit_events = relationship("AppointmentAuditEvent", back_populates="appointment", cascade="all, delete-orphan")
