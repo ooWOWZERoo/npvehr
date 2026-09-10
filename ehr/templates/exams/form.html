@@ -122,10 +122,10 @@
       <div class="form-group"><label>Clinical Notes</label><input name="asa_clinical_notes"></div>
     </div>
     </div>
-    <div class="section-title">Assessment &amp; Plan</div>
+    <div class="section-title">Assessment &amp; Plan <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; auto-filled from the structured fields above as you fill them in; edit freely</span></div>
     <div class="form-row cols-2">
-      <div class="form-group"><label>Assessment</label><textarea name="assessment"></textarea></div>
-      <div class="form-group"><label>Plan</label><textarea name="plan"></textarea></div>
+      <div class="form-group"><label>Assessment</label><textarea name="assessment" id="assessment"></textarea></div>
+      <div class="form-group"><label>Plan</label><textarea name="plan" id="plan"></textarea></div>
     </div>
     <div class="form-row cols-2">
       <div class="form-group"><label>Diagnosis Codes (ICD-10)</label><input name="diagnosis_codes" placeholder="H52.13, H52.219"></div>
@@ -147,5 +147,91 @@ document.querySelectorAll('.focus-toggle').forEach(function (cb) {
   cb.addEventListener('change', sync);
   sync();
 });
+
+// Assessment & Plan composer: drafts a narrative from the structured fields
+// above (the source requirements document's "Auto-Generated Clinical Note
+// Output Summary" idea -- see VISION_EHR_DATA_STANDARDS_RESEARCH.md 5.1's
+// correction note) so a clinician isn't re-typing in prose what they just
+// selected as chips/dropdowns. Purely a drafting aid: once a clinician types
+// directly into either textarea, this stops overwriting that field --
+// tracked via each textarea's own native `input` event, which only fires on
+// a real keystroke, never on this script's own `.value =` assignment.
+(function () {
+  var assessmentEl = document.getElementById('assessment');
+  var planEl = document.getElementById('plan');
+  var assessmentEdited = false, planEdited = false;
+  assessmentEl.addEventListener('input', function () { assessmentEdited = true; });
+  planEl.addEventListener('input', function () { planEdited = true; });
+
+  function checkedValues(name) {
+    return Array.prototype.map.call(
+      document.querySelectorAll('input[name="' + name + '"]:checked'), function (el) { return el.value; });
+  }
+  function fieldValue(name) {
+    var el = document.querySelector('[name="' + name + '"]');
+    return el ? el.value : '';
+  }
+  function isFocusOn(target) {
+    var cb = document.querySelector('.focus-toggle[data-target="' + target + '"]');
+    return cb ? cb.checked : false;
+  }
+
+  function composeAssessment() {
+    var parts = [];
+    if (isFocusOn('focus-refractive')) {
+      var dx = checkedValues('refractive_diagnosis'), lat = fieldValue('refractive_laterality'),
+          stab = fieldValue('refractive_stability'), sec = checkedValues('refractive_secondary_findings');
+      if (dx.length || lat || stab) {
+        var s = dx.join(', ') || 'Refractive error';
+        if (lat) s += ' ' + lat;
+        if (stab) s += ', ' + stab.toLowerCase();
+        s += '.';
+        if (sec.length) s += ' ' + sec.join(', ') + ' noted.';
+        parts.push(s);
+      }
+    }
+    if (isFocusOn('focus-anterior')) {
+      var sev = fieldValue('asa_severity'), code = fieldValue('asa_primary_diagnosis_code');
+      if (sev || code) {
+        var s2 = (sev ? sev + ' ' : '') + 'dry eye disease';
+        if (code) s2 += ' (' + code + ')';
+        s2 += '.';
+        parts.push(s2);
+      }
+    }
+    return parts.join(' ');
+  }
+
+  function composePlan() {
+    var parts = [];
+    if (isFocusOn('focus-anterior')) {
+      var tx = checkedValues('asa_plan_therapeutics'), fu = fieldValue('asa_follow_up_interval');
+      if (tx.length) parts.push(tx.join(', ') + '.');
+      if (fu) parts.push('Follow up in ' + fu + '.');
+    }
+    if (!parts.length) {
+      var weeks = fieldValue('follow_up_weeks');
+      if (weeks) parts.push('Follow up in ' + weeks + ' weeks.');
+    }
+    return parts.join(' ');
+  }
+
+  function refresh() {
+    if (!assessmentEdited) assessmentEl.value = composeAssessment();
+    if (!planEdited) planEl.value = composePlan();
+  }
+
+  document.querySelectorAll(
+    '#focus-refractive input, #focus-refractive select, #focus-anterior input, #focus-anterior select, ' +
+    '.focus-toggle, [name="follow_up_weeks"]'
+  ).forEach(function (el) {
+    // 'change' covers selects/checkboxes immediately; 'input' is also needed
+    // for text/number fields (asa_primary_diagnosis_code, follow_up_weeks,
+    // etc.), since 'change' on those only fires after the field loses focus.
+    el.addEventListener('change', refresh);
+    el.addEventListener('input', refresh);
+  });
+  refresh();
+})();
 </script>
 {% endblock %}

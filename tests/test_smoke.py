@@ -78,6 +78,27 @@ def test_visit_focus_toggle_shows_hides_assessment_sections(logged_in_page, live
     assert not refractive_section.is_visible()
 
 
+def test_assessment_plan_auto_composed_then_not_overwritten_after_manual_edit(logged_in_page, live_server):
+    """The Assessment & Plan composer (ehr/templates/exams/form.html) drafts a
+    narrative from the structured chips/dropdowns -- verifies it actually
+    composes text, and that it stops overwriting a field once a clinician
+    types into it directly (tracked via the textarea's own `input` event,
+    which a real keystroke fires but this script's own `.value =` does not)."""
+    page = logged_in_page
+    page.goto(live_server + "/exams/new")
+    assessment = page.locator("#assessment")
+    assert assessment.input_value() == ""
+
+    page.locator('input[name="refractive_diagnosis"][value="Myopia"]').check()
+    page.locator('select[name="refractive_stability"]').select_option("Stable")
+    assert "Myopia" in assessment.input_value()
+    assert "stable" in assessment.input_value()
+
+    assessment.fill("Clinician's own wording")
+    page.locator('input[name="refractive_diagnosis"][value="Hyperopia"]').check()
+    assert assessment.input_value() == "Clinician's own wording"
+
+
 def test_new_prescription_form_loads(logged_in_page, live_server):
     page = logged_in_page
     page.goto(live_server + "/prescriptions/new")
