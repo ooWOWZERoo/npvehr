@@ -128,8 +128,8 @@
       <div class="form-group"><label>Plan</label><textarea name="plan" id="plan"></textarea></div>
     </div>
     <div class="form-row cols-2">
-      <div class="form-group"><label>Diagnosis Codes (ICD-10)</label><input name="diagnosis_codes" placeholder="H52.13, H52.219"></div>
-      <div class="form-group"><label>Follow-up (weeks)</label><input name="follow_up_weeks" type="number"></div>
+      <div class="form-group"><label>Diagnosis Codes (ICD-10)</label><input name="diagnosis_codes" id="diagnosis_codes" placeholder="H52.13, H52.219"></div>
+      <div class="form-group"><label>Follow-up (weeks)</label><input name="follow_up_weeks" id="follow_up_weeks" type="number"></div>
     </div>
     <div class="form-actions"><button type="submit" class="btn btn-primary">Save Exam</button></div>
   </form>
@@ -156,12 +156,30 @@ document.querySelectorAll('.focus-toggle').forEach(function (cb) {
 // directly into either textarea, this stops overwriting that field --
 // tracked via each textarea's own native `input` event, which only fires on
 // a real keystroke, never on this script's own `.value =` assignment.
+// ICD-10 auto-suggestion lookup (VISION_EHR_DATA_STANDARDS_RESEARCH.md 7.2) --
+// a small hardcoded lookup for exactly the six diagnoses offered as chips
+// above, not a substitute for real ICD-10 code-set integration (4.4,
+// still deferred). Emmetropia is intentionally omitted -- normal refractive
+// status, not a billable diagnosis. Presbyopia/Anisometropia have no
+// laterality split in ICD-10 itself.
+var ICD10_BY_DX = {
+  'Myopia':        {OD: 'H52.11', OS: 'H52.12', OU: 'H52.13', '': 'H52.10'},
+  'Hyperopia':     {OD: 'H52.01', OS: 'H52.02', OU: 'H52.03', '': 'H52.00'},
+  'Astigmatism':   {OD: 'H52.201', OS: 'H52.202', OU: 'H52.203', '': 'H52.209'},
+  'Presbyopia':    {OD: 'H52.4', OS: 'H52.4', OU: 'H52.4', '': 'H52.4'},
+  'Anisometropia': {OD: 'H52.31', OS: 'H52.31', OU: 'H52.31', '': 'H52.31'}
+};
+
 (function () {
   var assessmentEl = document.getElementById('assessment');
   var planEl = document.getElementById('plan');
-  var assessmentEdited = false, planEdited = false;
+  var diagnosisCodesEl = document.getElementById('diagnosis_codes');
+  var followUpWeeksEl = document.getElementById('follow_up_weeks');
+  var assessmentEdited = false, planEdited = false, diagnosisCodesEdited = false, followUpWeeksEdited = false;
   assessmentEl.addEventListener('input', function () { assessmentEdited = true; });
   planEl.addEventListener('input', function () { planEdited = true; });
+  diagnosisCodesEl.addEventListener('input', function () { diagnosisCodesEdited = true; });
+  followUpWeeksEl.addEventListener('input', function () { followUpWeeksEdited = true; });
 
   function checkedValues(name) {
     return Array.prototype.map.call(
@@ -202,6 +220,24 @@ document.querySelectorAll('.focus-toggle').forEach(function (cb) {
     return parts.join(' ');
   }
 
+  function composeDiagnosisCodes() {
+    if (!isFocusOn('focus-refractive')) return '';
+    var lat = fieldValue('refractive_laterality');
+    var codes = checkedValues('refractive_diagnosis')
+      .filter(function (dx) { return ICD10_BY_DX[dx]; })
+      .map(function (dx) { return ICD10_BY_DX[dx][lat] || ICD10_BY_DX[dx][''] ; });
+    return codes.join(', ');
+  }
+
+  function composeFollowUpWeeks() {
+    if (!isFocusOn('focus-refractive')) return '';
+    var dx = checkedValues('refractive_diagnosis'), lat = fieldValue('refractive_laterality'),
+        stab = fieldValue('refractive_stability');
+    if (!(dx.length || lat || stab)) return '';
+    var sec = checkedValues('refractive_secondary_findings');
+    return sec.indexOf('Suspect Glaucoma') !== -1 ? '26' : '52';
+  }
+
   function composePlan() {
     var parts = [];
     if (isFocusOn('focus-anterior')) {
@@ -218,6 +254,11 @@ document.querySelectorAll('.focus-toggle').forEach(function (cb) {
 
   function refresh() {
     if (!assessmentEdited) assessmentEl.value = composeAssessment();
+    if (!diagnosisCodesEdited) diagnosisCodesEl.value = composeDiagnosisCodes();
+    // follow_up_weeks must be set before composePlan() runs -- its fallback
+    // reads the live DOM value, so the auto-suggested weeks flows into the
+    // Plan sentence on the same refresh cycle.
+    if (!followUpWeeksEdited) followUpWeeksEl.value = composeFollowUpWeeks();
     if (!planEdited) planEl.value = composePlan();
   }
 

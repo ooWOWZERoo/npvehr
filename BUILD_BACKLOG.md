@@ -18,12 +18,7 @@ This consolidates every outstanding build item, investigation, and test scattere
 
 ## 0. In Progress / Up Next
 
-- [ ] **ICD-10 auto-suggestion + diagnosis-driven recall interval** — extends the v2.12 Assessment & Plan composer. Source: research doc §7.2. Subtasks:
-  - [ ] Design the (diagnosis, laterality) → ICD-10 lookup table's shape (a small in-template JS object is likely sufficient — no schema change was scoped) and confirm scope stays narrow (a handful of common diagnoses, not real code-set integration — see §4.4 deferral)
-  - [ ] Extend `exams/form.html`'s composer to populate the existing `diagnosis_codes` field as a *suggestion*, editable like the rest
-  - [ ] Extend the Plan composer's follow-up logic to vary by diagnosis/secondary finding (e.g. shorter recall for "Suspect Glaucoma")
-  - [ ] Playwright coverage for both behaviors
-  - [ ] Spec update (next version bump, e.g. v2.14)
+- [x] **ICD-10 auto-suggestion + diagnosis-driven recall interval** — extends the v2.12 Assessment & Plan composer. **Done, v2.15** — see baseline spec §12.5d, research doc §7.2. Pick the next item from the sections below.
 
 ---
 

@@ -99,6 +99,40 @@ def test_assessment_plan_auto_composed_then_not_overwritten_after_manual_edit(lo
     assert assessment.input_value() == "Clinician's own wording"
 
 
+def test_icd10_suggestion_and_diagnosis_driven_recall_interval(logged_in_page, live_server):
+    """The ICD-10 lookup and diagnosis-driven recall interval
+    (ehr/templates/exams/form.html) extend the composer -- verifies the
+    lookup resolves by (diagnosis, laterality), a second diagnosis appends
+    its own code, a glaucoma-suspect secondary finding shortens the
+    suggested follow-up to 26 weeks (vs. the 52-week default) and that
+    shows up in the composed Plan text, and that manual edits to either
+    field are never overwritten (same input-event tracking as assessment/plan)."""
+    page = logged_in_page
+    page.goto(live_server + "/exams/new")
+    dx_codes = page.locator("#diagnosis_codes")
+    weeks = page.locator("#follow_up_weeks")
+    assert dx_codes.input_value() == ""
+    assert weeks.input_value() == ""
+
+    page.locator('input[name="refractive_diagnosis"][value="Myopia"]').check()
+    page.locator('select[name="refractive_laterality"]').select_option("OU")
+    assert dx_codes.input_value() == "H52.13"
+    assert weeks.input_value() == "52"
+
+    page.locator('input[name="refractive_diagnosis"][value="Astigmatism"]').check()
+    assert dx_codes.input_value() == "H52.13, H52.203"
+
+    page.locator('input[name="refractive_secondary_findings"][value="Suspect Glaucoma"]').check()
+    assert weeks.input_value() == "26"
+    assert "26 weeks" in page.locator("#plan").input_value()
+
+    dx_codes.fill("CUSTOM")
+    weeks.fill("99")
+    page.locator('input[name="refractive_diagnosis"][value="Hyperopia"]').check()
+    assert dx_codes.input_value() == "CUSTOM"
+    assert weeks.input_value() == "99"
+
+
 def test_new_prescription_form_loads(logged_in_page, live_server):
     page = logged_in_page
     page.goto(live_server + "/prescriptions/new")

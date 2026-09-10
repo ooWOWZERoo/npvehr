@@ -1,7 +1,7 @@
 # New Path Vision EHR
 ## Baseline Product Definition and Current-State Functional Specification
 
-**Document version:** 2.14 (supersedes v2.13; adds `BUILD_BACKLOG.md`, a master tracking list consolidating every outstanding item from this document and `VISION_EHR_DATA_STANDARDS_RESEARCH.md` into one place; documentation only, no code/schema/migration changed; none of this bears on the four go-live prerequisites, which are unchanged from v2.6)
+**Document version:** 2.15 (supersedes v2.14; extends the v2.12 Assessment & Plan composer with ICD-10 auto-suggestion and a diagnosis-driven recall interval — `VISION_EHR_DATA_STANDARDS_RESEARCH.md` §7.2's two compatible candidate ideas, now built; no schema change; see §12.5d; none of this bears on the four go-live prerequisites, which are unchanged from v2.6)
 **Baseline date:** September 9, 2026
 **Application-reported version:** 1.0.0
 **Baseline source:** `setup_ehr.py` self-contained scaffold script (locally generated `visioncare_ehr/` project directory; see §2.2)
@@ -962,6 +962,16 @@ The user asked whether the free-text `assessment`/`plan` fields (§12.5) should 
 **Known, explicitly out-of-scope limitation**: `Prescription`'s lens-design fields (the actual "Plan" per §5.1 — lens type/material/treatments, recall interval, patient education) are entered in a separate step (`Write Rx`, after the exam is saved) and don't exist yet at exam-creation time, so this round's Plan composer cannot include them. Extending the composer to also update after the Rx is written would mean writing back to an already-saved exam from the prescription-creation flow — a separate, larger follow-up, not attempted here.
 
 **Verified**: real-browser checks (not just curl, since this is live JS) — composed Assessment/Plan sentences match the fields entered; a manual edit is never overwritten by a later structured-field change; an exam saved with the composed text renders it identically to hand-typed text on the detail page (no distinction is stored, by design — this is a drafting aid, not a provenance-tracked field); the full Playwright suite passes, including a new `test_assessment_plan_auto_composed_then_not_overwritten_after_manual_edit`.
+
+### 12.5d ICD-10 auto-suggestion and diagnosis-driven recall interval (v2.15)
+
+Two further extensions to the same composer, from `VISION_EHR_DATA_STANDARDS_RESEARCH.md` §7.2's two compatible candidate ideas surfaced during the reqs3 reconciliation (v2.13). Same no-schema-change, client-side-only treatment as §12.5c — both extend `exams/form.html`'s existing composer script rather than adding a new endpoint.
+
+- **ICD-10 auto-suggestion**: a small hardcoded JS lookup (`ICD10_BY_DX`), keyed on (diagnosis, laterality), covering exactly the six diagnoses already offered as Refractive Assessment chips (Emmetropia intentionally excluded — normal refractive status, not a billable diagnosis; Presbyopia and Anisometropia have no laterality split in real ICD-10 and map to one code regardless of OD/OS/OU). Populates the existing `diagnosis_codes` field with one code per checked diagnosis chip, comma-joined, matching that field's existing free-text convention. Explicitly **not** real ICD-10 code-set integration — the same narrow-lookup treatment already used elsewhere, still subject to the terminology-server deferral (§22, `VISION_EHR_DATA_STANDARDS_RESEARCH.md` §4.4).
+- **Diagnosis-driven recall interval**: the existing `follow_up_weeks` field is now auto-suggested (26 weeks if "Suspect Glaucoma" is checked among the Refractive Assessment's secondary findings, 52 weeks otherwise), gated on the same "has actual diagnosis data" condition the Assessment composer already uses. Because the Plan composer's existing fallback already reads `follow_up_weeks`'s live value, the suggested interval flows into the composed Plan sentence automatically on the same refresh cycle — no change was needed to the Plan-composing function itself, only to the order fields are refreshed in.
+- Both new fields follow the identical "never overwrite a manual edit" mechanism as `assessment`/`plan` (§12.5c): a dedicated `edited` flag per field, flipped by that field's own `input` event.
+
+**Verified**: real-browser checks — Myopia+OU suggests `H52.13`; adding Astigmatism appends `H52.203` (`H52.13, H52.203`); checking "Suspect Glaucoma" changes the suggested follow-up from 52 to 26 weeks and the composed Plan text reflects it; manually editing either `diagnosis_codes` or `follow_up_weeks` stops further auto-suggestion for that field; a full exam submission persists the suggested values correctly; the full Playwright suite passes, including a new `test_icd10_suggestion_and_diagnosis_driven_recall_interval`.
 
 ### 12.6 Refraction
 
@@ -2793,3 +2803,11 @@ Two of four prerequisites are now fully done, with real, verifiable technical wo
 | New document | `BUILD_BACKLOG.md` consolidates every outstanding build item from this spec and `VISION_EHR_DATA_STANDARDS_RESEARCH.md` into one tracked list, organized by theme (remaining clinical dashboards, billing/claims, interoperability, security/compliance, practice-management placeholders, go-live prerequisites, product quality, testing), each citing its source section rather than duplicating detail. Every item follows the proven 7-step subtask pattern established by the dashboards already shipped (schema → migration → routes → templates → seed → tests → spec update) where applicable. |
 | Updated | §22's "Related reference material" paragraph and the README both now point to `BUILD_BACKLOG.md`. |
 | Explicitly not done | No code changed. This is a tracking document, not a commitment to build any specific item on it in any particular order. |
+
+**Version 2.15 change log (relative to v2.14) — extends the v2.12 composer with two candidate ideas from the reqs3 reconciliation, no schema change, not go-live-relevant:**
+
+| Area | Change |
+| --- | --- |
+| New capability | ICD-10 auto-suggestion: a small hardcoded lookup by (diagnosis, laterality) populates the existing `diagnosis_codes` field for the six Refractive Assessment diagnoses (Emmetropia excluded as non-billable). Diagnosis-driven recall interval: `follow_up_weeks` is now auto-suggested (26 weeks for a glaucoma suspect, 52 otherwise), which flows into the composed Plan sentence via the existing fallback. Both follow the same never-overwrite-a-manual-edit mechanism as `assessment`/`plan`. See new §12.5d. |
+| Updated | `VISION_EHR_DATA_STANDARDS_RESEARCH.md` §7.2 marked implemented. `BUILD_BACKLOG.md`'s "In Progress / Up Next" item moved to done. |
+| Explicitly not done | No real ICD-10 code-set integration (still deferred, §4.4 of the research doc). No change to Anterior Segment's own follow-up logic. No schema/route change. |
