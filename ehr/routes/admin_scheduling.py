@@ -90,6 +90,60 @@ def type_detail(request: Request, type_id: int, db: Session = Depends(get_db)):
         {"type_": t, "version": v, "previews": previews})
 
 
+@router.get("/appointment-types/{type_id}/color-rules", response_class=HTMLResponse, dependencies=[Depends(require_role(*ADMIN_SCHEDULING_VIEW))])
+def color_rules(request: Request, type_id: int, db: Session = Depends(get_db)):
+    """Edit the conditional color rules (spec 9.3/9.5) on a type's latest
+    version through a real form, instead of direct database access -- the
+    read-only Color Preview table on type_detail.html (driven by the same
+    sched.resolve_color this page's rules feed) shows what these resolve to.
+    Rules are ordered by priority (lowest wins first), matching
+    AppointmentTypeVersion.color_rules' own relationship ordering."""
+    t = db.query(AppointmentType).filter(AppointmentType.id == type_id).first()
+    if not t: return HTMLResponse("Not found", status_code=404)
+    v = _latest_version(t)
+    return templates.TemplateResponse(request, "admin/scheduling/color_rules.html",
+        {"type_": t, "version": v})
+
+
+@router.post("/appointment-types/{type_id}/color-rules", dependencies=[Depends(require_role(*ADMIN_SCHEDULING_EDIT))])
+def create_color_rule(type_id: int, priority: int = Form(0), patient_relationship: str = Form(""),
+    is_follow_up: str = Form(""), minimum_countable_tests: str = Form(""), maximum_countable_tests: str = Form(""),
+    color: str = Form(...), reason_code: str = Form(""), db: Session = Depends(get_db)):
+    t = db.query(AppointmentType).filter(AppointmentType.id == type_id).first()
+    if not t: return HTMLResponse("Not found", status_code=404)
+    v = _latest_version(t)
+    if not v: return HTMLResponse("This type has no version to attach a color rule to.", status_code=400)
+    if not color.strip():
+        return HTMLResponse("Color is required.", status_code=400)
+    db.add(AppointmentTypeColorRule(
+        appointment_type_version_id=v.id, priority=priority,
+        patient_relationship=patient_relationship or None,  # '' means "any" (wildcard)
+        is_follow_up={"": None, "yes": True, "no": False}.get(is_follow_up, None),
+        minimum_countable_tests=int(minimum_countable_tests) if minimum_countable_tests else None,
+        maximum_countable_tests=int(maximum_countable_tests) if maximum_countable_tests else None,
+        color=color.strip(), reason_code=reason_code or None))
+    db.add(AppointmentTypeAuditEvent(appointment_type_id=t.id, appointment_type_version_id=v.id,
+        event_type="color_rule_added", change_reason=f"priority {priority}, color {color.strip()}"))
+    db.commit()
+    return RedirectResponse(f"/admin/scheduling/appointment-types/{type_id}/color-rules", status_code=303)
+
+
+@router.post("/appointment-types/{type_id}/color-rules/{rule_id}/delete", dependencies=[Depends(require_role(*ADMIN_SCHEDULING_EDIT))])
+def delete_color_rule(type_id: int, rule_id: int, db: Session = Depends(get_db)):
+    t = db.query(AppointmentType).filter(AppointmentType.id == type_id).first()
+    if not t: return HTMLResponse("Not found", status_code=404)
+    v = _latest_version(t)
+    if not v: return HTMLResponse("Not found", status_code=404)
+    rule = db.query(AppointmentTypeColorRule).filter(AppointmentTypeColorRule.id == rule_id,
+        AppointmentTypeColorRule.appointment_type_version_id == v.id).first()
+    if not rule: return HTMLResponse("Not found", status_code=404)
+    db.delete(rule)
+    db.add(AppointmentTypeAuditEvent(appointment_type_id=t.id, appointment_type_version_id=v.id,
+        event_type="color_rule_deleted", change_reason=f"priority {rule.priority}, color {rule.color}"))
+    db.commit()
+    return RedirectResponse(f"/admin/scheduling/appointment-types/{type_id}/color-rules", status_code=303)
+
+
 @router.get("/appointment-types/{type_id}/edit", response_class=HTMLResponse, dependencies=[Depends(require_role(*ADMIN_SCHEDULING_EDIT))])
 def edit_type_form(request: Request, type_id: int, db: Session = Depends(get_db)):
     t = db.query(AppointmentType).filter(AppointmentType.id == type_id).first()

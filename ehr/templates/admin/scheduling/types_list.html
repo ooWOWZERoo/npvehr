@@ -3,10 +3,6 @@
 {% block content %}
 <div class="page-header"><h1>Scheduling Administration</h1></div>
 {% include "admin/scheduling/_nav.html" %}
-<p style="font-size:0.8rem;color:#b91c1c">
-  No authentication exists yet in this application (spec section 7) &mdash; these admin screens are open
-  to anyone who can reach them. TODO: gate this page behind appointment_types.manage once auth exists.
-</p>
 <div class="page-header"><h2>Appointment Types</h2><a href="/admin/scheduling/appointment-types/new" class="btn btn-primary btn-sm">+ New Type</a></div>
 <div class="card">
   <table><thead><tr><th>Order</th><th>Active</th><th>Code</th><th>Name</th><th>Service Line</th>

@@ -48,8 +48,8 @@
     </div>
     <p style="font-size:0.8rem;color:#64748b">
       Conditional color rules (spec 9.3/9.5, e.g. Medical Eye Evaluation's new/follow-up/test-count precedence)
-      are seeded automatically for the system catalog and carried forward on republish; a dedicated
-      rule-builder UI is deferred (see implementation report) &mdash; edit AppointmentTypeColorRule rows directly for now.
+      are seeded automatically for the system catalog and carried forward on republish;
+      {% if type_ %}<a href="/admin/scheduling/appointment-types/{{ type_.id }}/color-rules">manage this type's color rules</a>{% else %}manage a type's color rules from its detail page once created{% endif %}.
     </p>
 
     {% if type_ %}

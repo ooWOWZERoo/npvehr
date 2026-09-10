@@ -4,6 +4,7 @@
 <div class="page-header"><h1>{{ version.display_name if version else type_.code }}</h1>
   <div style="display:flex;gap:0.5rem">
     <a href="/admin/scheduling/appointment-types/{{ type_.id }}/edit" class="btn btn-secondary btn-sm">Edit / Publish Version</a>
+    <a href="/admin/scheduling/appointment-types/{{ type_.id }}/color-rules" class="btn btn-secondary btn-sm">Color Rules</a>
     <a href="/admin/scheduling/appointment-types/{{ type_.id }}/history" class="btn btn-secondary btn-sm">History</a>
     <a href="/admin/scheduling/appointment-types" class="btn btn-secondary btn-sm">Back</a>
   </div>
@@ -21,7 +22,7 @@
       <dt>Active</dt><dd>{{ 'Yes' if version and version.active else 'No' }}</dd>
     </dl>
   </div>
-  <div class="card"><h3>Color Preview (spec 17.3)</h3>
+  <div class="card"><h3>Color Preview (spec 17.3) &mdash; <a href="/admin/scheduling/appointment-types/{{ type_.id }}/color-rules">Manage Color Rules</a></h3>
     {% if previews %}
     <table><thead><tr><th>Relationship</th><th>Follow-up</th><th>Tests</th><th>Color</th><th>Reason</th></tr></thead><tbody>
     {% for p in previews %}

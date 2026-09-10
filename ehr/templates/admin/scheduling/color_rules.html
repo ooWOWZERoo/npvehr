@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Color Rules: {{ type_.code }} &mdash; Admin{% endblock %}
+{% block content %}
+<div class="page-header"><h1>Color Rules: {{ version.display_name if version else type_.code }}</h1>
+  <a href="/admin/scheduling/appointment-types/{{ type_.id }}" class="btn btn-secondary">Back to Type</a></div>
+{% include "admin/scheduling/_nav.html" %}
+
+{% if not version %}
+<div class="card"><p>This type has no version yet -- create one before adding color rules.</p></div>
+{% else %}
+<div class="card">
+  <h3>Current Rules (evaluated in priority order, lowest first)</h3>
+  {% if version.color_rules %}
+  <table>
+    <thead><tr><th>Priority</th><th>Relationship</th><th>Follow-up</th><th>Min Tests</th><th>Max Tests</th><th>Color</th><th>Reason Code</th><th></th></tr></thead>
+    <tbody>
+    {% for r in version.color_rules %}
+      <tr>
+        <td>{{ r.priority }}</td>
+        <td>{{ r.patient_relationship or 'Any' }}</td>
+        <td>{{ 'Yes' if r.is_follow_up == true else ('No' if r.is_follow_up == false else 'Any') }}</td>
+        <td>{{ r.minimum_countable_tests if r.minimum_countable_tests is not none else '&mdash;' }}</td>
+        <td>{{ r.maximum_countable_tests if r.maximum_countable_tests is not none else '&mdash;' }}</td>
+        <td><span class="color-swatch" style="background:{{ r.color }}"></span> {{ r.color }}</td>
+        <td>{{ r.reason_code or '&mdash;' }}</td>
+        <td>
+          <form method="post" action="/admin/scheduling/appointment-types/{{ type_.id }}/color-rules/{{ r.id }}/delete" style="display:inline">
+            <button type="submit" class="btn btn-sm btn-secondary" onclick="return confirm('Delete this color rule?')">Delete</button>
+          </form>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p style="color:#64748b">No conditional rules yet &mdash; this type resolves to its base color (<span class="color-swatch" style="background:{{ version.base_color }}"></span> {{ version.base_color or 'not set' }}) for every booking.</p>
+  {% endif %}
+</div>
+
+<div class="card form-card">
+  <h3>Add a Rule</h3>
+  <form method="post" action="/admin/scheduling/appointment-types/{{ type_.id }}/color-rules">
+    <div class="section-title">Match Conditions (blank/Any = wildcard, matches every value)</div>
+    <div class="form-row cols-3">
+      <div class="form-group"><label>Priority*</label><input name="priority" type="number" value="0" required></div>
+      <div class="form-group"><label>Patient Relationship</label>
+        <select name="patient_relationship">
+          <option value="">Any</option>
+          <option value="new">New</option>
+          <option value="established">Established</option>
+        </select>
+      </div>
+      <div class="form-group"><label>Follow-up</label>
+        <select name="is_follow_up">
+          <option value="">Any</option>
+          <option value="yes">Yes</option>
+          <option value="no">No</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row cols-2">
+      <div class="form-group"><label>Minimum Countable Tests</label><input name="minimum_countable_tests" type="number" min="0"></div>
+      <div class="form-group"><label>Maximum Countable Tests</label><input name="maximum_countable_tests" type="number" min="0"></div>
+    </div>
+    <div class="section-title">Result</div>
+    <div class="form-row cols-2">
+      <div class="form-group"><label>Color (hex)*</label><input name="color" type="text" placeholder="#0F766E" required></div>
+      <div class="form-group"><label>Reason Code</label><input name="reason_code" type="text" placeholder="e.g. established_follow_up"></div>
+    </div>
+    <p style="font-size:0.8rem;color:#64748b">
+      Rules are evaluated in priority order (lowest number first); the first rule whose conditions all
+      match wins. If no rule matches, the type's base color is used. Editing rules here changes future
+      bookings' resolved color only &mdash; already-booked appointments keep the color that was resolved
+      and snapshotted at booking time (see the type's Color Preview for what future bookings will resolve to).
+    </p>
+    <div class="form-actions"><button type="submit" class="btn btn-primary">Add Rule</button></div>
+  </form>
+</div>
+{% endif %}
+{% endblock %}
