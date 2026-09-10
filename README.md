@@ -7,11 +7,11 @@ external services configured.
 **Start here:** `NEW_PATH_VISION_EHR_BASELINE_PRODUCT_DEFINITION_AND_SPECIFICATION.md` is the living
 specification — the authoritative record of what's implemented, what's placeholder, and what's
 explicitly deferred. Read the go-live safety notice at the top of that document before doing
-anything with real patient data: authentication (v2.4) and TLS/encryption-at-rest/a documented
-backup procedure (v2.5, §38) are now in place, but **no Business Associate Agreement is signed
-with Vercel, Neon, or Cloudinary** — that's a legal/procurement action, not an engineering one,
-and it alone still blocks go-live regardless of everything else here. Confirm with compliance
-counsel before any real PHI.
+anything with real patient data: authentication (v2.4), TLS/encryption-at-rest (v2.5), and a
+live-tested backup/restore procedure (v2.6, §38) are now in place, but **no Business Associate
+Agreement is signed with Vercel, Neon, or Cloudinary** — that's a legal/procurement action, not
+an engineering one, and it alone still blocks go-live regardless of everything else here. Confirm
+with compliance counsel before any real PHI.
 
 `VISION_EHR_DATA_STANDARDS_RESEARCH.md` is reference material on eye-care-specific EHR data
 standards (FHIR, IHE, DICOM, SNOMED/LOINC/ICD-10) for a future clinical-data-model rework — not

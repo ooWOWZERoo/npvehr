@@ -1,7 +1,7 @@
 # New Path Vision EHR
 ## Baseline Product Definition and Current-State Functional Specification
 
-**Document version:** 2.5 (supersedes v2.4; the application is now actually deployed — Vercel + Neon Postgres + Cloudinary, with a Playwright/CI test suite and a session-auth-gated patient-photo fix — see new §38; TLS in transit is now verified end-to-end and encryption at rest is provided by the two managed data stores, closing most of prerequisite 3, and a documented (not yet live-tested) Neon point-in-time-recovery procedure exists for prerequisite 4; prerequisite 2 — a signed BAA — remains untouched, since it is a business/legal action no engineering change can complete)
+**Document version:** 2.6 (supersedes v2.5; the Neon point-in-time-recovery restore procedure documented in §38.3 has now actually been performed and confirmed — restored patient/user/appointment counts matched expected seeded data exactly — closing go-live prerequisite 4; prerequisite 2, a signed BAA, remains the sole fully-open item, since it is a business/legal action no engineering change can complete)
 **Baseline date:** September 9, 2026
 **Application-reported version:** 1.0.0
 **Baseline source:** `setup_ehr.py` self-contained scaffold script (locally generated `visioncare_ehr/` project directory; see §2.2)
@@ -12,19 +12,21 @@
 
 ## ⚠ DO NOT USE WITH REAL PATIENT DATA — READ BEFORE GOING LIVE
 
-> **Status as of v2.5: 1 of 4 go-live prerequisites is fully done, 2 are substantially — but not completely — addressed, and 1 remains entirely untouched. Do not go live yet.**
+> **Status as of v2.6: 2 of 4 go-live prerequisites are fully done, 1 is substantially — but not completely — addressed, and 1 remains entirely untouched. Do not go live yet.**
 >
-> **What changed in v2.5:** the application moved off a single local machine entirely. It now runs on Vercel, backed by Neon (managed Postgres) and Cloudinary (managed object storage) — see new §38. That platform move happens to close most of the *technical* substance of prerequisites 3 and 4, as a side effect rather than a dedicated compliance project: Vercel terminates TLS for every request, Neon's connection is TLS-required, and both Neon and Cloudinary encrypt their storage by platform default (§38.2) — and Neon's built-in point-in-time recovery gives this application a real backup mechanism for the first time, with a documented restore procedure (§38.3). Patient photo access was also closed from a public/guessable URL to a session-auth-gated route (§38.4), and an automated end-to-end test suite now runs in CI on every change (§38.5).
+> **What changed in v2.6:** the Neon point-in-time-recovery restore procedure documented in v2.5 (§38.3) has now actually been performed, not just described. A branch was restored to an earlier point in time, and its `patients`/`users`/`appointments` row counts were confirmed to exactly match the expected seeded data. This closes go-live prerequisite 4.
 >
-> **What did NOT change:** nobody has signed a Business Associate Agreement with Vercel, Neon, or Cloudinary (prerequisite 2 — still completely open, and the one item on this list that is a legal/procurement action, not an engineering one). The Neon backup procedure is documented but has not yet been exercised as a live, verified restore (§38.3). This document's author could not independently re-verify Vercel/Neon/Cloudinary's current published encryption-at-rest and BAA terms while writing this section (the review environment's network policy blocked reaching vendor documentation directly) — treat §38.2's characterization as reasoned from general, standard practice for this class of managed provider, not as a re-confirmed fact, and verify current terms directly with each vendor before relying on it. Record-level "who viewed this specific photo" auditing beyond the session-auth gate still does not exist, and CSRF protection remains absent (§15.1, unchanged).
+> **What changed in v2.5 (carried forward):** the application moved off a single local machine entirely. It now runs on Vercel, backed by Neon (managed Postgres) and Cloudinary (managed object storage) — see §38. Vercel terminates TLS for every request, Neon's connection is TLS-required, and both Neon and Cloudinary encrypt their storage by platform default (§38.2). Patient photo access was closed from a public/guessable URL to a session-auth-gated route (§38.4), and an automated end-to-end test suite now runs in CI on every change (§38.5).
+>
+> **What did NOT change:** nobody has signed a Business Associate Agreement with Vercel, Neon, or Cloudinary (prerequisite 2 — still completely open, and the one item on this list that is a legal/procurement action, not an engineering one). This document's author could not independently re-verify Vercel/Neon/Cloudinary's current published encryption-at-rest and BAA terms while writing §38.2 (the review environment's network policy blocked reaching vendor documentation directly) — treat that section's characterization as reasoned from general, standard practice for this class of managed provider, not as a re-confirmed fact, and verify current terms directly with each vendor before relying on it. Record-level "who viewed this specific photo" auditing beyond the session-auth gate still does not exist, and CSRF protection remains absent (§15.1, unchanged).
 >
 > **This application MUST NOT be used to store, process, or display real patient data or any other real PHI until, at minimum, all of the following are in place:**
 > 1. ~~Real authentication, authorization, and audit logging (who did what, to which record, when).~~ **Done as of v2.4** — see §37. (Note the scope: the audit log covers login/logout/access-denied events, not yet a full per-field "who changed this clinical value" trail — see §37.6.)
 > 2. Deployment on compliant hosting, under a signed Business Associate Agreement (BAA) with the hosting/infrastructure provider. **Still fully open — a business/legal action, not something this or any future engineering pass can complete on its own.** See §38.1.
 > 3. Encryption in transit (TLS) and at rest (database and file storage). **Substantially addressed as of v2.5** via the managed platforms now in use — see §38.2 for exactly what was and wasn't verified, and its caveats.
-> 4. Real backup and disaster-recovery capability, tested and documented. **Partially addressed as of v2.5**: Neon's point-in-time recovery gives this application a real backup mechanism, and a restore procedure is documented (§38.3) — but no one has yet performed and confirmed a live test restore. **Still open until that test happens.**
+> 4. ~~Real backup and disaster-recovery capability, tested and documented.~~ **Done as of v2.6** — Neon's point-in-time recovery is the mechanism, §38.3 documents the procedure, and a live test restore has been performed and confirmed correct. See §38.3 for the one narrower caveat that remains (Cloudinary-stored photos aren't covered by a Neon restore).
 >
-> **The user has engaged compliance/legal counsel for this project.** Readiness for real-patient go-live must be confirmed with that counsel — not inferred from this document, and not determined by engineering judgment alone. This document is a technical and product baseline; it is not legal advice, and nothing in it should be read as counsel's sign-off on go-live. Completing prerequisite 1, and making real progress on 3 and 4, does not make the still-fully-open prerequisite 2 any less mandatory.
+> **The user has engaged compliance/legal counsel for this project.** Readiness for real-patient go-live must be confirmed with that counsel — not inferred from this document, and not determined by engineering judgment alone. This document is a technical and product baseline; it is not legal advice, and nothing in it should be read as counsel's sign-off on go-live. Completing prerequisites 1 and 4, and making real progress on 3, does not make the still-fully-open prerequisite 2 any less mandatory.
 >
 > This notice is referenced from §4.1 (Access-control baseline), §15 (Security, Privacy, and Compliance Baseline), §37 (Authentication build), and §38 (Deployment infrastructure), which describe the underlying facts in detail. Read those sections for the specifics; read this box first for what those facts mean in practice.
 
@@ -1070,7 +1072,7 @@ This is a product and technical assessment, not legal advice or a certification.
 
 ### 16.2 Reliability and data recovery
 
-- ~~No backup, restore, replication, point-in-time recovery, or integrity-check process is included.~~ **Partially addressed in v2.5**: the deployed database (Neon) has built-in point-in-time recovery, and a restore procedure is now documented — see §38.3. No integrity-check process exists either way. Not addressed for a locally-run instance (default SQLite has none of this).
+- ~~No backup, restore, replication, point-in-time recovery, or integrity-check process is included.~~ **Resolved in v2.6** for the deployed database: Neon's built-in point-in-time recovery, restore procedure documented and live-tested — see §38.3. No integrity-check process exists either way. Not addressed for a locally-run instance (default SQLite has none of this).
 - No health-check or readiness endpoint is defined.
 - No structured application logging or error-reporting integration is included.
 - Database commits occur directly inside request handlers.
@@ -2431,7 +2433,7 @@ Given the user's confirmation that this application is intended to become a live
 These are the gaps that remain genuinely open after this reconciliation pass, consolidated in one place so a reader does not have to reconstruct current status from six different rounds' change logs:
 
 1. ~~No authentication, authorization, or audit-of-who-changed-what anywhere in the application.~~ **Resolved in v2.4** — see §37. Note: `/admin/scheduling/*`'s previously hard-coded always-allow checks (§26.1 item 1) are now gated by the v2.4 role model like every other route; a full per-record clinical-field "who changed this value" audit trail beyond authentication/access events remains a separate, still-open item — see §37.6.
-2. ~~No encryption in transit or at rest, no TLS enforcement, no backups, no BAA-eligible hosting~~ — **substantially changed in v2.5** (§38): TLS in transit is now real end-to-end, encryption at rest is provided by the managed data stores, and a documented (not yet live-tested) backup/restore procedure exists. **No BAA-eligible hosting is signed, and that item alone is unchanged and fully open** — see the go-live notice and §15.
+2. ~~No encryption in transit or at rest, no TLS enforcement, no backups, no BAA-eligible hosting~~ — **substantially changed in v2.5–v2.6** (§38): TLS in transit is now real end-to-end, encryption at rest is provided by the managed data stores, and a backup/restore procedure exists and has been live-tested (§38.3). **No BAA-eligible hosting is signed, and that item alone is unchanged and fully open** — see the go-live notice and §15.
 3. **No CSRF protection** anywhere (§15.1, §26.10 item 4) — a pre-existing gap, not new.
 4. **No down-migration/rollback capability** in the migration runner (§25.15) — it can add columns/tables and seed data, but nothing in it reverses a migration.
 5. ~~No automated test suite of any kind for this application~~ (§18.3 item 6, §26.10 item 7) — **resolved in v2.5**: an end-to-end Playwright suite (§38.5) now runs on every push and pull request via GitHub Actions CI. Scope is smoke-level (login, logout, auth redirects, main nav destinations render) — it is not workflow-level or regression coverage of every screen in this baseline, so most of §20's manual regression checklist is not yet automated.
@@ -2556,19 +2558,27 @@ Locally (no `DATABASE_URL`/`CLOUDINARY_URL` set), none of this applies — the S
 
 ### 38.3 Backup and disaster recovery
 
-Neon provides point-in-time recovery (PITR) as a built-in platform capability: the service retains enough history to restore the database to an earlier point in time, independent of any action this application takes, for a retention window set by the Neon plan in use. This is a materially different situation from the pre-v2.5 baseline, where the database was a single local SQLite file with no backup mechanism of any kind — but it comes with real, specific limits worth stating plainly rather than glossing over:
+Neon provides point-in-time recovery (PITR) as a built-in platform capability: the service retains enough history to restore the database to an earlier point in time, independent of any action this application takes, for a retention window set by the Neon plan in use. This is a materially different situation from the pre-v2.5 baseline, where the database was a single local SQLite file with no backup mechanism of any kind.
 
-- **This has not yet been live-tested.** The review environment used to prepare this document could not reach Neon's database port directly (its network policy allows only HTTP/HTTPS through an allowlisted proxy, not the raw TCP connection Postgres requires), so no one has actually performed and confirmed a restore against the real production database. The procedure below is Neon's documented mechanism, not a dry run this document's author personally completed.
-- **It covers the database only.** Cloudinary-stored patient photos are not part of a Neon restore. A database-only restore after a photo has been deleted or a patient record changed would leave `photo_path` values that may not match Cloudinary's current state — the same class of problem the pre-v2.5 baseline already noted for local photo files and a database restore (§16.2), just relocated rather than resolved. Cloudinary's own asset retention/versioning (if enabled on the account's plan) would need to be relied on separately for photo recovery; this was not investigated as part of this pass.
+**Live-tested in v2.6.** The review environment used to prepare this document could not perform this test itself — it cannot reach Neon's database port directly (its network policy allows only HTTP/HTTPS through an allowlisted proxy, not the raw TCP connection Postgres requires) — so the user performed it directly in the Neon console and reported the results back for this document to record:
+
+1. A new branch was created from a restore point a few minutes in the past, via Neon's **Branches** → **Restore**/**Create branch from a point in time** flow.
+2. The restored branch's data was queried directly (Neon's built-in SQL Editor, run against the restored branch): `SELECT count(*) FROM patients`, `... FROM users`, `... FROM appointments`.
+3. Results: **5 patients, 4 users, 4 appointments** — an exact match for this application's seeded demo data (§17, §38.1's `seed_demo_data()`), confirming the restored branch held correct, intact data rather than an empty or corrupted database.
+4. The test branch was deleted afterward, per Neon's own guidance to avoid ongoing storage cost for a branch no one needs kept around.
+
+This confirms the *mechanism* works end-to-end: a point-in-time restore produces a branch with correct data, queryable immediately. It was a verification exercise, not a full production incident drill — step 4 of the cutover procedure below (repointing `DATABASE_URL` at a restored branch and redeploying) was not itself exercised, since doing so against the live production database for a test would have been the wrong way to run this test. That step is standard Vercel/Neon configuration (the same mechanism used to set up `DATABASE_URL` in the first place, §38.1) rather than a novel one, so this is a reasonable, deliberate scope boundary for the test rather than a gap being glossed over — but if a real incident ever requires actually cutting over, treat that as the first time step 4 specifically has been exercised.
+
+Two boundaries on what this backup mechanism covers, worth stating plainly:
+
+- **It covers the database only.** Cloudinary-stored patient photos are not part of a Neon restore. A database-only restore after a photo has been deleted or a patient record changed would leave `photo_path` values that may not match Cloudinary's current state — the same class of problem the pre-v2.5 baseline already noted for local photo files and a database restore (§16.2), just relocated rather than resolved. Cloudinary's own asset retention/versioning (if enabled on the account's plan) would need to be relied on separately for photo recovery; this was not investigated or tested as part of this pass.
 - **It does not cover application code or configuration** — that recovery path is "redeploy from the `main` branch in GitHub," which is a solved problem already (Vercel auto-deploys on push) and not a gap.
 
-**Documented restore procedure** (to be executed and confirmed by the user or their operator, not yet performed by this document's author):
+**Restore procedure** (steps 1–3 live-tested as described above; step 4 is standard configuration, not separately tested):
 1. In the Neon console, open the project's **Branches** view.
 2. Use **Restore** (or create a new branch "as of" a specific past timestamp) to select the point in time to recover to. Neon's restore window is bounded by the project's plan-specific retention period — confirm the current limit for the plan in use before assuming a given point in time is still recoverable.
-3. Verify the restored branch's data independently (e.g., spot-check a few known patient/appointment records) before pointing production traffic at it.
+3. Verify the restored branch's data independently (e.g., the row-count spot-check above, or a check of specific known records) before pointing production traffic at it.
 4. To actually cut over, update the Vercel project's `DATABASE_URL` environment variable to the restored branch's connection string and redeploy.
-
-Until step 3 has actually been performed once against a real restore, **this procedure counts as documented but not tested**, per the wording of go-live prerequisite 4.
 
 ### 38.4 Patient photo access control
 
@@ -2586,14 +2596,14 @@ This is smoke-level coverage confirming the application boots, authenticates, an
 
 ### 38.6 Updated go-live prerequisite summary
 
-| # | Prerequisite | Status as of v2.5 |
+| # | Prerequisite | Status as of v2.6 |
 | --- | --- | --- |
 | 1 | Real authentication, authorization, and audit logging | **Done** (v2.4, §37) |
 | 2 | Compliant hosting under a signed BAA | **Still fully open** — a business/legal action; see §38.1 |
 | 3 | Encryption in transit and at rest | **Substantially addressed** — in-transit verified directly; at-rest reasoned from standard managed-provider practice but not independently re-confirmed against current vendor terms; see §38.2 |
-| 4 | Backup and disaster recovery, tested and documented | **Partially addressed** — a real mechanism (Neon PITR) and a documented procedure exist; no live test restore has been performed yet; see §38.3 |
+| 4 | Backup and disaster recovery, tested and documented | **Done** — Neon PITR is the mechanism, the procedure is documented, and a live test restore was performed and confirmed correct (§38.3); the one remaining caveat is scope (Cloudinary photos aren't covered by a Neon restore), not "untested" |
 
-Three of four prerequisites now have real, verifiable technical progress behind them. None of that changes the go-live notice's bottom line: **do not use this application with real patient data yet.** Prerequisite 2 remains completely untouched, prerequisites 3 and 4 each have a stated, concrete remaining step (independently re-confirm vendor at-rest/BAA terms; perform one live test restore), and the user's compliance counsel — not this document, and not engineering judgment — makes the actual go-live call.
+Two of four prerequisites are now fully done, with real, verifiable technical work behind both. None of that changes the go-live notice's bottom line: **do not use this application with real patient data yet.** Prerequisite 2 remains completely untouched — and is the one item nothing in §38 can close, since it's a legal/procurement action — and prerequisite 3 has one stated, concrete remaining step (independently re-confirm vendor at-rest/BAA terms). The user's compliance counsel — not this document, and not engineering judgment — makes the actual go-live call.
 
 **Version 2.5 change log (relative to v2.4):**
 
@@ -2606,3 +2616,10 @@ Three of four prerequisites now have real, verifiable technical progress behind 
 | New capability, go-live-relevant | An automated Playwright end-to-end test suite now runs in CI on every PR and push to `main` — see §38.5. Resolves genuine-open-gap #5 from §36.5. |
 | Updated | The go-live safety notice (before §1), §4.1, §15.1, §16.2, and §36.5 items 2 and 5 all updated to reflect v2.5's deployment infrastructure and its effect on go-live prerequisites 3 and 4, while making clear that prerequisite 2 (a signed BAA) remains completely untouched. |
 | Removed | The placeholder eye/leaf SVG logo (login page, printable prescription header) — the client's final logo asset still has not been delivered; removed at the user's request rather than continuing to carry a placeholder. |
+
+**Version 2.6 change log (relative to v2.5):**
+
+| Area | Change |
+| --- | --- |
+| Fixed, go-live-relevant | Go-live prerequisite 4 (backup/DR) moved from "documented but not live-tested" to **done**: the Neon point-in-time-recovery restore procedure from v2.5's §38.3 was actually performed — a branch restored to an earlier point in time, its data queried directly, and its `patients`/`users`/`appointments` counts (5/4/4) confirmed to exactly match this application's seeded demo data. See the rewritten §38.3. |
+| Updated | The go-live safety notice (before §1), §16.2, and §36.5 item 2 updated to reflect prerequisite 4's now-confirmed status. §38.6's summary table updated to 2 of 4 prerequisites fully done. |
