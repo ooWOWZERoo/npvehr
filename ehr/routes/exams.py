@@ -48,12 +48,19 @@ async def create_exam(request: Request, db: Session = Depends(get_db)):
         assessment=g("assessment"), plan=g("plan"),
         diagnosis_codes=g("diagnosis_codes"), follow_up_weeks=_i(g("follow_up_weeks")))
     db.add(exam); db.flush()
-    if _f(g("od_sphere")) is not None or _f(g("os_sphere")) is not None:
-        db.add(Refraction(exam_id=exam.id, refraction_type="manifest",
-            od_sphere=_f(g("od_sphere")), od_cylinder=_f(g("od_cylinder")),
-            od_axis=_i(g("od_axis")), od_add=_f(g("od_add")), od_va=g("od_va"),
-            os_sphere=_f(g("os_sphere")), os_cylinder=_f(g("os_cylinder")),
-            os_axis=_i(g("os_axis")), os_add=_f(g("os_add")), os_va=g("os_va")))
+    # Three-step refraction matrix (IHE GEE): habitual (current glasses as worn
+    # in), manifest (subjective refinement), cycloplegic (post-dilation). Each
+    # is optional and independent -- a Refraction row is only created for a
+    # type if at least one sphere value was actually entered for it.
+    for prefix, rtype in (("hab", "habitual"), ("man", "manifest"), ("cyc", "cycloplegic")):
+        od_sphere, os_sphere = _f(g(f"{prefix}_od_sphere")), _f(g(f"{prefix}_os_sphere"))
+        if od_sphere is None and os_sphere is None:
+            continue
+        db.add(Refraction(exam_id=exam.id, refraction_type=rtype,
+            od_sphere=od_sphere, od_cylinder=_f(g(f"{prefix}_od_cylinder")),
+            od_axis=_i(g(f"{prefix}_od_axis")), od_add=_f(g(f"{prefix}_od_add")), od_va=g(f"{prefix}_od_va"),
+            os_sphere=os_sphere, os_cylinder=_f(g(f"{prefix}_os_cylinder")),
+            os_axis=_i(g(f"{prefix}_os_axis")), os_add=_f(g(f"{prefix}_os_add")), os_va=g(f"{prefix}_os_va")))
     db.commit()
     return RedirectResponse(f"/exams/{exam.id}", status_code=303)
 

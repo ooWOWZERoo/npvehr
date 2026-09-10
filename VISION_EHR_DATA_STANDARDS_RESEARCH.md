@@ -1,6 +1,6 @@
 # Vision/Eye Care EHR Data Standards — Research Notes
 
-**Status:** Reference material only. Nothing in this document has been implemented in New Path Vision EHR yet. Saved for review and planning in a future session — see "Next steps" at the bottom.
+**Status:** Reference material. **Section 4.2's first narrow slice — the habitual/manifest/cycloplegic refraction-type distinction — was implemented in v2.8** of the baseline spec (see that document's §12.6a). Everything else here (FHIR resource modeling, IHE GEE encounter workflow, DICOM device integration, SNOMED/LOINC/ICD-10 terminology) remains unimplemented. Saved for review and planning in a future session — see "Next steps" at the bottom.
 
 **Context:** Generic medical EHR specifications are insufficient for eye care because of strict per-eye laterality (OD/OS/OU), specialized measurement matrices (e.g., manifest vs. cycloplegic refraction), and a medical/retail-vision billing split. This note collects the dominant existing specifications so any future architectural rework of New Path Vision EHR's data model can align with them from the start, rather than requiring a rewrite later.
 
@@ -71,11 +71,11 @@ Avoid free-text for clinical findings — map to:
 
 ## How this relates to New Path Vision EHR today
 
-The current data model (`EyeExam`, `Refraction`, `Prescription` in `ehr/models/database.py`) is a simplified, mostly free-text/flat-field representation — it does **not** currently align with any of the above (no FHIR resources, no SNOMED/LOINC/ICD-10 coding, no habitual/manifest/cycloplegic refraction split, no DICOM device integration, no IHE GEE-structured encounter workflow). This is expected for the current prototype stage and is already documented as a general gap in the living spec (`NEW_PATH_VISION_EHR_BASELINE_PRODUCT_DEFINITION_AND_SPECIFICATION.md`, e.g. §12.5's note that "clinical findings are primarily unstructured strings").
+The current data model (`EyeExam`, `Refraction`, `Prescription` in `ehr/models/database.py`) is a simplified, mostly free-text/flat-field representation — it does **not** currently align with most of the above (no FHIR resources, no SNOMED/LOINC/ICD-10 coding, no DICOM device integration, no IHE GEE-structured encounter workflow). **One piece now does align: the habitual/manifest/cycloplegic refraction split** (item 3 in "Next steps" below), implemented in the baseline spec's v2.8 (§12.6a) — `Refraction.refraction_type` already existed on this table but was previously write-only, always hardcoded to `manifest`; an exam can now carry an independent, optionally-present row for each of the three types. Everything else remains a general gap, documented in the living spec (`NEW_PATH_VISION_EHR_BASELINE_PRODUCT_DEFINITION_AND_SPECIFICATION.md`, §36.5 item 11).
 
-## Next steps (not started — for a future session)
+## Next steps (partially started — see status notes)
 
-1. Decide whether/when to align the `EyeExam`/`Refraction`/`Prescription` schema toward FHIR's `Observation`+`VisionPrescription` shape, given this is a significant, non-backward-compatible data-model change.
-2. If pursued, sequence it similarly to past big builds in this project: a scoping conversation first (how much of this to adopt now vs. defer), then a background-agent build with migration + verification, then a living-spec update.
-3. Consider starting narrow: e.g., just add explicit habitual/manifest/cycloplegic refraction types (a small, high-value slice) before attempting full FHIR/DICOM/terminology alignment.
-4. This is a genuinely large scope (FHIR resource modeling, DICOM listener service, a terminology server/code-set integration) — likely multiple future sessions' worth of work, not a single round.
+1. Decide whether/when to align the `EyeExam`/`Refraction`/`Prescription` schema toward FHIR's `Observation`+`VisionPrescription` shape, given this is a significant, non-backward-compatible data-model change. **Not started.**
+2. If pursued, sequence it similarly to past big builds in this project: a scoping conversation first (how much of this to adopt now vs. defer), then a background-agent build with migration + verification, then a living-spec update. **Not started.**
+3. ~~Consider starting narrow: e.g., just add explicit habitual/manifest/cycloplegic refraction types (a small, high-value slice) before attempting full FHIR/DICOM/terminology alignment.~~ **Done, v2.8** — see the baseline spec's §12.6a.
+4. This is a genuinely large scope (FHIR resource modeling, DICOM listener service, a terminology server/code-set integration) — likely multiple future sessions' worth of work, not a single round. Item 3 above was the first such slice; items 1-2 and the DICOM/terminology work remain fully open.

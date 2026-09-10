@@ -147,6 +147,12 @@ def seed_demo_data(db):
         diagnosis_codes="H52.13, H52.219", follow_up_weeks=52,
     )
     db.add(exam); db.flush()
+    # Habitual (patient's old glasses, now under-corrected) and manifest
+    # (today's subjective refinement) -- demonstrates the refraction-type
+    # matrix from the IHE General Eye Evaluation profile.
+    db.add(Refraction(exam_id=exam.id, refraction_type="habitual",
+        od_sphere=-2.75, od_cylinder=-0.75, od_axis=180, od_va="20/25",
+        os_sphere=-2.00, os_cylinder=-0.50, os_axis=175, os_va="20/25"))
     db.add(Refraction(exam_id=exam.id, refraction_type="manifest",
         od_sphere=-3.25, od_cylinder=-0.75, od_axis=180, od_va="20/20",
         os_sphere=-2.50, os_cylinder=-0.50, os_axis=175, os_va="20/20"))

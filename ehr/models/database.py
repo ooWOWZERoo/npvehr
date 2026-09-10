@@ -455,6 +455,11 @@ class Refraction(Base):
     __tablename__ = "refractions"
     id = Column(Integer, primary_key=True, index=True)
     exam_id = Column(Integer, ForeignKey("eye_exams.id"), nullable=False)
+    # 'habitual' (patient's current glasses as worn in), 'manifest' (subjective
+    # refinement), or 'cycloplegic' (post-dilation) -- the three-step refraction
+    # matrix from the IHE General Eye Evaluation profile (see
+    # VISION_EHR_DATA_STANDARDS_RESEARCH.md 4.2). One exam can have up to one
+    # Refraction row per type; an exam is free to have any subset of the three.
     refraction_type = Column(String, default="manifest")
     od_sphere = Column(Float); od_cylinder = Column(Float); od_axis = Column(Integer)
     od_add = Column(Float); od_va = Column(String)

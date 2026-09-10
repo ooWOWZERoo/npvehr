@@ -27,8 +27,10 @@
       <tr><td>OS</td><td>{{ exam.os_sc or '—' }}</td><td>{{ exam.os_cc or '—' }}</td></tr>
     </table>
     </div>
-    {% if exam.refractions %}{% set r = exam.refractions[0] %}
-    <h3 style="margin-top:1rem">Manifest Refraction</h3>
+    {% for rtype, label in [('habitual', 'Habitual Refraction'), ('manifest', 'Manifest Refraction'), ('cycloplegic', 'Cycloplegic Refraction')] %}
+    {% set r = exam.refractions|selectattr('refraction_type', 'equalto', rtype)|first %}
+    {% if r %}
+    <h3 style="margin-top:1rem">{{ label }}</h3>
     <div class="table-responsive">
     <table class="exam-table">
       <tr><th></th><th>Sph</th><th>Cyl</th><th>Axis</th><th>Add</th><th>VA</th></tr>
@@ -49,6 +51,7 @@
     </table>
     </div>
     {% endif %}
+    {% endfor %}
   </div>
 </div>
 <div class="detail-grid" style="margin-top:1rem">

@@ -1,7 +1,7 @@
 # New Path Vision EHR
 ## Baseline Product Definition and Current-State Functional Specification
 
-**Document version:** 2.7 (supersedes v2.6; closes four tracked Appointment Scheduling Module gaps from §26.10/§36.5 — the malformed-date-500 bug, `created_by_user_id`/`updated_by_user_id` attribution on appointments, a color-rule builder UI, and a real open-slot availability search — see §26.10 and §36.5 for what changed and §36.5's own change-log entry below for the full list; none of this bears on the four go-live prerequisites, which are unchanged from v2.6)
+**Document version:** 2.8 (supersedes v2.7; adds the habitual/manifest/cycloplegic refraction-type distinction from `VISION_EHR_DATA_STANDARDS_RESEARCH.md`'s narrow-first recommendation — see §12.6a and §36.5 item 11; none of this bears on the four go-live prerequisites, which are unchanged from v2.6)
 **Baseline date:** September 9, 2026
 **Application-reported version:** 1.0.0
 **Baseline source:** `setup_ehr.py` self-contained scaffold script (locally generated `visioncare_ehr/` project directory; see §2.2)
@@ -924,12 +924,29 @@ erDiagram
 | --- | --- | --- |
 | id | Integer primary key | Required |
 | exam_id | Integer foreign key | Required |
-| refraction_type | String | Defaults to manifest |
+| refraction_type | String | `habitual`, `manifest`, or `cycloplegic` (defaults to `manifest`) — see §12.6a for what is now captured under each |
 | od_sphere, os_sphere | Float | Optional |
 | od_cylinder, os_cylinder | Float | Optional |
 | od_axis, os_axis | Integer | Optional |
 | od_add, os_add | Float | Optional |
 | od_va, os_va | String | Optional |
+
+### 12.6a Refraction-type distinction: habitual, manifest, cycloplegic (v2.8)
+
+`refraction_type` has existed on this table since before v1.0, but until v2.8 it was write-only decoration: `create_exam` always hardcoded `"manifest"`, the new-exam form had exactly one refraction section with no type selector, and the detail page rendered only `exam.refractions[0]` regardless of type. Every exam could carry at most one refraction record, always labeled manifest, whatever was actually measured.
+
+This is the first, narrow slice recommended in `VISION_EHR_DATA_STANDARDS_RESEARCH.md` §4.2 (the IHE General Eye Evaluation profile's three-step refraction matrix) — deliberately scoped to just the type distinction using the columns this table already had, not the full FHIR/`VisionPrescription`/DICOM/terminology rework that document's "Next steps" also describes and explicitly defers.
+
+**What changed:**
+- The new-exam form (`exams/form.html`) now has three independent refraction sections — Habitual ("patient's current glasses, as worn in"), Manifest ("subjective refinement"), Cycloplegic ("post-dilation") — each with its own OD/OS sphere/cylinder/axis/add/VA fields, prefixed `hab_`/`man_`/`cyc_`.
+- `create_exam` (`ehr/routes/exams.py`) creates a `Refraction` row per type, independently, only when that type's OD or OS sphere was actually entered — an exam can have any subset of the three (zero, one, two, or all three), matching real clinical workflows (e.g., cycloplegic refraction is not performed at every visit).
+- The exam detail page (`exams/detail.html`) shows a labeled section for each type actually present, in clinical order (Habitual, Manifest, Cycloplegic), instead of an unconditional single "Manifest Refraction" section keyed to array position 0.
+- No schema migration was needed — `refraction_type` was already a column on every `refractions` row; this is a behavior change (multiple typed rows per exam instead of one untyped one), not a new column.
+- Seed data (`ehr/db/seed.py`) now seeds both a habitual and a manifest refraction on the demo patient's exam, so the multi-type display is visible immediately in the seeded demo data rather than only after manual entry.
+
+**What this does not do:** there is still no edit route for an existing exam (exams are create-only, as before); no cycloplegic-specific fields (agent used, pupil size); no coded/structured clinical findings; and no FHIR `Observation`/`VisionPrescription` resource shape, SNOMED/LOINC/ICD-10 coding, or DICOM device integration — all of that remains open, per `VISION_EHR_DATA_STANDARDS_RESEARCH.md`'s own "Next steps," and is tracked at §36.5 item 11.
+
+**Verified**: local SQLite instance — the seeded exam's detail page renders both Habitual and Manifest sections with correct values; the new-exam form posts the three prefixed field groups correctly; a new exam created with only cycloplegic fields filled in shows only a Cycloplegic Refraction section (no empty Habitual/Manifest sections rendered); the full Playwright suite (8/8) passes.
 
 ### 12.7 Prescription
 
@@ -1258,7 +1275,7 @@ The following is not part of the implemented baseline. It is the recommended ord
 9. Accessibility, responsive design, user-facing validation, and error recovery. *(Responsive design is now partially addressed — see §14.3 — but validation/error recovery and full accessibility remain open.)*
 10. Billing, optical workflows, communications, integrations, reporting, general document/image management, and other expansion areas selected by product strategy.
 
-**Related reference material (not yet acted on):** `VISION_EHR_DATA_STANDARDS_RESEARCH.md`, saved alongside this document, collects the dominant external eye-care EHR data standards (HL7 Eye Care Functional Profile, the HL7 FHIR Eye Care Implementation Guide, IHE General Eye Evaluation and Eye Care Displayable Report profiles, DICOM ophthalmology supplements, and SNOMED-CT/LOINC/ICD-10 coding conventions for laterality-specific findings). It is intended to inform a future rework of item 7 above (clinical record lifecycle) and the underlying `EyeExam`/`Refraction`/`Prescription` data model (§12.5–§12.7) — specifically the current model's lack of habitual/manifest/cycloplegic refraction distinction, coded (vs. free-text) clinical findings, and any device/DICOM integration path. Nothing in that research document has been implemented; it is stored for planning a future session's scoping conversation, not as a commitment to a specific approach or timeline.
+**Related reference material:** `VISION_EHR_DATA_STANDARDS_RESEARCH.md`, saved alongside this document, collects the dominant external eye-care EHR data standards (HL7 Eye Care Functional Profile, the HL7 FHIR Eye Care Implementation Guide, IHE General Eye Evaluation and Eye Care Displayable Report profiles, DICOM ophthalmology supplements, and SNOMED-CT/LOINC/ICD-10 coding conventions for laterality-specific findings). It is intended to inform a future rework of item 7 above (clinical record lifecycle) and the underlying `EyeExam`/`Refraction`/`Prescription` data model (§12.5–§12.7). **Its first recommended narrow slice — the habitual/manifest/cycloplegic refraction-type distinction — was implemented in v2.8** (§12.6a). Coded (vs. free-text) clinical findings, FHIR `Observation`/`VisionPrescription` resource shapes, SNOMED-CT/LOINC/ICD-10-CM coding, and any device/DICOM integration path remain unimplemented and are stored for planning a future session's scoping conversation, not as a commitment to a specific approach or timeline.
 
 ## 23. Traceability Summary
 
@@ -1269,7 +1286,7 @@ The following is not part of the implemented baseline. It is the recommended ord
 | Dashboard | `ehr/app.py`, `dashboard.html` | Loaded; seed counts, panels, and the missed-check-in banner (v1.5) confirmed |
 | Patients (incl. photo upload) | `routes/patients.py`, patient templates | Search, create, detail, edit, photo upload/thumbnail/placeholder, and 404 confirmed |
 | Appointments (incl. calendar click-to-create) | `routes/appointments.py`, appointment templates | List, calendar, click-to-create, create, status, and error behavior confirmed |
-| Eye exams | `routes/exams.py`, exam templates | Form, creation, refraction creation, detail, and 404 confirmed |
+| Eye exams | `routes/exams.py`, exam templates | Form, creation, refraction creation, detail, and 404 confirmed; **(v2.8)** habitual/manifest/cycloplegic refraction-type distinction confirmed (§12.6a) |
 | Prescriptions | `routes/prescriptions.py`, prescription templates | Creation, exam link, detail, print (with logo), and 404 confirmed |
 | **(v1.3) Appointment Scheduling Module** — types, versions, color rules, tests, day/week views, provider conflicts | `routes/appointments.py`, `routes/admin_scheduling.py`, `services/scheduling.py`, `models/database.py`, `db/migrations.py` | Manual curl/flow verification plus a synthetic-database migration test (§26.1, §26.8–§26.9); no automated test suite (§26.10 item 7) |
 | **(v1.3) Schema migration runner** | `db/migrations.py` | 11 migrations traced in full against source; ordering, idempotency, and table/column effects verified by direct reading — see §25.16a |
@@ -2464,7 +2481,7 @@ These are the gaps that remain genuinely open after this reconciliation pass, co
 8. **No CPT/procedure coding, claims data model, or payer connectivity** behind any of the 5 Claim Management placeholder screens (§35.3).
 9. **No optical-product/inventory data model** behind the Catalog placeholders, and no real order-lab tracking behind Order Management (§27.6).
 10. ~~**No `created_by_user_id`/`updated_by_user_id` attribution** anywhere, since no user model exists (§26.10 item 6).~~ **Partially resolved in v2.7** — `Appointment` now has both columns; `AppointmentTypeVersion` attribution remains open (§26.10 item 6).
-11. **Diagnosis codes, clinical findings, and refractions remain free-text/unstructured**, with no coded-data model, habitual/manifest/cycloplegic refraction distinction, or device/DICOM integration (§22, referencing the separate `VISION_EHR_DATA_STANDARDS_RESEARCH.md`).
+11. **Diagnosis codes, clinical findings, and refractions remain free-text/unstructured**, with no coded-data model or device/DICOM integration (§22, referencing the separate `VISION_EHR_DATA_STANDARDS_RESEARCH.md`). ~~habitual/manifest/cycloplegic refraction distinction~~ **resolved in v2.8** — see §12.6a. FHIR `Observation`/`VisionPrescription` resource shapes, SNOMED-CT/LOINC/ICD-10-CM coding, and DICOM device integration remain open, as `VISION_EHR_DATA_STANDARDS_RESEARCH.md`'s own "Next steps" anticipated this would be a multi-session effort with the type distinction as only its first slice.
 12. **No visual Resource Schedule grid view**, though the underlying `Resource`/`AvailabilityTemplate` data exists (§27.6, §31.3).
 13. **No pagination, advanced filtering, or bulk operations** on any list screen (patients, appointments, admin lists).
 
@@ -2655,3 +2672,10 @@ Two of four prerequisites are now fully done, with real, verifiable technical wo
 | New capability | A color-rule builder UI (`/admin/scheduling/appointment-types/{id}/color-rules`) replaces direct-database-access editing of `AppointmentTypeColorRule` rows. See §26.10 item 2, §36.5 item 7. |
 | New capability | A real open-slot availability search replaces the `/appointments/availability` placeholder, backed by two new provider-scoped working-hours tables (`ProviderAvailabilityTemplate`/`ProviderAvailabilityException`, migration `014_create_provider_availability_tables`) and a new admin page to manage them. Also fixes a latent bug found during this work: the old route read its provider filter via `Form(None)` on a `GET` request, which never actually receives a value. See new §26.10 item 3 resolution and §26.11. |
 | Updated | §9.8, §26.10 (items 2, 3, 6), §36.5 (items 6, 7, 10) updated to reflect the above. None of this bears on the four go-live prerequisites (§38.6) — they are unchanged from v2.6. |
+
+**Version 2.8 change log (relative to v2.7) — narrow first slice of `VISION_EHR_DATA_STANDARDS_RESEARCH.md`, not go-live-relevant:**
+
+| Area | Change |
+| --- | --- |
+| New capability | The `Refraction.refraction_type` column (present since before v1.0 but previously write-only, always hardcoded to `manifest`) is now actually used: the new-exam form captures independent Habitual, Manifest, and Cycloplegic refraction sections, `create_exam` creates a typed row per section actually filled in, and the exam detail page shows each type present, in clinical order. No schema migration was needed. See new §12.6a. |
+| Updated | §12.6, §22, §23, §36.5 item 11 updated to reflect the above — this is deliberately scoped as the first narrow slice `VISION_EHR_DATA_STANDARDS_RESEARCH.md` recommended, not the full FHIR/DICOM/terminology rework that document also describes and still defers. |
