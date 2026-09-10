@@ -571,6 +571,26 @@ def migration_013_appointment_created_updated_by(conn):
     _add_column_if_missing(conn, "appointments", "created_by_user_id", "INTEGER")
     _add_column_if_missing(conn, "appointments", "updated_by_user_id", "INTEGER")
 
+# ---------------------------------------------------------------------------
+# Migration: 015 -- Refractive Assessment & Plan structured fields
+# (VISION_EHR_DATA_STANDARDS_RESEARCH.md 5.1), reviewed/reconciled in v2.9,
+# built in v2.10. Structured Assessment columns on eye_exams, structured Plan
+# (lens design/follow-up) columns on prescriptions. Plain nullable VARCHAR --
+# no DB-level enum, matching every other multi-choice field in this schema.
+# ---------------------------------------------------------------------------
+def migration_015_refractive_assessment_and_plan(conn):
+    if _table_exists(conn, "eye_exams"):
+        _add_column_if_missing(conn, "eye_exams", "refractive_diagnosis", "VARCHAR")
+        _add_column_if_missing(conn, "eye_exams", "refractive_laterality", "VARCHAR")
+        _add_column_if_missing(conn, "eye_exams", "refractive_stability", "VARCHAR")
+        _add_column_if_missing(conn, "eye_exams", "refractive_secondary_findings", "VARCHAR")
+    if _table_exists(conn, "prescriptions"):
+        _add_column_if_missing(conn, "prescriptions", "lens_type", "VARCHAR")
+        _add_column_if_missing(conn, "prescriptions", "lens_material", "VARCHAR")
+        _add_column_if_missing(conn, "prescriptions", "lens_treatments", "VARCHAR")
+        _add_column_if_missing(conn, "prescriptions", "recall_interval", "VARCHAR")
+        _add_column_if_missing(conn, "prescriptions", "patient_education_tags", "VARCHAR")
+
 # Ordered list of (id, function). Adding new migrations: append, never edit past entries.
 COLUMN_MIGRATIONS = [
     ("001_appointment_columns", migration_001_appointment_columns),
@@ -582,6 +602,7 @@ COLUMN_MIGRATIONS = [
     ("012_create_auth_tables", migration_012_create_auth_tables),
     ("013_appointment_created_updated_by", migration_013_appointment_created_updated_by),
     ("014_create_provider_availability_tables", migration_014_create_provider_availability_tables),
+    ("015_refractive_assessment_and_plan", migration_015_refractive_assessment_and_plan),
 ]
 POST_CREATE_ALL_MIGRATIONS = [
     ("002_seed_appointment_types", migration_002_seed_appointment_types),

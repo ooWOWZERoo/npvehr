@@ -36,6 +36,30 @@
       <tr><td>OS</td><td><input name="os_bc" type="number" step="0.1" placeholder="8.6"></td><td><input name="os_dia" type="number" step="0.1" placeholder="14.2"></td><td><input name="os_brand"></td></tr>
     </table>
     </div>
+    <div class="section-title">Lens Design &amp; Follow-Up <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; structured plan fields (VISION_EHR_DATA_STANDARDS_RESEARCH.md 5.1)</span></div>
+    <div class="form-row cols-3">
+      <div class="form-group"><label>Lens Type</label>
+        <select name="lens_type"><option value="">&mdash;</option><option>Single Vision</option><option>Bifocal</option><option>Trifocal</option><option>Progressive</option><option>Office-Computer</option></select>
+      </div>
+      <div class="form-group"><label>Lens Material</label>
+        <select name="lens_material"><option value="">&mdash;</option><option>CR-39</option><option>Polycarbonate</option><option>Trivex</option><option>Hi-Index 1.67</option><option>Hi-Index 1.74</option></select>
+      </div>
+      <div class="form-group"><label>Recall Interval</label>
+        <select name="recall_interval"><option value="">&mdash;</option><option>3 Months</option><option>6 Months</option><option>1 Year</option><option>2 Years</option></select>
+      </div>
+    </div>
+    <div class="form-group"><label>Lens Treatments</label></div>
+    <div class="test-chip-list">
+      {% for t in ['Anti-Reflective Coating', 'Blue Light Filter', 'Transitions/Photochromic', 'Polarized'] %}
+      <label class="test-chip"><input type="checkbox" name="lens_treatments" value="{{ t }}"> {{ t }}</label>
+      {% endfor %}
+    </div>
+    <div class="form-group"><label>Patient Education</label></div>
+    <div class="test-chip-list">
+      {% for tag in ['20-20-20 Rule', 'UV Protection', 'Contact Lens hygiene'] %}
+      <label class="test-chip"><input type="checkbox" name="patient_education_tags" value="{{ tag }}"> {{ tag }}</label>
+      {% endfor %}
+    </div>
     <div class="form-group" style="margin-top:1rem"><label>Notes</label><textarea name="notes"></textarea></div>
     <div class="form-actions"><button type="submit" class="btn btn-primary">Save Prescription</button></div>
   </form>

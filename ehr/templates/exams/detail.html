@@ -74,6 +74,14 @@
     </div>
   </div>
 </div>
+{% if exam.refractive_diagnosis or exam.refractive_laterality or exam.refractive_stability or exam.refractive_secondary_findings %}
+<div class="card" style="margin-top:1rem"><h3>Refractive Assessment</h3><dl class="dl-grid">
+  <dt>Diagnosis</dt><dd>{{ exam.refractive_diagnosis or '—' }}</dd>
+  <dt>Laterality</dt><dd>{{ exam.refractive_laterality or '—' }}</dd>
+  <dt>Stability</dt><dd>{{ exam.refractive_stability or '—' }}</dd>
+  <dt>Secondary Findings</dt><dd>{{ exam.refractive_secondary_findings or '—' }}</dd>
+</dl></div>
+{% endif %}
 <div class="card" style="margin-top:1rem"><h3>Assessment &amp; Plan</h3>
   <div class="form-row cols-2">
     <div><strong>Assessment</strong><p>{{ exam.assessment or '—' }}</p></div>

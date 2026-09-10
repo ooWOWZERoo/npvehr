@@ -1,7 +1,7 @@
 # New Path Vision EHR
 ## Baseline Product Definition and Current-State Functional Specification
 
-**Document version:** 2.9 (supersedes v2.8; a documentation-only pass reconciling an uploaded requirements document into `VISION_EHR_DATA_STANDARDS_RESEARCH.md` §5 and this document's §19/§36.5 — five additional clinical-dashboard proposals plus e-prescribing/optical-lab/inventory requirements, all recorded as target-state only, no code/schema/migration changed; none of this bears on the four go-live prerequisites, which are unchanged from v2.6)
+**Document version:** 2.10 (supersedes v2.9; builds the Refractive Assessment & Plan structured fields documented in `VISION_EHR_DATA_STANDARDS_RESEARCH.md` §5.1 — new columns on `EyeExam` and `Prescription`, migration `015_refractive_assessment_and_plan`, no new tables; see §12.5a/§12.7a and §36.5 item 14; none of this bears on the four go-live prerequisites, which are unchanged from v2.6)
 **Baseline date:** September 9, 2026
 **Application-reported version:** 1.0.0
 **Baseline source:** `setup_ehr.py` self-contained scaffold script (locally generated `visioncare_ehr/` project directory; see §2.2)
@@ -914,9 +914,21 @@ erDiagram
 | Slit lamp | OD/OS lids, cornea, lens as String |
 | Fundus | OD/OS disc, macula, vessels, periphery as String |
 | Conclusion | `assessment`, `plan` Text; `diagnosis_codes` String; `follow_up_weeks` Integer |
+| Refractive assessment *(v2.10, see §12.5a)* | `refractive_diagnosis`, `refractive_laterality`, `refractive_stability`, `refractive_secondary_findings` — all String |
 | Metadata | `created_at` DateTime defaulting to naive UTC |
 
-**Model observations:** Clinical findings are primarily unstructured strings. Diagnosis codes are stored as one free-text string rather than related coded records.
+**Model observations:** Clinical findings are primarily unstructured strings, aside from the v2.10 structured refractive-assessment fields (§12.5a). Diagnosis codes are stored as one free-text string rather than related coded records.
+
+### 12.5a Structured Refractive Assessment fields (v2.10)
+
+`VISION_EHR_DATA_STANDARDS_RESEARCH.md` §5.1 documented a structured Assessment field set, translated from an uploaded requirements document, extending — not replacing — the free-text `assessment`/`diagnosis_codes` fields above. Built as four plain nullable `VARCHAR` columns, no DB-level enum, matching this schema's existing convention for other multi-choice fields (e.g. `Refraction.refraction_type`):
+
+- `refractive_diagnosis` — comma-delimited multi-value (Myopia, Hyperopia, Astigmatism, Presbyopia, Anisometropia, Emmetropia).
+- `refractive_laterality` — `OD` / `OS` / `OU`.
+- `refractive_stability` — Stable / Progressing / Improving.
+- `refractive_secondary_findings` — comma-delimited multi-value (Amblyopia, Strabismus history, Cataract suspect, Suspect Glaucoma).
+
+Added via migration `015_refractive_assessment_and_plan`, verified against fresh SQLite and Postgres databases (including idempotent re-run). All four are optional — an exam with none of them set renders identically to a pre-v2.10 exam (the new "Refractive Assessment" card on the detail page is conditionally hidden when all four are empty). The new-exam form captures diagnosis and secondary findings as checkbox groups (this app's existing `test-chip` pattern) and laterality/stability as dropdowns. Diagnosis coding stays free-text via the existing `diagnosis_codes` field — no ICD-10 lookup table, per the v2.9 decision to defer terminology-server work (§22, §4.4 of the research doc).
 
 ### 12.6 Refraction
 
@@ -960,7 +972,22 @@ This is the first, narrow slice recommended in `VISION_EHR_DATA_STANDARDS_RESEAR
 | OS optical values | sphere/cylinder/add/prism Float; axis Integer; base String |
 | OS contact values | base curve and diameter Float; brand String |
 | Narrative | `notes` Text |
+| Lens design & follow-up *(v2.10, see §12.7a)* | `lens_type`, `lens_material`, `lens_treatments`, `recall_interval`, `patient_education_tags` — all String |
 | Metadata | `created_at` DateTime defaulting to naive UTC |
+
+### 12.7a Structured Lens Design & Follow-Up plan fields (v2.10)
+
+The Plan-side counterpart to §12.5a, from the same source (`VISION_EHR_DATA_STANDARDS_RESEARCH.md` §5.1). Five plain nullable `VARCHAR` columns, not restricted to `rx_type == "glasses"` — the same non-restrictive treatment the existing contact-lens fields already get on a glasses Rx:
+
+- `lens_type` — Single Vision / Bifocal / Trifocal / Progressive / Office-Computer.
+- `lens_material` — CR-39 / Polycarbonate / Trivex / Hi-Index 1.67 / Hi-Index 1.74.
+- `lens_treatments` — comma-delimited multi-value (Anti-Reflective Coating, Blue Light Filter, Transitions/Photochromic, Polarized).
+- `recall_interval` — 3 Months / 6 Months / 1 Year / 2 Years.
+- `patient_education_tags` — comma-delimited multi-value (20-20-20 Rule, UV Protection, Contact Lens hygiene).
+
+Added via the same migration `015_refractive_assessment_and_plan` as §12.5a. All five are optional and shown on the Rx detail page (a "Lens Design & Follow-Up" section, conditionally hidden when all five are empty) and on the printed Rx (`prescriptions/print.html`) when at least one of `lens_type`/`lens_material`/`lens_treatments` is set.
+
+**Verified** (both §12.5a and §12.7a): local SQLite instance — new-exam and new-Rx forms render the new fields; a created exam/Rx with the new fields set displays them correctly on its detail page (multi-select checkboxes correctly comma-joined); an exam/Rx created with none of the new fields set still renders cleanly with no error and no empty card; the full Playwright suite passes. Postgres verified via a fresh local database (migration `015` applied, all nine new columns confirmed present via `sqlalchemy.inspect`, then re-run to confirm idempotency).
 
 ### 12.8 Database behavior
 
@@ -2485,7 +2512,7 @@ These are the gaps that remain genuinely open after this reconciliation pass, co
 11. **Diagnosis codes, clinical findings, and refractions remain free-text/unstructured**, with no coded-data model or device/DICOM integration (§22, referencing the separate `VISION_EHR_DATA_STANDARDS_RESEARCH.md`). ~~habitual/manifest/cycloplegic refraction distinction~~ **resolved in v2.8** — see §12.6a. FHIR `Observation`/`VisionPrescription` resource shapes, SNOMED-CT/LOINC/ICD-10-CM coding, and DICOM device integration remain open, as `VISION_EHR_DATA_STANDARDS_RESEARCH.md`'s own "Next steps" anticipated this would be a multi-session effort with the type distinction as only its first slice.
 12. **No visual Resource Schedule grid view**, though the underlying `Resource`/`AvailabilityTemplate` data exists (§27.6, §31.3).
 13. **No pagination, advanced filtering, or bulk operations** on any list screen (patients, appointments, admin lists).
-14. **New, v2.9 — no chronic-disease/glaucoma tracking, vision-therapy tracking, or pre-/post-op co-management data model.** Field-level requirements for all three (plus a structured refractive Assessment & Plan extending §12.6a's work) were reviewed from an uploaded requirements document and documented as target-state only, translated into this app's own conventions (plain columns, no React/async stack, no FHIR mapping yet). See `VISION_EHR_DATA_STANDARDS_RESEARCH.md` §5.1–§5.5. Not implemented; no code, schema, or migration changed this round.
+14. **No chronic-disease/glaucoma tracking, vision-therapy tracking, or pre-/post-op co-management data model.** Field-level requirements for all three were reviewed from an uploaded requirements document and documented as target-state only, translated into this app's own conventions (plain columns, no React/async stack, no FHIR mapping yet). See `VISION_EHR_DATA_STANDARDS_RESEARCH.md` §5.2–§5.5. ~~A structured refractive Assessment & Plan extending §12.6a's work~~ **built in v2.10** — see §12.5a, §12.7a, and `VISION_EHR_DATA_STANDARDS_RESEARCH.md` §5.1. Not implemented for §5.2–§5.5; no code, schema, or migration changed for those this round.
 
 Explicitly **removed** from this list because they are resolved (previously listed as open in earlier versions, now fixed, and confirmed fixed by this pass): no schema-migration mechanism (resolved v1.3); no provider-conflict/availability validation (resolved v1.3); no room/lane/device resource-conflict enforcement (resolved v1.9); `patients.mrn` uniqueness (resolved v1.7); orphaned photo files (resolved v1.7); the `&mdash;` display defect (resolved v1.2, regressed, re-resolved v2.0 — see §33.4 for why this one is worth remembering as a *pattern* rather than a one-time fix); the `.container` flex/grid sizing bug (resolved v1.8); no responsive layout rules (resolved v1.2).
 
@@ -2689,3 +2716,11 @@ Two of four prerequisites are now fully done, with real, verifiable technical wo
 | Reviewed and reconciled | An uploaded requirements document (`NPVEHR_Reqs1.docx`) proposing five clinical Assessment & Plan dashboards (Refractive extensions, Anterior Segment/Dry Eye, Posterior Segment/Glaucoma, Binocular Vision/Vision Therapy, Pre-/Post-Op Co-Management) plus e-prescribing (NCPDP), optical-lab integration (VisionWeb/ANSI Z80), and in-house optical inventory. The document assumed a React+TypeScript/async-SQLAlchemy/Postgres-only stack this app does not use; its field-level content was translated into this app's plain-column, server-rendered conventions and added as new §5 of `VISION_EHR_DATA_STANDARDS_RESEARCH.md`. Per that file's existing FHIR-deferral treatment of `Refraction`/`Prescription` (§4.1, §12.6a), the new dashboards are likewise not FHIR-mapped yet. |
 | Updated | §19 (Capability Boundary) updated so optical inventory, e-prescribing, chronic-disease/vision-therapy/post-op tracking, and optical-lab APIs read as considered-and-deferred rather than never-discussed. §22's "Related reference material" paragraph and §36.5 (items 9, 11, and new item 14) updated to point at the new research-doc section. |
 | Explicitly not done | No new SQLAlchemy models, migrations, routes, or templates. No React/TypeScript introduced. No external vendor connections (e-prescribing, optical lab, RxNorm) attempted — recorded as target-state only, consistent with how DICOM device integration is already treated (§4.3 of the research doc). |
+
+**Version 2.10 change log (relative to v2.9) — builds §5.1 of `VISION_EHR_DATA_STANDARDS_RESEARCH.md`, not go-live-relevant:**
+
+| Area | Change |
+| --- | --- |
+| New capability | Structured Refractive Assessment fields on `EyeExam` (`refractive_diagnosis`, `refractive_laterality`, `refractive_stability`, `refractive_secondary_findings`) and structured Lens Design & Follow-Up plan fields on `Prescription` (`lens_type`, `lens_material`, `lens_treatments`, `recall_interval`, `patient_education_tags`) — nine new plain `VARCHAR` columns via migration `015_refractive_assessment_and_plan`, no new tables. New-exam and new-Rx forms gained checkbox-group/dropdown sections for these; both detail pages and the printed Rx display them, conditionally hidden when empty. See new §12.5a, §12.7a. |
+| Updated | `VISION_EHR_DATA_STANDARDS_RESEARCH.md` §5.1 marked implemented; its "Next steps" item 5 marked done. §36.5 item 14 updated to reflect this slice being built while §5.2–§5.5 (the other four dashboards) remain open. |
+| Explicitly not done | No ICD-10 lookup/auto-populate (diagnosis stays free-text via the existing `diagnosis_codes` field, per the v2.9 terminology-server deferral). No changes to the other four dashboards in §5. No React, no new tables, no external calls. |

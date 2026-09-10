@@ -60,6 +60,26 @@
       <tr><td>OS</td><td><input name="fundus_disc_os"></td><td><input name="fundus_macula_os"></td><td><input name="fundus_vessels_os"></td><td><input name="fundus_periphery_os"></td></tr>
     </table>
     </div>
+    <div class="section-title">Refractive Assessment <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; structured diagnosis fields (VISION_EHR_DATA_STANDARDS_RESEARCH.md 5.1)</span></div>
+    <div class="test-chip-list">
+      {% for dx in ['Myopia', 'Hyperopia', 'Astigmatism', 'Presbyopia', 'Anisometropia', 'Emmetropia'] %}
+      <label class="test-chip"><input type="checkbox" name="refractive_diagnosis" value="{{ dx }}"> {{ dx }}</label>
+      {% endfor %}
+    </div>
+    <div class="form-row cols-2">
+      <div class="form-group"><label>Laterality</label>
+        <select name="refractive_laterality"><option value="">&mdash;</option><option value="OD">OD (Right)</option><option value="OS">OS (Left)</option><option value="OU">OU (Both)</option></select>
+      </div>
+      <div class="form-group"><label>Stability</label>
+        <select name="refractive_stability"><option value="">&mdash;</option><option>Stable</option><option>Progressing</option><option>Improving</option></select>
+      </div>
+    </div>
+    <div class="form-group"><label>Secondary Findings</label></div>
+    <div class="test-chip-list">
+      {% for finding in ['Amblyopia', 'Strabismus history', 'Cataract suspect', 'Suspect Glaucoma'] %}
+      <label class="test-chip"><input type="checkbox" name="refractive_secondary_findings" value="{{ finding }}"> {{ finding }}</label>
+      {% endfor %}
+    </div>
     <div class="section-title">Assessment &amp; Plan</div>
     <div class="form-row cols-2">
       <div class="form-group"><label>Assessment</label><textarea name="assessment"></textarea></div>

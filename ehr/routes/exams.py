@@ -32,6 +32,7 @@ def new_exam_form(request: Request, patient_id: int = None, db: Session = Depend
 async def create_exam(request: Request, db: Session = Depends(get_db)):
     form = await request.form()
     g = lambda k: form.get(k, "")
+    gl = lambda k: ", ".join(form.getlist(k))  # comma-join a multi-value (checkbox) field
     exam = EyeExam(
         patient_id=int(g("patient_id")), provider_id=int(g("provider_id")),
         exam_date=g("exam_date"), chief_complaint=g("chief_complaint"),
@@ -46,7 +47,9 @@ async def create_exam(request: Request, db: Session = Depends(get_db)):
         fundus_vessels_od=g("fundus_vessels_od"), fundus_vessels_os=g("fundus_vessels_os"),
         fundus_periphery_od=g("fundus_periphery_od"), fundus_periphery_os=g("fundus_periphery_os"),
         assessment=g("assessment"), plan=g("plan"),
-        diagnosis_codes=g("diagnosis_codes"), follow_up_weeks=_i(g("follow_up_weeks")))
+        diagnosis_codes=g("diagnosis_codes"), follow_up_weeks=_i(g("follow_up_weeks")),
+        refractive_diagnosis=gl("refractive_diagnosis"), refractive_laterality=g("refractive_laterality"),
+        refractive_stability=g("refractive_stability"), refractive_secondary_findings=gl("refractive_secondary_findings"))
     db.add(exam); db.flush()
     # Three-step refraction matrix (IHE GEE): habitual (current glasses as worn
     # in), manifest (subjective refinement), cycloplegic (post-dilation). Each

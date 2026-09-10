@@ -34,6 +34,16 @@
       </tr>
     </table>
     </div>
+    {% if rx.lens_type or rx.lens_material or rx.lens_treatments or rx.recall_interval or rx.patient_education_tags %}
+    <h3 style="margin-top:1rem">Lens Design &amp; Follow-Up</h3>
+    <dl class="dl-grid">
+      <dt>Lens Type</dt><dd>{{ rx.lens_type or '—' }}</dd>
+      <dt>Material</dt><dd>{{ rx.lens_material or '—' }}</dd>
+      <dt>Treatments</dt><dd>{{ rx.lens_treatments or '—' }}</dd>
+      <dt>Recall Interval</dt><dd>{{ rx.recall_interval or '—' }}</dd>
+      <dt>Patient Education</dt><dd>{{ rx.patient_education_tags or '—' }}</dd>
+    </dl>
+    {% endif %}
     {% if rx.notes %}<p style="margin-top:0.75rem;font-size:0.875rem"><strong>Notes:</strong> {{ rx.notes }}</p>{% endif %}
   </div>
 </div>

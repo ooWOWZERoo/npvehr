@@ -40,6 +40,10 @@
       {% if rx.rx_type == 'contacts' %}<td>{{ rx.os_bc or '—' }}</td><td>{{ rx.os_dia or '—' }}</td><td>{{ rx.os_brand or '—' }}</td>{% endif %}
     </tr>
   </table>
+  {% if rx.lens_type or rx.lens_material or rx.lens_treatments %}
+  <p><strong>Lens:</strong> {{ rx.lens_type or '—' }}{% if rx.lens_material %}, {{ rx.lens_material }}{% endif %}{% if rx.lens_treatments %} ({{ rx.lens_treatments }}){% endif %}</p>
+  {% endif %}
+  {% if rx.recall_interval %}<p><strong>Recall:</strong> {{ rx.recall_interval }}</p>{% endif %}
   {% if rx.notes %}<p><strong>Notes:</strong> {{ rx.notes }}</p>{% endif %}
   <div class="footer"><p>Provider Signature: ______________________________ &nbsp; License #: {{ rx.provider.license_number or '—' }} &nbsp; NPI: {{ rx.provider.npi or '—' }}</p></div>
 </body>

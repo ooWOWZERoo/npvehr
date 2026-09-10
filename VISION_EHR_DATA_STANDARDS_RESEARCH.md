@@ -79,9 +79,9 @@ The current data model (`EyeExam`, `Refraction`, `Prescription` in `ehr/models/d
 
 Per the same reasoning already applied to §4.1 above, this section's schemas are **not** mapped to FHIR resources yet — that mapping is deferred for the same reason item 1 in "Next steps" below is still open. Nothing in this section is implemented; it is target-state requirements only.
 
-### 5.1 Comprehensive Refractive & Exam dashboard
+### 5.1 Comprehensive Refractive & Exam dashboard — **implemented in v2.10**
 
-Extends the existing `EyeExam`/`Refraction`/`Prescription` tables (§12.5–§12.7 of the baseline spec) rather than replacing them — the source document's "Assessment" fields are new, but its "Plan" (spectacle Rx) fields mostly already exist on `Prescription`.
+Extends the existing `EyeExam`/`Refraction`/`Prescription` tables (§12.5–§12.7 of the baseline spec) rather than replacing them — the source document's "Assessment" fields are new, but its "Plan" (spectacle Rx) fields mostly already exist on `Prescription`. **Built in v2.10** exactly as scoped below: plain nullable `VARCHAR` columns (migration `015_refractive_assessment_and_plan`), new form sections in `exams/form.html`/`prescriptions/form.html` using the existing `test-chip` checkbox-group pattern for multi-value fields, and display on both detail pages plus the printed Rx. Diagnosis coding stayed free-text as planned — no ICD-10 lookup table.
 
 | Field | Translated type | Notes |
 | --- | --- | --- |
@@ -90,11 +90,11 @@ Extends the existing `EyeExam`/`Refraction`/`Prescription` tables (§12.5–§12
 | Stability | String | Stable / Progressing / Improving |
 | Secondary Findings | String (multi-value) | Amblyopia, Strabismus history, Cataract suspect, Suspect Glaucoma |
 | Diagnosis code | Existing `EyeExam.diagnosis_codes` free-text field already covers this; an ICD-10 code table/auto-populate is future terminology-server work (§4.4), not new here |
-| Lens Type *(new — not on `Prescription` today)* | String | Single Vision / Bifocal / Trifocal / Progressive / Office-Computer |
-| Lens Material *(new)* | String | CR-39 / Polycarbonate / Trivex / Hi-Index 1.67 / Hi-Index 1.74 |
-| Lens Treatments *(new)* | String (multi-value) | Anti-Reflective Coating, Blue Light Filter, Transitions/Photochromic, Polarized |
-| Recall Interval *(new)* | String | 3 Months / 6 Months / 1 Year / 2 Years |
-| Patient Education Tags *(new)* | String (multi-value) | 20-20-20 Rule, UV Protection, Contact Lens hygiene |
+| Lens Type | String | Single Vision / Bifocal / Trifocal / Progressive / Office-Computer |
+| Lens Material | String | CR-39 / Polycarbonate / Trivex / Hi-Index 1.67 / Hi-Index 1.74 |
+| Lens Treatments | String (multi-value) | Anti-Reflective Coating, Blue Light Filter, Transitions/Photochromic, Polarized |
+| Recall Interval | String | 3 Months / 6 Months / 1 Year / 2 Years |
+| Patient Education Tags | String (multi-value) | 20-20-20 Rule, UV Protection, Contact Lens hygiene |
 
 ### 5.2 Anterior Segment & Ocular Surface Disease (Dry Eye) dashboard
 
@@ -181,5 +181,5 @@ These are all **real external integrations or a genuinely new inventory subsyste
 2. If pursued, sequence it similarly to past big builds in this project: a scoping conversation first (how much of this to adopt now vs. defer), then a background-agent build with migration + verification, then a living-spec update. **Not started.**
 3. ~~Consider starting narrow: e.g., just add explicit habitual/manifest/cycloplegic refraction types (a small, high-value slice) before attempting full FHIR/DICOM/terminology alignment.~~ **Done, v2.8** — see the baseline spec's §12.6a.
 4. This is a genuinely large scope (FHIR resource modeling, DICOM listener service, a terminology server/code-set integration) — likely multiple future sessions' worth of work, not a single round. Item 3 above was the first such slice; items 1-2 and the DICOM/terminology work remain fully open.
-5. **New, v2.9:** pick one of §5's five dashboards to actually scope and build (most likely §5.1's Refractive Assessment & Plan fields, since it extends the `Refraction`/`Prescription` work already shipped in v2.8 rather than introducing a wholly new table). **Not started** — documentation only this round.
+5. ~~Pick one of §5's five dashboards to actually scope and build (most likely §5.1's Refractive Assessment & Plan fields, since it extends the `Refraction`/`Prescription` work already shipped in v2.8 rather than introducing a wholly new table).~~ **Done, v2.10** — see §5.1. §5.2–§5.5 (Anterior Segment, Glaucoma, Binocular Vision, Pre/Post-Op) remain undone.
 6. **New, v2.9:** §5.6's e-prescribing/lab-integration/inventory material remains target-state only; revisit only once real vendor relationships or credentials exist to integrate against. **Not started.**

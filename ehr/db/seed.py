@@ -145,6 +145,7 @@ def seed_demo_data(db):
         fundus_periphery_od="Flat, intact", fundus_periphery_os="Flat, intact",
         assessment="Myopia OU, stable. Astigmatism OU.", plan="New glasses prescription. RTC 1 year.",
         diagnosis_codes="H52.13, H52.219", follow_up_weeks=52,
+        refractive_diagnosis="Myopia, Astigmatism", refractive_laterality="OU", refractive_stability="Stable",
     )
     db.add(exam); db.flush()
     # Habitual (patient's old glasses, now under-corrected) and manifest
@@ -159,7 +160,10 @@ def seed_demo_data(db):
     db.add(Prescription(patient_id=pts[0].id, exam_id=exam.id, provider_id=p1.id,
         rx_type="glasses", issue_date="2026-09-01", expiry_date="2027-09-01",
         od_sphere=-3.25, od_cylinder=-0.75, od_axis=180,
-        os_sphere=-2.50, os_cylinder=-0.50, os_axis=175))
+        os_sphere=-2.50, os_cylinder=-0.50, os_axis=175,
+        lens_type="Progressive", lens_material="Polycarbonate",
+        lens_treatments="Anti-Reflective Coating, Blue Light Filter",
+        recall_interval="1 Year", patient_education_tags="20-20-20 Rule, UV Protection"))
     db.commit(); db.close()
     print("Seeded database.")
 

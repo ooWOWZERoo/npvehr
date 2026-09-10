@@ -33,6 +33,7 @@ def new_rx_form(request: Request, patient_id: int = None, exam_id: int = None, d
 async def create_rx(request: Request, db: Session = Depends(get_db)):
     form = await request.form()
     g = lambda k: form.get(k, "")
+    gl = lambda k: ", ".join(form.getlist(k))  # comma-join a multi-value (checkbox) field
     rx = Prescription(
         patient_id=int(g("patient_id")), provider_id=int(g("provider_id")),
         exam_id=_i(g("exam_id")), rx_type=g("rx_type") or "glasses",
@@ -42,7 +43,9 @@ async def create_rx(request: Request, db: Session = Depends(get_db)):
         od_bc=_f(g("od_bc")), od_dia=_f(g("od_dia")), od_brand=g("od_brand"),
         os_sphere=_f(g("os_sphere")), os_cylinder=_f(g("os_cylinder")), os_axis=_i(g("os_axis")),
         os_add=_f(g("os_add")), os_prism=_f(g("os_prism")), os_base=g("os_base"),
-        os_bc=_f(g("os_bc")), os_dia=_f(g("os_dia")), os_brand=g("os_brand"), notes=g("notes"))
+        os_bc=_f(g("os_bc")), os_dia=_f(g("os_dia")), os_brand=g("os_brand"), notes=g("notes"),
+        lens_type=g("lens_type"), lens_material=g("lens_material"), lens_treatments=gl("lens_treatments"),
+        recall_interval=g("recall_interval"), patient_education_tags=gl("patient_education_tags"))
     db.add(rx); db.commit(); db.refresh(rx)
     return RedirectResponse(f"/prescriptions/{rx.id}", status_code=303)
 

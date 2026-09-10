@@ -445,6 +445,15 @@ class EyeExam(Base):
     fundus_periphery_od = Column(String); fundus_periphery_os = Column(String)
     assessment = Column(Text); plan = Column(Text)
     diagnosis_codes = Column(String); follow_up_weeks = Column(Integer)
+    # Structured Refractive Assessment (VISION_EHR_DATA_STANDARDS_RESEARCH.md
+    # 5.1), alongside the free-text assessment/diagnosis_codes above -- diagnosis
+    # coding itself stays free-text (deferred terminology-server work, 4.4); these
+    # are comma-delimited multi-value strings where noted, matching this app's
+    # existing convention for other multi-choice fields (e.g. Refraction.refraction_type).
+    refractive_diagnosis = Column(String)  # comma-delimited: Myopia, Hyperopia, Astigmatism, Presbyopia, Anisometropia, Emmetropia
+    refractive_laterality = Column(String)  # OD / OS / OU
+    refractive_stability = Column(String)  # Stable / Progressing / Improving
+    refractive_secondary_findings = Column(String)  # comma-delimited: Amblyopia, Strabismus history, Cataract suspect, Suspect Glaucoma
     created_at = Column(DateTime, default=datetime.utcnow)
     patient = relationship("Patient", back_populates="eye_exams")
     provider = relationship("Provider", back_populates="eye_exams")
@@ -482,6 +491,14 @@ class Prescription(Base):
     os_add = Column(Float); os_prism = Column(Float); os_base = Column(String)
     os_bc = Column(Float); os_dia = Column(Float); os_brand = Column(String)
     notes = Column(Text)
+    # Lens Design & Follow-Up plan fields (VISION_EHR_DATA_STANDARDS_RESEARCH.md
+    # 5.1) -- not restricted to rx_type == "glasses", same non-restrictive
+    # treatment the existing contact-lens fields already get on a glasses Rx.
+    lens_type = Column(String)  # Single Vision / Bifocal / Trifocal / Progressive / Office-Computer
+    lens_material = Column(String)  # CR-39 / Polycarbonate / Trivex / Hi-Index 1.67 / Hi-Index 1.74
+    lens_treatments = Column(String)  # comma-delimited: Anti-Reflective Coating, Blue Light Filter, Transitions/Photochromic, Polarized
+    recall_interval = Column(String)  # 3 Months / 6 Months / 1 Year / 2 Years
+    patient_education_tags = Column(String)  # comma-delimited: 20-20-20 Rule, UV Protection, Contact Lens hygiene
     created_at = Column(DateTime, default=datetime.utcnow)
     patient = relationship("Patient", back_populates="prescriptions")
     exam = relationship("EyeExam", back_populates="prescriptions")
