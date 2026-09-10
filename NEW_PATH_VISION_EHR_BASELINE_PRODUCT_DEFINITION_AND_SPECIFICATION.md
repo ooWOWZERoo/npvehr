@@ -1,7 +1,7 @@
 # New Path Vision EHR
 ## Baseline Product Definition and Current-State Functional Specification
 
-**Document version:** 2.6 (supersedes v2.5; the Neon point-in-time-recovery restore procedure documented in §38.3 has now actually been performed and confirmed — restored patient/user/appointment counts matched expected seeded data exactly — closing go-live prerequisite 4; prerequisite 2, a signed BAA, remains the sole fully-open item, since it is a business/legal action no engineering change can complete)
+**Document version:** 2.7 (supersedes v2.6; closes four tracked Appointment Scheduling Module gaps from §26.10/§36.5 — the malformed-date-500 bug, `created_by_user_id`/`updated_by_user_id` attribution on appointments, a color-rule builder UI, and a real open-slot availability search — see §26.10 and §36.5 for what changed and §36.5's own change-log entry below for the full list; none of this bears on the four go-live prerequisites, which are unchanged from v2.6)
 **Baseline date:** September 9, 2026
 **Application-reported version:** 1.0.0
 **Baseline source:** `setup_ehr.py` self-contained scaffold script (locally generated `visioncare_ehr/` project directory; see §2.2)
@@ -364,7 +364,7 @@ flowchart TD
 | GET | `/appointments/{appt_id}/edit` | Edit/reschedule form (new in v1.3) | Yes, HTTP 200 |
 | POST | `/appointments/{appt_id}/edit` | Update appointment (type/relationship/conflict-revalidated) | Yes, redirects to appointment detail; invalid requests return HTTP 400 |
 | POST | `/appointments/{appt_id}/reschedule` | Change date/time only, with conflict recheck (new in v1.3) | Yes |
-| GET | `/appointments/availability` | Open-slot availability search (new in v1.3; **stub page**, not a working slot search — see §26.10) | Yes, HTTP 200 (placeholder content) |
+| GET | `/appointments/availability` | Open-slot availability search (new in v1.3 as a stub; **real search since v2.7** — see §26.11) | Yes, HTTP 200 |
 | POST | `/appointments/{appt_id}/status` | Update appointment status | Yes for valid status |
 | GET | `/exams/new` | New-eye-exam form | Yes, HTTP 200 |
 | POST | `/exams/new` | Create eye exam and optional refraction | Yes, redirects to exam detail |
@@ -405,8 +405,13 @@ flowchart TD
 | POST | `/admin/scheduling/tests/{test_id}/toggle` | Toggle a test's active flag | Yes, redirects to test list |
 | GET | `/admin/scheduling/resources` | Resource list | Yes, HTTP 200 |
 | POST | `/admin/scheduling/resources/new` | Create a resource | Yes, redirects to resource list |
-| GET | `/admin/scheduling/availability` | Availability-template list | Yes, HTTP 200 |
+| GET | `/admin/scheduling/availability` | Availability-template list (resource-scoped) | Yes, HTTP 200 |
 | POST | `/admin/scheduling/availability/new` | Create an availability template row | Yes, redirects to availability list |
+| GET | `/admin/scheduling/provider-availability` | Provider working-hours list (new in v2.7, see §26.11) | Yes, HTTP 200 |
+| POST | `/admin/scheduling/provider-availability/new` | Create a provider working-hours row | Yes, redirects to provider-availability list |
+| GET | `/admin/scheduling/appointment-types/{type_id}/color-rules` | Color-rule builder for a type's latest version (new in v2.7, see §26.10 item 2) | Yes, HTTP 200 |
+| POST | `/admin/scheduling/appointment-types/{type_id}/color-rules` | Create a color rule | Yes, redirects to color-rules page |
+| POST | `/admin/scheduling/appointment-types/{type_id}/color-rules/{rule_id}/delete` | Delete a color rule | Yes, redirects to color-rules page |
 | GET | `/admin/scheduling/audit` | Scheduling audit log (last 100 appointment audit events + last 100 appointment-type audit events) | Yes, HTTP 200 |
 
 All of the above share the same "no authentication or permission check" posture already noted for `/admin/scheduling/holidays` — see §8.2 and §26.1 item 1.
@@ -604,7 +609,7 @@ All of the above share the same "no authentication or permission check" posture 
 - Hovering a day cell reveals a small `+` button in its corner as a visual affordance for the same action; clicking the `+` button behaves identically to clicking the cell.
 - Clicking an existing appointment chip within a day still navigates to that appointment's detail page and does **not** trigger the day's create action (click event propagation is stopped on the chip).
 - The new-appointment form pre-fills the date/time input with the selected date at 09:00, which the user can adjust before saving.
-- **Corrected in v2.3 — stale since v1.3:** this bullet originally read "there is still no availability, business-hours, duplicate, overlap, or provider-conflict validation." That has not been true since v1.3: provider-conflict and type/relationship-eligibility validation are enforced server-side on every create (including via click-to-create), returning HTTP 400 rather than silently accepting the booking — see §9.8 and §26.9. Room/lane/device resource-conflict validation was added in v1.9 (§31). What remains genuinely absent: real open-slot availability search (`/appointments/availability` is still a placeholder, §26.10 item 3) and any business-hours/practice-schedule check beyond the holiday-closure check added in v1.5 (§27.5).
+- **Corrected in v2.3 — stale since v1.3:** this bullet originally read "there is still no availability, business-hours, duplicate, overlap, or provider-conflict validation." That has not been true since v1.3: provider-conflict and type/relationship-eligibility validation are enforced server-side on every create (including via click-to-create), returning HTTP 400 rather than silently accepting the booking — see §9.8 and §26.9. Room/lane/device resource-conflict validation was added in v1.9 (§31). ~~What remains genuinely absent: real open-slot availability search (`/appointments/availability` is still a placeholder, §26.10 item 3)~~ **resolved in v2.7, see §26.11** — and any business-hours/practice-schedule check beyond the holiday-closure check added in v1.5 (§27.5).
 
 **Not implemented on the month calendar specifically (corrected in v2.3 — day/week views exist elsewhere since v1.3):** ~~week/day views~~ — these are separate routes/screens (`GET /appointments/day`, `GET /appointments/week`, §26.7), not alternate renderings of this month view; they do include the filtering (provider/type/relationship/status) this month view still lacks. Drag-and-drop, resource columns, overlapping-event layout, appointment duration visualization, print, and timezone selection remain genuinely absent from all calendar views (month, day, and week alike).
 
@@ -624,7 +629,7 @@ All of the above share the same "no authentication or permission check" posture 
 
 - Patient, provider, and scheduled date/time are required.
 - The server parses `scheduled_at` with `datetime.fromisoformat()`.
-- A malformed date/time produces HTTP 500 rather than a controlled validation response.
+- ~~A malformed date/time produces HTTP 500 rather than a controlled validation response.~~ **Resolved in v2.7** — the parse is now wrapped in `try`/`except`, returning the same HTTP 400-with-re-rendered-form response every other validation failure here already returns, on create, edit, and reschedule.
 - No rule prevents negative, zero, or unusually long durations at the server level — though duration is now normally *derived* from the appointment type/relationship rather than freely typed (§26.5), so this matters mainly for a manually overridden duration (`duration_overridden`, §12.4).
 - ~~No availability, business-hours, duplicate, overlap, or provider-conflict validation exists, even when the appointment is created via calendar click-to-create.~~ **Corrected in v2.3 — resolved since v1.3/v1.5/v1.9, stale claim left uncorrected through v2.2.** Provider-conflict and eligibility validation is enforced server-side (HTTP 400 on conflict), including via calendar click-to-create (§9.7, §26.9); practice-closure/holiday checking is enforced (§27.5); room/lane/device resource-conflict validation is enforced (§31). Real open-slot availability *search* (as opposed to conflict rejection at booking time) remains a placeholder (§26.10 item 3).
 - No foreign-record existence check is performed before insert.
@@ -2048,14 +2053,31 @@ Malformed appointment date/time input on the pre-existing `/appointments/new` ro
 The following target-state requirements were intentionally not built in this pass, and remain open gaps against target-state document v1.0:
 
 1. ~~Resource conflict enforcement beyond providers~~ (target-state §12.1, §12.3) — **Resolved in v1.9**, see §31.
-2. **Color-rule builder UI** (target-state §9.5, §17.3) — rules are correct and versioned but are edited at the database level, not through a form.
-3. **Real open-slot availability search** — `/appointments/availability` (target-state §19.2) is a placeholder page, not a working query against `AvailabilityTemplate`/`AvailabilityException`.
+2. ~~**Color-rule builder UI** (target-state §9.5, §17.3) — rules are correct and versioned but are edited at the database level, not through a form.~~ **Resolved in v2.7** — new `GET`/`POST /admin/scheduling/appointment-types/{id}/color-rules` routes and template let staff create and delete color rules on a type's latest version through a real form, with the same audit-event pattern used for other type edits. Scoped to the latest version only, consistent with this module's versioning (historical versions stay immutable).
+3. ~~**Real open-slot availability search** — `/appointments/availability` (target-state §19.2) is a placeholder page, not a working query against `AvailabilityTemplate`/`AvailabilityException`.~~ **Resolved in v2.7** — see §26.11.
 4. **CSRF protection** (target-state §25) — not implemented; consistent with the pre-existing baseline gap in §15.1, not a new regression.
 5. **Drag-and-drop/resize on calendar views** (target-state §14.5) — not implemented; this was explicitly optional in the target-state document.
-6. **`created_by_user_id`/`updated_by_user_id` attribution** on appointments and appointment-type versions (target-state §18.2, §18.3) — deferred until a user/auth model exists, per §26.2 above.
+6. ~~**`created_by_user_id`/`updated_by_user_id` attribution** on appointments and appointment-type versions (target-state §18.2, §18.3) — deferred until a user/auth model exists, per §26.2 above.~~ **Partially resolved in v2.7** — `Appointment` now has both columns (migration `013_appointment_created_updated_by`), set at creation and on every subsequent edit/reschedule/status-change, and shown on the appointment detail page. `AppointmentTypeVersion` attribution was not part of this round and remains open.
 7. **Formal automated test suite** for the 20 scenarios in target-state §27 — verification for this baseline update was manual (curl/flow testing plus a synthetic-database migration test), not an automated regression suite. This is consistent with the pre-existing baseline gap recorded in §18.3 item 6 and §20 (no automated regression tests exist for this application generally).
 
 Per target-state §29 ("Definition of Done"), item 8 requires no unresolved conflict between the implemented module, the target-state document, and this updated baseline. The items above are the currently known, explicitly documented set of such differences; they should be tracked and closed in a future revision rather than silently left open.
+
+### 26.11 Real open-slot availability search (v2.7)
+
+`/appointments/availability` (§9.8's sibling screen, target-state §19.2) was a placeholder with no working logic — and its provider dropdown carried a latent bug independent of that: it read `provider_id` via `Form(None)` on a `GET` route, which never actually receives a value (a `GET` form submits as a query string, not a request body).
+
+**Schema.** `AvailabilityTemplate`/`AvailabilityException` (§26.6, §31) are resource-scoped only (exam lanes, rooms, devices) — there was no concept anywhere of a *provider's* own working hours, which is the real reason a working search was never buildable before this. Two new tables add that, mirroring the resource-scoped pair exactly rather than extending it (this app's migration runner only ever does `ADD COLUMN`/`CREATE TABLE IF NOT EXISTS`, never a table rebuild, so loosening `AvailabilityTemplate.resource_id`'s `NOT NULL` constraint isn't available as a migration path):
+
+- **`ProviderAvailabilityTemplate`**: `id`, `provider_id` (FK), `day_of_week` (0=Monday..6=Sunday), `start_time`/`end_time` (`HH:MM`), `effective_from`/`effective_through`, `active`.
+- **`ProviderAvailabilityException`**: `id`, `provider_id` (FK), `start_at`, `end_at`, `exception_type` (`blocked` | `extra_availability`), `reason`.
+
+Added via migration `014_create_provider_availability_tables`, verified against fresh SQLite and Postgres databases (including idempotent re-run). The two seeded demo providers (Dr. Chen, Dr. Rivera) get Mon–Fri 9:00–17:00 hours seeded directly in `seed_demo_data()` so the search has real data immediately, rather than requiring admin data entry first to be useful at all.
+
+**Search logic** (`ehr/services/scheduling.py`'s `find_open_slots(db, provider_id, date, duration_minutes)`) reuses the module's existing building blocks rather than reimplementing them: `find_closure()` rules out a whole-day practice closure; the provider's `ProviderAvailabilityTemplate` rows for that day-of-week (respecting `effective_from`/`effective_through`/`active`) set the base open window(s); overlapping `blocked` `ProviderAvailabilityException` rows and every conflicting active appointment's occupied interval (via the same `compute_occupied_interval`/`intervals_overlap`/`ACTIVE_STATUSES` machinery `find_provider_conflict` already uses) are subtracted from that. What's left is walked at `SLOT_UNIT_MINUTES` (5-minute) resolution, emitting each start time where a `duration_minutes`-long appointment fits with no conflict.
+
+**Route and UI.** `/appointments/availability` now takes `provider_id`, `appointment_type_version_id`, `relationship`, and `date_str` as real query parameters (fixing the `Form(None)`-on-`GET` bug), computes duration via the existing `compute_duration_minutes(version, relationship)`, and renders the actual list of open start times, each linking into the new-appointment form pre-filled with that date (the form itself does not yet support pre-filling provider/type/time — the page's own copy says so rather than overclaiming). A new `/admin/scheduling/provider-availability` admin page (mirroring the existing resource-availability page) manages providers' weekly hours.
+
+**Verified**: unit-tested slot math (93 five-minute-resolution 20-minute slots in a 9am–5pm window; booking one removes exactly 4 adjacent slots, and the booked start time itself is no longer present); curl-verified the rewritten route and admin page against a live local instance; the full Playwright suite passes.
 
 ## 27. Global Navigation Redesign and Practice-Operations Additions (v1.4–v1.5)
 
@@ -2074,7 +2096,7 @@ Global navigation moved from horizontal top-bar links to a left sidebar, collaps
 - Orders — Order Management (new in v1.5, see §27.4)
 - Claim Management (new in v1.5, see §27.4)
 - Catalog — expandable: Frames, Eyeglass Lenses, Contact Lenses, Accessories, Insurance Plans (new in v1.5, see §27.4)
-- Administration ▸ Scheduling — expandable: Appointment Types, Diagnostic Tests, Resources, Availability Templates, Holidays / Closures (new in v1.5, see §27.4), Scheduling Audit
+- Administration ▸ Scheduling — expandable: Appointment Types, Diagnostic Tests, Resources, Availability Templates, Provider Availability (new in v2.7, see §26.11), Holidays / Closures (new in v1.5, see §27.4), Scheduling Audit
 
 Recently-viewed-patient tracking and the sidebar's own collapse state are both client-side only (cookie/`localStorage`); no new server-side session or database state was introduced to support the sidebar itself.
 
@@ -2437,11 +2459,11 @@ These are the gaps that remain genuinely open after this reconciliation pass, co
 3. **No CSRF protection** anywhere (§15.1, §26.10 item 4) — a pre-existing gap, not new.
 4. **No down-migration/rollback capability** in the migration runner (§25.15) — it can add columns/tables and seed data, but nothing in it reverses a migration.
 5. ~~No automated test suite of any kind for this application~~ (§18.3 item 6, §26.10 item 7) — **resolved in v2.5**: an end-to-end Playwright suite (§38.5) now runs on every push and pull request via GitHub Actions CI. Scope is smoke-level (login, logout, auth redirects, main nav destinations render) — it is not workflow-level or regression coverage of every screen in this baseline, so most of §20's manual regression checklist is not yet automated.
-6. **Real open-slot availability search** (`/appointments/availability`) remains a placeholder (§26.10 item 3).
-7. **Color-rule builder UI** does not exist; color rules are correct and versioned but edited only at the database level (§26.10 item 2).
+6. ~~**Real open-slot availability search** (`/appointments/availability`) remains a placeholder (§26.10 item 3).~~ **Resolved in v2.7** — see §26.11.
+7. ~~**Color-rule builder UI** does not exist; color rules are correct and versioned but edited only at the database level (§26.10 item 2).~~ **Resolved in v2.7** — see §26.10 item 2.
 8. **No CPT/procedure coding, claims data model, or payer connectivity** behind any of the 5 Claim Management placeholder screens (§35.3).
 9. **No optical-product/inventory data model** behind the Catalog placeholders, and no real order-lab tracking behind Order Management (§27.6).
-10. **No `created_by_user_id`/`updated_by_user_id` attribution** anywhere, since no user model exists (§26.10 item 6).
+10. ~~**No `created_by_user_id`/`updated_by_user_id` attribution** anywhere, since no user model exists (§26.10 item 6).~~ **Partially resolved in v2.7** — `Appointment` now has both columns; `AppointmentTypeVersion` attribution remains open (§26.10 item 6).
 11. **Diagnosis codes, clinical findings, and refractions remain free-text/unstructured**, with no coded-data model, habitual/manifest/cycloplegic refraction distinction, or device/DICOM integration (§22, referencing the separate `VISION_EHR_DATA_STANDARDS_RESEARCH.md`).
 12. **No visual Resource Schedule grid view**, though the underlying `Resource`/`AvailabilityTemplate` data exists (§27.6, §31.3).
 13. **No pagination, advanced filtering, or bulk operations** on any list screen (patients, appointments, admin lists).
@@ -2623,3 +2645,13 @@ Two of four prerequisites are now fully done, with real, verifiable technical wo
 | --- | --- |
 | Fixed, go-live-relevant | Go-live prerequisite 4 (backup/DR) moved from "documented but not live-tested" to **done**: the Neon point-in-time-recovery restore procedure from v2.5's §38.3 was actually performed — a branch restored to an earlier point in time, its data queried directly, and its `patients`/`users`/`appointments` counts (5/4/4) confirmed to exactly match this application's seeded demo data. See the rewritten §38.3. |
 | Updated | The go-live safety notice (before §1), §16.2, and §36.5 item 2 updated to reflect prerequisite 4's now-confirmed status. §38.6's summary table updated to 2 of 4 prerequisites fully done. |
+
+**Version 2.7 change log (relative to v2.6) — four tracked Appointment Scheduling Module gaps closed, not go-live-relevant:**
+
+| Area | Change |
+| --- | --- |
+| Fixed | Malformed `scheduled_at` on appointment create/edit/reschedule produced an unhandled HTTP 500; now returns the same HTTP 400-with-re-rendered-form response every other validation failure in these routes already returns. See §9.8. |
+| New capability | `Appointment.created_by_user_id`/`updated_by_user_id` (migration `013_appointment_created_updated_by`) record which authenticated user created and last touched each appointment, shown on the detail page. `AppointmentTypeVersion` attribution was not part of this round and remains open. See §26.10 item 6, §36.5 item 10. |
+| New capability | A color-rule builder UI (`/admin/scheduling/appointment-types/{id}/color-rules`) replaces direct-database-access editing of `AppointmentTypeColorRule` rows. See §26.10 item 2, §36.5 item 7. |
+| New capability | A real open-slot availability search replaces the `/appointments/availability` placeholder, backed by two new provider-scoped working-hours tables (`ProviderAvailabilityTemplate`/`ProviderAvailabilityException`, migration `014_create_provider_availability_tables`) and a new admin page to manage them. Also fixes a latent bug found during this work: the old route read its provider filter via `Form(None)` on a `GET` request, which never actually receives a value. See new §26.10 item 3 resolution and §26.11. |
+| Updated | §9.8, §26.10 (items 2, 3, 6), §36.5 (items 6, 7, 10) updated to reflect the above. None of this bears on the four go-live prerequisites (§38.6) — they are unchanged from v2.6. |
