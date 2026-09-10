@@ -16,11 +16,9 @@ templates = Jinja2Templates(directory="ehr/templates")
 templates.env.globals["ehr_env"] = EHR_ENV
 templates.env.globals["ROLE_LABELS"] = ROLE_LABELS
 
-# NOTE: This application has no authentication/authorization layer yet. Every
-# permission check called for by the specification (appointments.create,
-# appointments.override_conflict, appointment_types.manage, etc.) is a TODO
-# here -- routes are open to anyone who can reach them. Add real checks once
-# a User/role model exists.
+# Every route in this router requires a valid session (applied at router-inclusion
+# time in ehr/app.py); mutation routes additionally require APPOINTMENT_EDIT via
+# require_role() below, per the v2.4 authentication/role build.
 
 
 def _bookable_type_versions(db: Session):
@@ -351,10 +349,16 @@ def create_appointment(request: Request, patient_id: int = Form(...), provider_i
     db: Session = Depends(get_db)):
 
     version = db.query(AppointmentTypeVersion).filter(AppointmentTypeVersion.id == appointment_type_version_id).first()
-    when = datetime.fromisoformat(scheduled_at)
     posted = dict(patient_id=patient_id, provider_id=provider_id, appointment_type_version_id=appointment_type_version_id,
                   scheduled_at=scheduled_at, relationship=relationship, is_follow_up=is_follow_up,
                   reason=reason, notes=notes, test_ids=[int(t) for t in test_ids] if test_ids else [])
+
+    try:
+        when = datetime.fromisoformat(scheduled_at)
+    except (ValueError, TypeError):
+        ctx = _form_context(db, patient_id=patient_id, prefill_date=None,
+                             error="Invalid appointment date/time.", posted=posted)
+        return templates.TemplateResponse(request, "appointments/form.html", ctx, status_code=400)
 
     def fail(msg):
         ctx = _form_context(db, patient_id=patient_id, prefill_date=when.date().isoformat(), error=msg, posted=posted)
@@ -426,11 +430,15 @@ def update_appointment(request: Request, appt_id: int, provider_id: int = Form(.
     if not a: return HTMLResponse("Not found", status_code=404)
 
     version = db.query(AppointmentTypeVersion).filter(AppointmentTypeVersion.id == appointment_type_version_id).first()
-    when = datetime.fromisoformat(scheduled_at)
 
     def fail(msg):
         ctx = _form_context(db, patient_id=a.patient_id, appt=a, error=msg)
         return templates.TemplateResponse(request, "appointments/edit.html", ctx, status_code=400)
+
+    try:
+        when = datetime.fromisoformat(scheduled_at)
+    except (ValueError, TypeError):
+        return fail("Invalid appointment date/time.")
 
     if not version or not version.active:
         return fail("Selected appointment type is not available for booking.")
@@ -472,7 +480,10 @@ def reschedule_appointment(appt_id: int, scheduled_at: str = Form(...),
     a = db.query(Appointment).filter(Appointment.id == appt_id).first()
     if not a: return HTMLResponse("Not found", status_code=404)
     version = a.appointment_type_version
-    when = datetime.fromisoformat(scheduled_at)
+    try:
+        when = datetime.fromisoformat(scheduled_at)
+    except (ValueError, TypeError):
+        return HTMLResponse("Invalid appointment date/time.", status_code=400)
     old_when = a.scheduled_at
     try:
         _apply_scheduling_rules(db, a, version, a.patient_relationship_at_booking, a.is_follow_up, when,
