@@ -17,6 +17,10 @@ with compliance counsel before any real PHI.
 standards (FHIR, IHE, DICOM, SNOMED/LOINC/ICD-10) for a future clinical-data-model rework — not
 yet implemented.
 
+`BUILD_BACKLOG.md` is the master tracking list of everything outstanding across both documents
+above (remaining dashboards, billing/claims, security/compliance gaps, UX polish, testing) —
+check there before scoping the next round of work.
+
 ## Running locally
 
 ```bash

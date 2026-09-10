@@ -1,0 +1,158 @@
+# New Path Vision EHR — Master Build Backlog
+
+**Status:** Living tracking document. **Baseline as of:** spec v2.14 / research doc v2.13 (2026-09-10).
+
+## Purpose and how to use this document
+
+This consolidates every outstanding build item, investigation, and test scattered across `NEW_PATH_VISION_EHR_BASELINE_PRODUCT_DEFINITION_AND_SPECIFICATION.md` (the living spec), `VISION_EHR_DATA_STANDARDS_RESEARCH.md` (the eye-care data-standards research notes), and open GitHub issues, into one place — so a reader doesn't have to reconstruct current status from a dozen change-log entries across two documents.
+
+**This document does not replace the spec or research doc as the source of truth for what's *already built*** — those two documents remain authoritative for current-state facts, and every item below cites exactly where its full detail lives. This document exists only to answer "what's left, and in what order," and to track status as items move.
+
+**Conventions:**
+- `[ ]` not started · `[~]` partially done / documented but not built · `[x]` done (kept here briefly for traceability, then prunable)
+- Every item cites its source section(s) so detail isn't duplicated here.
+- "Subtasks" follow the proven pattern established by every dashboard slice shipped so far (§5.1/§5.2 in the research doc): schema → migration (dialect-verified on SQLite + Postgres) → routes → templates → seed data → Playwright coverage → spec update. That exact 7-step shape is reused as the subtask list for every net-new feature below rather than re-deriving it each time.
+- When picking up an item, move it under "In Progress," and when it ships, update its status here **and** in the spec/research doc via the normal versioned-changelog process — this document itself gets no version number of its own; it just tracks live status.
+
+---
+
+## 0. In Progress / Up Next
+
+- [ ] **ICD-10 auto-suggestion + diagnosis-driven recall interval** — extends the v2.12 Assessment & Plan composer. Source: research doc §7.2. Subtasks:
+  - [ ] Design the (diagnosis, laterality) → ICD-10 lookup table's shape (a small in-template JS object is likely sufficient — no schema change was scoped) and confirm scope stays narrow (a handful of common diagnoses, not real code-set integration — see §4.4 deferral)
+  - [ ] Extend `exams/form.html`'s composer to populate the existing `diagnosis_codes` field as a *suggestion*, editable like the rest
+  - [ ] Extend the Plan composer's follow-up logic to vary by diagnosis/secondary finding (e.g. shorter recall for "Suspect Glaucoma")
+  - [ ] Playwright coverage for both behaviors
+  - [ ] Spec update (next version bump, e.g. v2.14)
+
+---
+
+## 1. Remaining Clinical Dashboards (research doc §5)
+
+Three of five dashboards from the original reviewed requirements document remain unbuilt. Each follows the exact 7-step pattern used for §5.1 (Refractive) and §5.2 (Anterior Segment/Dry Eye) — new child table keyed on `exam_id`, one more Visit Focus chip, one more wrapped `<div>` in `exams/form.html`, no changes to the toggle/composer mechanism itself.
+
+- [ ] **§5.3 Posterior Segment & Glaucoma Tracking dashboard.** Target/current IOP, cup-disc ratio, OCT RNFL, visual field MD + reliability, meds/diagnostic-order lists. Notably wants **longitudinal trending** (a chart of IOP over time) — this is real additional design surface beyond the other dashboards' single-visit-snapshot shape, and should be scoped explicitly before starting (does "done" for this slice include a trend view, or just the data model + form + detail card, with trending as a separate follow-up?).
+  - [ ] Schema: new `GlaucomaTracking`-style table (exam-scoped child row)
+  - [ ] Migration (dialect-verified)
+  - [ ] Routes: `create_exam` conditional row creation
+  - [ ] Templates: new Visit Focus chip + section in `exams/form.html`, conditional card in `exams/detail.html`
+  - [ ] Decide + scope the trending question above before or during this slice
+  - [ ] Seed data
+  - [ ] Playwright coverage
+  - [ ] Spec update
+- [ ] **§5.4 Binocular Vision & Pediatrics (Vision Therapy) dashboard.** Phoria (distance/near), NPC break/recovery, accommodation amplitude, home exercises, therapy session/compliance tracking. Lower visit volume, more specialty/pediatric-focused than the other four.
+  - [ ] Schema, migration, routes, templates, seed, tests, spec (same 7-step pattern)
+- [ ] **§5.5 Pre-/Post-Operative Co-Management dashboard.** The most structurally different of the five — the source document models it as **one row per follow-up visit along a timeline** (Day 1, Week 1, Month 1, Month 3...), which doesn't fit the "one row per exam" shape every other dashboard uses. Needs its own design pass before the standard 7-step pattern applies cleanly:
+  - [ ] Decide the per-visit-row vs. single-row-with-mutable-milestone modeling question (research doc §5.5 already leans toward per-visit-row, matching this app's append-only audit style — confirm before building)
+  - [ ] Schema, migration, routes, templates, seed, tests, spec
+
+---
+
+## 2. Billing, Claims & Insurance (research doc §6) — target-state only
+
+**Explicitly gated**: do not begin implementation without (a) a real clearinghouse/payer relationship, (b) compliance/legal review, and (c) the go-live BAA prerequisite (§9 below) resolved first — this domain has materially higher compliance and financial risk than any clinical dashboard, and this app remains marked "do not use with real patient data." Listed here for completeness/tracking, not as a queued build item.
+
+- [ ] Billing invoice / service-line data model (CMS-1500-shaped fields — research doc §6.1)
+- [ ] CCI-edit / medical-necessity rule-matrix lookup tables (§6.2) — the lookup-table-over-hardcoded-logic pattern itself is reusable even before/if the billing domain is greenlit
+- [ ] Checkout-block workflow ("Pending Conflict" status + remediation surfacing, §6.3) — no checkout/payment flow exists in this app at all yet, so this depends on that existing first
+- [ ] EDI 837 (X12) / CMS-1500 generation (§6.4) — flagged as a compliance-gated capability, not a formatting exercise; needs a real clearinghouse relationship before any code is written
+
+---
+
+## 3. E-prescribing, Optical Lab Integration & Inventory (research doc §5.6) — target-state only
+
+Same external-integration caution as billing above, though lower compliance stakes (no direct payer/claims risk):
+
+- [ ] E-prescribing (NCPDP SCRIPT, RxNorm drug identification, structured SIG codes)
+- [ ] Optical lab order transmission (ANSI Z80/VisionWeb-style API, frame boxing/centration metrics, JSON order payload)
+- [ ] In-house optical inventory (`inventory_frames`/`inventory_contact_lenses`, UPC/SKU lookup, reorder thresholds, transactional checkout with row-level locking)
+- [ ] Real Order Management (turning a written Rx into a trackable lab order — placed → fabrication → shipped → received → dispensed). Recommended by Claude earlier this session as the natural "next step after the exam" in the patient journey (Optical/Billing Out per IHE GEE, research doc §4.2); not yet scoped or started. Existing placeholder describes the target shape already (`ehr/routes/store_ops.py`'s `/orders/`).
+
+---
+
+## 4. Interoperability & Coded Terminology (research doc §4, deferred since v2.8)
+
+The foundational, largest-scope item underlying much of the above — deliberately deferred multiple times in favor of narrower slices (habitual/manifest/cycloplegic types in v2.8 was "item 3," the first slice):
+
+- [ ] Decide whether/when to align `EyeExam`/`Refraction`/`Prescription` toward FHIR's `Observation`+`VisionPrescription` shape — a significant, non-backward-compatible data-model change (research doc §4.1, "Next steps" item 1)
+- [ ] If pursued: scoping conversation → background-agent build with migration + verification → living-spec update (item 2)
+- [ ] SNOMED-CT/LOINC/ICD-10-CM real code-set integration — the ICD-10 auto-suggestion slice in §0 above is explicitly a narrow, hardcoded-lookup precursor to this, not a substitute for it (§4.4)
+- [ ] DICOM device integration — a background C-STORE SCP listener service to pull autorefractor/OCT/visual-field device data directly into exam fields (§4.3)
+- [ ] IHE GEE-structured encounter workflow (Patient Check-In → Technician Pre-Test → Doctor Exam → Assessment & Plan → Optical/Billing Out) as a first-class UI flow, rather than today's single exam-entry form (§4.2)
+
+---
+
+## 5. Appointment Scheduling Module — remaining gaps (spec §26.10, §36.5)
+
+- [ ] `AppointmentTypeVersion` `created_by`/`updated_by` attribution — `Appointment` itself got this in v2.7; the type-version side was explicitly out of scope for that round (§36.5 item 10)
+- [ ] Visual **Resource Schedule grid view** — `Resource`/`AvailabilityTemplate` data already exists and is enforced; no grid UI was ever built (§27.6, §31.3, §36.5 item 12)
+- [ ] Room/lane/device resource conflict enforcement extended to a resource-picker UI on the booking form itself (today, resource assignment is automatic based on type requirements — no manual override UI, §31.3)
+- [ ] Calendar click-to-create does not itself pre-check availability before opening the form (§18.2 item 7, still open per that item's own note)
+
+---
+
+## 6. Clinical Workflow Gaps (spec §18.2, §37.6)
+
+- [ ] Clinical records (exams, prescriptions) **cannot be edited, signed, corrected, or appended** — both are create-only today, confirmed repeatedly this session (§18.2 item 4). This is a foundational gap for real clinical use: no draft → sign → lock → amend lifecycle exists at all.
+- [ ] Appointment and exam records are not explicitly linked (§18.2 item 1) — worth re-verifying current truth before treating as still-open, since significant appointment-module work has happened since this was written
+- [ ] Provider records cannot be managed in the application (no add/edit provider UI) — re-verify current truth (§18.2 item 3)
+- [ ] Prescription relationships not validated for patient/provider/exam consistency (§18.2 item 2)
+- [ ] Prism/base omitted from normal and printable prescription displays; contact-lens values omitted from normal prescription detail (§18.2 items 8-9) — re-verify against the v2.10 Lens Design & Follow-Up work, which may have already narrowed this
+
+---
+
+## 7. Security & Compliance
+
+- [ ] **CSRF protection** — a pre-existing, long-tracked gap, present in every version's open-gaps list (spec §15.1, §26.10 item 4, §36.5 item 3, §37.6)
+- [ ] Down-migration/rollback capability in the migration runner — it only ever adds, never reverses (§25.15, §36.5 item 4)
+- [ ] Per-record "who changed this specific clinical/administrative field" audit trail, beyond `AuthAuditEvent`'s authentication/access-event scope (§37.1, §37.6, §36.5 item 1's note)
+- [ ] Record-level authorization (e.g. restricting a provider to only their own patients) — current model is role-level only (§37.6)
+- [ ] MFA/SSO, self-service password reset, password-complexity policy beyond a sane minimum, account lockout/rate-limiting — all explicitly scoped out of the v2.4 auth build as "solid baseline, not enterprise list" (§37.6); revisit only if requirements change
+
+---
+
+## 8. Practice-Management Placeholders (spec §27.6, §35.3)
+
+Deferred during the v1.5 competitive-review round, never revisited since:
+
+- [ ] Full optical product/inventory data model behind the Catalog placeholder (overlaps with §3 above's inventory item — reconcile scope if both are picked up)
+- [ ] Real insurance-claim submission/tracking behind the Claim Management placeholder (overlaps with §2 above — same billing-domain gate applies)
+- [ ] Payer-specific bulk-authorization workflows (e.g. VSP-style) — deferred indefinitely pending any insurance-eligibility integration at all
+
+---
+
+## 9. Go-Live Prerequisites (spec §38.6)
+
+Tracked here for visibility; the authoritative detail lives in the spec's go-live notice and §38.
+
+| # | Prerequisite | Status |
+| --- | --- | --- |
+| 1 | Real authentication, authorization, and audit logging | **Done** (v2.4) |
+| 2 | Compliant hosting under a signed BAA (Vercel, Neon, Cloudinary) | **Open** — tracked in [GitHub issue #2](https://github.com/ooWOWZERoo/npvehr/issues/2); a legal/procurement action, not an engineering task |
+| 3 | Encryption in transit and at rest | **Substantially done** — in-transit verified directly; at-rest reasoned from standard managed-provider practice, not independently re-confirmed against current vendor terms |
+| 4 | Backup and disaster recovery, tested and documented | **Done** — Neon PITR, live-tested; the one caveat is scope (Cloudinary photos aren't covered by a Neon restore) |
+
+**Do not use this application with real patient data until prerequisite 2 is closed and the user's compliance counsel confirms readiness** — this is unchanged by anything else in this backlog.
+
+---
+
+## 10. Product Quality / UX (spec §18.3)
+
+- [ ] Incomplete form-label association and other accessibility issues — no full audit has been performed
+- [ ] No user-friendly validation or confirmation messages, including for photo-upload failures
+- [ ] No pagination, advanced search, filters, or large-data handling on any list screen (patients, appointments, admin lists) — spec §36.5 item 13 also names this
+- [ ] Dependencies specify minimum versions only (`>=`), no upper bounds or lock file — reduces build reproducibility
+- [ ] Client's final logo asset still not supplied; navigation/print header show a placeholder mark
+
+---
+
+## 11. Testing & QA
+
+- [ ] Expand the Playwright suite beyond smoke-level coverage (currently: login/logout/auth-redirects, main-nav-destinations-render, plus the Visit Focus toggle and composer behaviors added this session) toward the workflow-level regression coverage described in spec §20's manual checklist — most of that checklist is still not automated (§36.5 item 5's own note)
+- [ ] No automated migration test suite — migrations are verified manually/via synthetic-database checks each round, not as a standing automated test (§18.3 item 7's note)
+
+---
+
+## Notes on stale items
+
+A few `§18.2`/`§18.3` items above (record linkage, provider management, prescription display fields) were written early in this project's spec history and may have been partially superseded by later work (the Appointment Scheduling Module, the v2.10 Lens Design fields) without the spec's own gap-list being re-audited against them — each is flagged above with a "re-verify" note rather than assumed still fully accurate. Confirm current truth before scoping work against them.
