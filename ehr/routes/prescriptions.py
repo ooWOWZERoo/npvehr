@@ -7,6 +7,7 @@ from ehr.models.database import get_db, Prescription, Patient, Provider
 from ehr.env_info import EHR_ENV
 from ehr.utils import patient_context
 from ehr.auth.permissions import require_role, RX_VIEW, RX_EDIT, ROLE_LABELS
+from ehr.auth import csrf
 
 router = APIRouter(prefix="/prescriptions", tags=["prescriptions"])
 templates = Jinja2Templates(directory="ehr/templates")
@@ -32,6 +33,7 @@ def new_rx_form(request: Request, patient_id: int = None, exam_id: int = None, d
 @router.post("/new", dependencies=[Depends(require_role(*RX_EDIT))])
 async def create_rx(request: Request, db: Session = Depends(get_db)):
     form = await request.form()
+    csrf.verify_or_403(request.state.csrf_token, form.get("csrf_token"))
     g = lambda k: form.get(k, "")
     gl = lambda k: ", ".join(form.getlist(k))  # comma-join a multi-value (checkbox) field
     rx = Prescription(

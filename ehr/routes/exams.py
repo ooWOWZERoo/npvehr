@@ -7,6 +7,7 @@ from ehr.models.database import get_db, EyeExam, Refraction, AnteriorSegmentAsse
 from ehr.env_info import EHR_ENV
 from ehr.utils import patient_context
 from ehr.auth.permissions import require_role, EXAM_VIEW, EXAM_EDIT, ROLE_LABELS
+from ehr.auth import csrf
 
 router = APIRouter(prefix="/exams", tags=["exams"])
 templates = Jinja2Templates(directory="ehr/templates")
@@ -35,6 +36,7 @@ def new_exam_form(request: Request, patient_id: int = None, db: Session = Depend
 @router.post("/new", dependencies=[Depends(require_role(*EXAM_EDIT))])
 async def create_exam(request: Request, db: Session = Depends(get_db)):
     form = await request.form()
+    csrf.verify_or_403(request.state.csrf_token, form.get("csrf_token"))
     g = lambda k: form.get(k, "")
     gl = lambda k: ", ".join(form.getlist(k))  # comma-join a multi-value (checkbox) field
     exam = EyeExam(

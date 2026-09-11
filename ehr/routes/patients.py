@@ -9,6 +9,7 @@ from ehr.models.database import get_db, Patient, Appointment, EyeExam, Prescript
 from ehr.env_info import EHR_ENV
 from ehr.utils import patient_context, compute_age, display_name
 from ehr.auth.permissions import require_role, PATIENT_EDIT, ROLE_LABELS
+from ehr.auth import csrf
 from ehr.services.media import (save_patient_photo as _save_photo, delete_patient_photo as _delete_photo_file,
     get_photo_bytes as _get_photo_bytes)
 
@@ -139,7 +140,9 @@ def create_patient(request: Request,
     ocular_history: str = Form(""), family_ocular_history: str = Form(""),
     balance_due: str = Form(""),
     photo: UploadFile = File(None),
+    csrf_token: str = Form(""),
     db: Session = Depends(get_db)):
+    csrf.verify_or_403(request.state.csrf_token, csrf_token)
     conflict = _mrn_conflict(db, mrn)
     if conflict:
         pending = Patient(first_name=first_name, last_name=last_name, preferred_name=preferred_name or None,
@@ -257,7 +260,9 @@ def update_patient(request: Request, patient_id: int,
     ocular_history: str = Form(""), family_ocular_history: str = Form(""),
     balance_due: str = Form(""),
     photo: UploadFile = File(None),
+    csrf_token: str = Form(""),
     db: Session = Depends(get_db)):
+    csrf.verify_or_403(request.state.csrf_token, csrf_token)
     p = db.query(Patient).filter(Patient.id == patient_id).first()
     if not p: return HTMLResponse("Not found", status_code=404)
     conflict = _mrn_conflict(db, mrn, exclude_patient_id=patient_id)

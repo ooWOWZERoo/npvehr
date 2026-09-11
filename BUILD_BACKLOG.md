@@ -1,6 +1,6 @@
 # New Path Vision EHR — Master Build Backlog
 
-**Status:** Living tracking document. **Baseline as of:** spec v2.18 / research doc v2.18 (2026-09-11).
+**Status:** Living tracking document. **Baseline as of:** spec v2.19 / research doc v2.18 (2026-09-11).
 
 ## Purpose and how to use this document
 
@@ -21,7 +21,8 @@ This consolidates every outstanding build item, investigation, and test scattere
 - [x] **ICD-10 auto-suggestion + diagnosis-driven recall interval** — extends the v2.12 Assessment & Plan composer. **Done, v2.15** — see baseline spec §12.5d, research doc §7.2.
 - [x] **Posterior Segment & Glaucoma Tracking dashboard, with trend view** — third of five clinical dashboards. **Done, v2.16** — see baseline spec §12.5e, research doc §5.3.
 - [x] **Binocular Vision & Pediatrics (Vision Therapy) dashboard** — fourth of five clinical dashboards. **Done, v2.17** — see baseline spec §12.5f, research doc §5.4.
-- [x] **Pre-/Post-Operative Co-Management dashboard, with timeline view** — fifth and last clinical dashboard. **Done, v2.18** — see baseline spec §12.5g, research doc §5.5. §1 (Clinical Dashboards) is now fully closed out. Pick the next item from the sections below.
+- [x] **Pre-/Post-Operative Co-Management dashboard, with timeline view** — fifth and last clinical dashboard. **Done, v2.18** — see baseline spec §12.5g, research doc §5.5. §1 (Clinical Dashboards) is now fully closed out.
+- [x] **CSRF protection** — a long-tracked security gap (§7). **Done, v2.19** — see baseline spec §37.7. Pick the next item from the sections below.
 
 ---
 
@@ -100,7 +101,7 @@ The foundational, largest-scope item underlying much of the above — deliberate
 
 ## 7. Security & Compliance
 
-- [ ] **CSRF protection** — a pre-existing, long-tracked gap, present in every version's open-gaps list (spec §15.1, §26.10 item 4, §36.5 item 3, §37.6)
+- [x] **CSRF protection. Done, v2.19** — a pre-existing, long-tracked gap, present in every version's open-gaps list (spec §15.1, §26.10 item 4, §36.5 item 3, §37.6). See baseline spec §37.7: a session-bound synchronizer token verified on all 27 POST routes, delivered via a JS-injected hidden field, plus this app's first server-side secret (`SECRET_KEY`).
 - [ ] Down-migration/rollback capability in the migration runner — it only ever adds, never reverses (§25.15, §36.5 item 4)
 - [ ] Per-record "who changed this specific clinical/administrative field" audit trail, beyond `AuthAuditEvent`'s authentication/access-event scope (§37.1, §37.6, §36.5 item 1's note)
 - [ ] Record-level authorization (e.g. restricting a provider to only their own patients) — current model is role-level only (§37.6)

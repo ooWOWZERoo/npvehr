@@ -251,3 +251,30 @@ def test_new_prescription_form_loads(logged_in_page, live_server):
     page = logged_in_page
     page.goto(live_server + "/prescriptions/new")
     assert "/login" not in page.url
+
+
+def test_csrf_token_required_on_post(logged_in_page, live_server):
+    """CSRF protection (ehr/auth/csrf.py) -- app.js auto-injects a real,
+    session-bound token from base.html's <meta name="csrf-token"> into every
+    form (verified implicitly by every other test in this file still passing
+    with real browser form submissions), but a POST missing that token, or
+    carrying a wrong one, must be rejected with 403."""
+    page = logged_in_page
+    token = page.locator('meta[name="csrf-token"]').get_attribute("content")
+    assert token
+
+    # A real form's own submission (Playwright driving a real browser) is
+    # already covered elsewhere -- here, bypass the form entirely to prove
+    # the server independently verifies the token rather than trusting the
+    # client not to strip it.
+    resp = page.request.post(live_server + "/patients/new",
+        form={"first_name": "No", "last_name": "Token"})
+    assert resp.status == 403
+
+    resp = page.request.post(live_server + "/patients/new",
+        form={"first_name": "Wrong", "last_name": "Token", "csrf_token": "not-the-real-token"})
+    assert resp.status == 403
+
+    resp = page.request.post(live_server + "/patients/new",
+        form={"first_name": "Correct", "last_name": "Token", "csrf_token": token})
+    assert resp.status in (200, 303)
