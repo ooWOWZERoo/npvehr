@@ -1,6 +1,6 @@
 # New Path Vision EHR — Master Build Backlog
 
-**Status:** Living tracking document. **Baseline as of:** spec v2.14 / research doc v2.13 (2026-09-10).
+**Status:** Living tracking document. **Baseline as of:** spec v2.19 / research doc v2.18 (2026-09-11).
 
 ## Purpose and how to use this document
 
@@ -18,28 +18,31 @@ This consolidates every outstanding build item, investigation, and test scattere
 
 ## 0. In Progress / Up Next
 
-- [x] **ICD-10 auto-suggestion + diagnosis-driven recall interval** — extends the v2.12 Assessment & Plan composer. **Done, v2.15** — see baseline spec §12.5d, research doc §7.2. Pick the next item from the sections below.
+- [x] **ICD-10 auto-suggestion + diagnosis-driven recall interval** — extends the v2.12 Assessment & Plan composer. **Done, v2.15** — see baseline spec §12.5d, research doc §7.2.
+- [x] **Posterior Segment & Glaucoma Tracking dashboard, with trend view** — third of five clinical dashboards. **Done, v2.16** — see baseline spec §12.5e, research doc §5.3.
+- [x] **Binocular Vision & Pediatrics (Vision Therapy) dashboard** — fourth of five clinical dashboards. **Done, v2.17** — see baseline spec §12.5f, research doc §5.4.
+- [x] **Pre-/Post-Operative Co-Management dashboard, with timeline view** — fifth and last clinical dashboard. **Done, v2.18** — see baseline spec §12.5g, research doc §5.5. §1 (Clinical Dashboards) is now fully closed out.
+- [x] **CSRF protection** — a long-tracked security gap (§7). **Done, v2.19** — see baseline spec §37.7. Pick the next item from the sections below.
 
 ---
 
-## 1. Remaining Clinical Dashboards (research doc §5)
+## 1. Clinical Dashboards (research doc §5) — closed out, v2.18
 
-Three of five dashboards from the original reviewed requirements document remain unbuilt. Each follows the exact 7-step pattern used for §5.1 (Refractive) and §5.2 (Anterior Segment/Dry Eye) — new child table keyed on `exam_id`, one more Visit Focus chip, one more wrapped `<div>` in `exams/form.html`, no changes to the toggle/composer mechanism itself.
+All five dashboards from the original reviewed requirements document are now built (v2.10–v2.18), each following the same 7-step pattern — a child table keyed on `exam_id`, one Visit Focus chip, one wrapped `<div>` in `exams/form.html`, no changes to the toggle/composer mechanism itself. Kept here briefly for traceability.
 
-- [ ] **§5.3 Posterior Segment & Glaucoma Tracking dashboard.** Target/current IOP, cup-disc ratio, OCT RNFL, visual field MD + reliability, meds/diagnostic-order lists. Notably wants **longitudinal trending** (a chart of IOP over time) — this is real additional design surface beyond the other dashboards' single-visit-snapshot shape, and should be scoped explicitly before starting (does "done" for this slice include a trend view, or just the data model + form + detail card, with trending as a separate follow-up?).
-  - [ ] Schema: new `GlaucomaTracking`-style table (exam-scoped child row)
-  - [ ] Migration (dialect-verified)
-  - [ ] Routes: `create_exam` conditional row creation
-  - [ ] Templates: new Visit Focus chip + section in `exams/form.html`, conditional card in `exams/detail.html`
-  - [ ] Decide + scope the trending question above before or during this slice
-  - [ ] Seed data
-  - [ ] Playwright coverage
-  - [ ] Spec update
-- [ ] **§5.4 Binocular Vision & Pediatrics (Vision Therapy) dashboard.** Phoria (distance/near), NPC break/recovery, accommodation amplitude, home exercises, therapy session/compliance tracking. Lower visit volume, more specialty/pediatric-focused than the other four.
-  - [ ] Schema, migration, routes, templates, seed, tests, spec (same 7-step pattern)
-- [ ] **§5.5 Pre-/Post-Operative Co-Management dashboard.** The most structurally different of the five — the source document models it as **one row per follow-up visit along a timeline** (Day 1, Week 1, Month 1, Month 3...), which doesn't fit the "one row per exam" shape every other dashboard uses. Needs its own design pass before the standard 7-step pattern applies cleanly:
-  - [ ] Decide the per-visit-row vs. single-row-with-mutable-milestone modeling question (research doc §5.5 already leans toward per-visit-row, matching this app's append-only audit style — confirm before building)
-  - [ ] Schema, migration, routes, templates, seed, tests, spec
+- [x] **§5.3 Posterior Segment & Glaucoma Tracking dashboard. Done, v2.16** — see baseline spec §12.5e. Built in full, including the longitudinal IOP trend view (a new patient-workspace tab with a server-computed inline SVG chart) — confirmed with the user to build the complete spec rather than deferring trending as a separate follow-up.
+  - [x] Schema: new `GlaucomaTracking` table (exam-scoped child row)
+  - [x] Migration (dialect-verified: `017_create_glaucoma_trackings`)
+  - [x] Routes: `create_exam` conditional row creation; new `GET /patients/{id}/glaucoma-trend`
+  - [x] Templates: new Visit Focus chip + section in `exams/form.html`, conditional card in `exams/detail.html`, new `patients/glaucoma_trend_tab.html`
+  - [x] Trend view built (resolved, not deferred)
+  - [x] Seed data (two glaucoma-tracking exams, 6 months apart, same demo patient)
+  - [x] Playwright coverage (`test_glaucoma_focus_toggle_composer_and_trend_view`)
+  - [x] Spec update
+- [x] **§5.4 Binocular Vision & Pediatrics (Vision Therapy) dashboard. Done, v2.17** — see baseline spec §12.5f. No trend view needed (nothing in this field list asks for cross-visit trending beyond a plain session-number counter).
+  - [x] Schema, migration, routes, templates, seed, tests, spec (same 7-step pattern)
+- [x] **§5.5 Pre-/Post-Operative Co-Management dashboard. Done, v2.18** — see baseline spec §12.5g. The per-visit-row vs. single-row-with-mutable-milestone question resolved by reusing §5.3's Glaucoma trend-view precedent: every clinical encounter is already an `EyeExam` row, so "one row per follow-up visit" needs no new modeling primitive. All five clinical dashboards from research doc §5 are now built.
+  - [x] Schema, migration, routes, templates, seed, tests, spec (same 7-step pattern)
 
 ---
 
@@ -98,7 +101,7 @@ The foundational, largest-scope item underlying much of the above — deliberate
 
 ## 7. Security & Compliance
 
-- [ ] **CSRF protection** — a pre-existing, long-tracked gap, present in every version's open-gaps list (spec §15.1, §26.10 item 4, §36.5 item 3, §37.6)
+- [x] **CSRF protection. Done, v2.19** — a pre-existing, long-tracked gap, present in every version's open-gaps list (spec §15.1, §26.10 item 4, §36.5 item 3, §37.6). See baseline spec §37.7: a session-bound synchronizer token verified on all 27 POST routes, delivered via a JS-injected hidden field, plus this app's first server-side secret (`SECRET_KEY`).
 - [ ] Down-migration/rollback capability in the migration runner — it only ever adds, never reverses (§25.15, §36.5 item 4)
 - [ ] Per-record "who changed this specific clinical/administrative field" audit trail, beyond `AuthAuditEvent`'s authentication/access-event scope (§37.1, §37.6, §36.5 item 1's note)
 - [ ] Record-level authorization (e.g. restricting a provider to only their own patients) — current model is role-level only (§37.6)

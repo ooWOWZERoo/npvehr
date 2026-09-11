@@ -115,6 +115,110 @@
   </dl>
 </div>
 {% endif %}
+{% if exam.glaucoma_trackings %}
+{% set gt = exam.glaucoma_trackings[0] %}
+<div class="card" style="margin-top:1rem">
+  <div style="display:flex;justify-content:space-between;align-items:baseline">
+    <h3>Posterior Segment / Glaucoma Assessment</h3>
+    <a href="/patients/{{ exam.patient_id }}/glaucoma-trend" class="btn btn-secondary btn-sm">View full history &rarr;</a>
+  </div>
+  <dl class="dl-grid">
+    <dt>Diagnosis</dt><dd>{{ gt.primary_diagnosis_code or '—' }}</dd>
+    <dt>IOP Method</dt><dd>{{ gt.iop_method or '—' }}</dd>
+    <dt>IOP Time</dt><dd>{{ gt.iop_time_measured or '—' }}</dd>
+  </dl>
+  <div class="table-responsive">
+  <table class="exam-table">
+    <tr><th></th><th>Target IOP</th><th>Current IOP</th><th>Cup-Disc</th><th>Nerve Tissue</th></tr>
+    <tr><td>OD</td>
+      <td>{{ gt.target_iop_od if gt.target_iop_od is not none else '—' }}</td>
+      <td>{{ gt.iop_current_od if gt.iop_current_od is not none else '—' }}</td>
+      <td>{{ '%.2f'|format(gt.cup_disc_ratio_od) if gt.cup_disc_ratio_od is not none else '—' }}</td>
+      <td>{{ gt.nerve_tissue_status_od or '—' }}</td>
+    </tr>
+    <tr><td>OS</td>
+      <td>{{ gt.target_iop_os if gt.target_iop_os is not none else '—' }}</td>
+      <td>{{ gt.iop_current_os if gt.iop_current_os is not none else '—' }}</td>
+      <td>{{ '%.2f'|format(gt.cup_disc_ratio_os) if gt.cup_disc_ratio_os is not none else '—' }}</td>
+      <td>{{ gt.nerve_tissue_status_os or '—' }}</td>
+    </tr>
+  </table>
+  </div>
+  <div class="table-responsive" style="margin-top:0.75rem">
+  <table class="exam-table">
+    <tr><th></th><th>OCT RNFL</th><th>VF MD (dB)</th><th>VF Reliability</th></tr>
+    <tr><td>OD</td>
+      <td>{{ gt.oct_rnfl_average_microns_od if gt.oct_rnfl_average_microns_od is not none else '—' }}</td>
+      <td>{{ gt.visual_field_md_db_od if gt.visual_field_md_db_od is not none else '—' }}</td>
+      <td>{{ gt.vf_reliability_od or '—' }}</td>
+    </tr>
+    <tr><td>OS</td>
+      <td>{{ gt.oct_rnfl_average_microns_os if gt.oct_rnfl_average_microns_os is not none else '—' }}</td>
+      <td>{{ gt.visual_field_md_db_os if gt.visual_field_md_db_os is not none else '—' }}</td>
+      <td>{{ gt.vf_reliability_os or '—' }}</td>
+    </tr>
+  </table>
+  </div>
+  <dl class="dl-grid" style="margin-top:0.75rem">
+    <dt>Meds</dt><dd>{{ gt.prescribed_glaucoma_meds or '—' }}</dd>
+    <dt>Diagnostic Orders</dt><dd>{{ gt.diagnostic_orders or '—' }}</dd>
+    <dt>Follow-up</dt><dd>{{ gt.follow_up_interval or '—' }}</dd>
+    {% if gt.clinical_notes %}<dt>Notes</dt><dd>{{ gt.clinical_notes }}</dd>{% endif %}
+  </dl>
+</div>
+{% endif %}
+{% if exam.binocular_vision_assessments %}
+{% set bv = exam.binocular_vision_assessments[0] %}
+<div class="card" style="margin-top:1rem"><h3>Binocular Vision / Pediatrics Assessment</h3>
+  <dl class="dl-grid">
+    <dt>Diagnosis</dt><dd>{{ bv.primary_diagnosis_code or '—' }}</dd>
+    <dt>Strabismus</dt><dd>{% if bv.strabismus_present is none %}—{% elif bv.strabismus_present %}Present{{ ' (' + bv.strabismus_direction + ')' if bv.strabismus_direction else '' }}{% else %}Absent{% endif %}</dd>
+    <dt>Phoria (Dist/Near)</dt><dd>{{ bv.phoria_distance_diopters if bv.phoria_distance_diopters is not none else '—' }} / {{ bv.phoria_near_diopters if bv.phoria_near_diopters is not none else '—' }} &Delta;</dd>
+    <dt>NPC (Break/Recovery)</dt><dd>{{ bv.npc_break_cm if bv.npc_break_cm is not none else '—' }} / {{ bv.npc_recovery_cm if bv.npc_recovery_cm is not none else '—' }} cm</dd>
+  </dl>
+  <div class="table-responsive">
+  <table class="exam-table">
+    <tr><th></th><th>Accommodation Amplitude (D)</th></tr>
+    <tr><td>OD</td><td>{{ bv.accommodation_amplitude_od if bv.accommodation_amplitude_od is not none else '—' }}</td></tr>
+    <tr><td>OS</td><td>{{ bv.accommodation_amplitude_os if bv.accommodation_amplitude_os is not none else '—' }}</td></tr>
+  </table>
+  </div>
+  <dl class="dl-grid" style="margin-top:0.75rem">
+    <dt>Home Exercises</dt><dd>{{ bv.assigned_home_exercises or '—' }}</dd>
+    <dt>Therapy Session</dt><dd>{{ bv.therapy_session_number if bv.therapy_session_number is not none else '—' }}</dd>
+    <dt>Compliance</dt><dd>{{ bv.therapy_compliance_rating or '—' }}</dd>
+    <dt>Follow-up</dt><dd>{{ bv.follow_up_interval or '—' }}</dd>
+    {% if bv.clinical_notes %}<dt>Notes</dt><dd>{{ bv.clinical_notes }}</dd>{% endif %}
+  </dl>
+</div>
+{% endif %}
+{% if exam.surgery_comanagement_trackings %}
+{% set sx = exam.surgery_comanagement_trackings[0] %}
+<div class="card" style="margin-top:1rem">
+  <div style="display:flex;justify-content:space-between;align-items:baseline">
+    <h3>Pre-/Post-Op Co-Management</h3>
+    <a href="/patients/{{ exam.patient_id }}/surgery-timeline" class="btn btn-secondary btn-sm">View full timeline &rarr;</a>
+  </div>
+  <dl class="dl-grid">
+    <dt>Procedure</dt><dd>{{ sx.surgical_procedure or '—' }} {{ sx.operative_eye or '' }}</dd>
+    <dt>Date of Surgery</dt><dd>{{ sx.date_of_surgery or '—' }}</dd>
+    <dt>Surgeon / Facility</dt><dd>{{ sx.surgeon_name or '—' }} / {{ sx.co_managing_facility or '—' }}</dd>
+    <dt>Milestone</dt><dd>{{ sx.current_milestone or '—' }}</dd>
+    <dt>BCVA</dt><dd>{{ sx.best_corrected_visual_acuity or '—' }}</dd>
+    <dt>IOP</dt><dd>{{ sx.intraocular_pressure if sx.intraocular_pressure is not none else '—' }} mmHg</dd>
+    <dt>Corneal Edema</dt><dd>{% if sx.corneal_edema_present is none %}—{% elif sx.corneal_edema_present %}Present{{ ' (' + sx.corneal_edema_grading + ')' if sx.corneal_edema_grading else '' }}{% else %}Absent{% endif %}</dd>
+    <dt>AC Cells/Flare</dt><dd>{{ sx.anterior_chamber_cells_flare or '—' }}</dd>
+    <dt>Flap/Wound Status</dt><dd>{{ sx.surgical_flap_or_wound_status or '—' }}</dd>
+  </dl>
+  <dl class="dl-grid" style="margin-top:0.75rem">
+    <dt>Steroid Taper</dt><dd>{{ sx.steroid_taper_schedule or '—' }}</dd>
+    <dt>NSAID Drops</dt><dd>{{ sx.nsaid_drops_frequency or '—' }}</dd>
+    <dt>Antibiotic Drops</dt><dd>{{ sx.antibiotic_drops_status or '—' }}</dd>
+    <dt>Follow-up</dt><dd>{{ sx.follow_up_interval or '—' }}</dd>
+    {% if sx.clinical_notes %}<dt>Notes</dt><dd>{{ sx.clinical_notes }}</dd>{% endif %}
+  </dl>
+</div>
+{% endif %}
 <div class="card" style="margin-top:1rem"><h3>Assessment &amp; Plan</h3>
   <div class="form-row cols-2">
     <div><strong>Assessment</strong><p>{{ exam.assessment or '—' }}</p></div>

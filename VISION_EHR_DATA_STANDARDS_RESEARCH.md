@@ -114,9 +114,11 @@ A new encounter-scoped table, `AnteriorSegmentAssessment` (`exam_id` FK, mirrori
 | plan_therapeutics | String (multi-value) | e.g. Preservative-Free Tears, Warm Compresses, Topical Steroid, Restasis/Xiidra |
 | follow_up_interval, clinical_notes | String / Text | As elsewhere in this app |
 
-### 5.3 Posterior Segment & Glaucoma Tracking dashboard
+### 5.3 Posterior Segment & Glaucoma Tracking dashboard — **implemented in v2.16**
 
-A new longitudinal table, e.g. `GlaucomaTracking`, indexed on `(patient_id, created_at)` for trend charts — the source document's own indexing intent, achievable with a normal SQLAlchemy index rather than its Postgres-specific DDL.
+Built as an `exam_id`-FK child row (`GlaucomaTracking`), same shape as `Refraction`/`AnteriorSegmentAssessment`, rather than the source document's `(patient_id, created_at)`-indexed patient-scoped table — trending is achieved by querying every row across a patient's exam history (joined via `EyeExam.patient_id`) instead of denormalizing `patient_id` onto this table, keeping every dashboard's linkage shape consistent. **Built in full, including the longitudinal trend view** flagged as an open scoping question in `BUILD_BACKLOG.md` — confirmed with the user to build the complete spec, not just the single-visit snapshot shape used for §5.1/§5.2.
+
+The trend view is a new patient-workspace tab (`GET /patients/{id}/glaucoma-trend`, "Glaucoma Tracking" in the subnav) showing a table of every exam with a tracking row (newest first, each linking to its exam) plus a simple inline `<svg>` line chart of current IOP OD/OS across visits, computed server-side as plain Python (index-spaced X axis, since visit dates aren't evenly distributed; a dashed 21 mmHg reference line). No charting library or CDN dependency, consistent with this app's zero-external-JS-dependency convention. Target IOP is shown in the table only, not layered onto the chart, to keep the one visual signal (current IOP trend) clear. Each exam's own Glaucoma detail card links to this tab ("View full history →").
 
 | Field | Translated type | Notes |
 | --- | --- | --- |
@@ -134,9 +136,9 @@ A new longitudinal table, e.g. `GlaucomaTracking`, indexed on `(patient_id, crea
 | diagnostic_orders | String (multi-value) | e.g. "OCT RNFL", "Humphrey VF 24-2" |
 | follow_up_interval, clinical_notes | String / Text | |
 
-### 5.4 Binocular Vision & Pediatrics (Vision Therapy) dashboard
+### 5.4 Binocular Vision & Pediatrics (Vision Therapy) dashboard — **implemented in v2.17**
 
-A new table, e.g. `BinocularVisionAssessment`.
+Built as an `exam_id`-FK child row (`BinocularVisionAssessment`), same shape as `AnteriorSegmentAssessment`/`GlaucomaTracking` — one row per exam. Unlike §5.3's Glaucoma dashboard, nothing in this field list asks for cross-visit trending beyond `therapy_session_number` (a plain "session N of M" counter, not a chart), so this stayed a single-visit-snapshot dashboard: a fourth Visit Focus chip, a form section, and a conditional detail card, no new trend-view route. `strabismus_present` is captured as a tri-state Yes/No dropdown rather than a checkbox, since a confirmed-absent finding is clinically distinct from one simply not yet assessed.
 
 | Field | Translated type | Notes |
 | --- | --- | --- |
@@ -151,9 +153,11 @@ A new table, e.g. `BinocularVisionAssessment`.
 | therapy_compliance_rating | String | Excellent / Good / Fair / Poor |
 | follow_up_interval, clinical_notes | String / Text | |
 
-### 5.5 Pre- and Post-Operative Co-Management dashboard
+### 5.5 Pre- and Post-Operative Co-Management dashboard — **implemented in v2.18**
 
-A new table, e.g. `SurgeryComanagementTracking`, with one row per follow-up encounter along a patient's surgical timeline (the source document models `current_milestone` as a single mutable field; a per-visit row is more consistent with this app's append-only, audit-friendly style — see §26.6/§26.9's `AppointmentAuditEvent` pattern).
+Built as an `exam_id`-FK child row (`SurgeryComanagementTracking`), same shape as the other four dashboards — the source document's own "one row per follow-up encounter along a timeline" (Pre-Op Clearance → Day 1 → Week 1 → Month 1 → Month 3 → Released) is naturally satisfied here, since every clinical encounter in this app is already an `EyeExam` row; a per-visit row falls out of that for free rather than requiring a new modeling decision (the concern originally flagged — see `BUILD_BACKLOG.md`'s note that this dashboard needed its own design pass before building — resolved by recognizing it as the same shape as §5.3's Glaucoma trend view, not a new one). `current_milestone` records where a given visit sits in the timeline; the timeline itself is a query across a patient's exam history, not a mutable field.
+
+The new patient-workspace tab ("Surgery Co-Management," `GET /patients/{id}/surgery-timeline`) renders this as an ordered table (Date, Milestone, Procedure/Eye, BCVA, IOP, Corneal Edema), newest first — no chart, since milestones are categorical/ordinal rather than a continuous quantity worth trending visually; the ordered table itself is the timeline the source document wanted. `corneal_edema_present` is captured as a tri-state Yes/No dropdown, same convention as §5.4's `strabismus_present`.
 
 | Field | Translated type | Notes |
 | --- | --- | --- |
@@ -242,4 +246,7 @@ The source document includes a sample ASC X12 EDI 837 segment sequence and a CMS
 7. ~~Build a second dashboard (§5.2's Anterior Segment / Dry Eye), and, since that's the first dashboard to join Refractive Assessment on the same exam form, design how a clinician picks which Assessment & Plan section(s) apply to a given visit.~~ **Done, v2.11** — see §5.2 and the baseline spec's §12.5b (Visit Focus navigation model). §5.3–§5.5 (Glaucoma, Binocular Vision, Pre/Post-Op) remain undone; each adds one more Visit Focus chip by the same pattern, no changes to the toggle mechanism itself.
 8. ~~The free-text `EyeExam.assessment`/`plan` fields (§12.5) have no connection to any of the structured Assessment fields built in §5.1/§5.2 — a clinician has to separately re-type in prose what they already selected as chips/dropdowns. The source document's dropped "Auto-Generated Clinical Note Output Summary" concept (see §5.1's correction note above) addresses exactly this: auto-populate `assessment`/`plan` with a draft narrative synthesized from the structured fields, left editable rather than locked.~~ **Done, v2.12** — see the baseline spec's §12.5c. Two further diagnosis-driven refinements to this composer (ICD-10 auto-suggestion, diagnosis-driven recall interval) are recorded as candidates in §7 below, from a later reviewed document.
 9. **New, v2.13:** §6's billing/claims/EDI material remains target-state only, same treatment as §5.6 — revisit only with a real clearinghouse/payer relationship and compliance review, not attempted here. **Not started.**
-10. **New, v2.13:** §7's two compatible ideas (ICD-10 auto-suggestion, diagnosis-driven recall interval) are candidates for a future narrow slice extending the existing v2.12 composer. **Not started.**
+10. ~~§7's two compatible ideas (ICD-10 auto-suggestion, diagnosis-driven recall interval) are candidates for a future narrow slice extending the existing v2.12 composer.~~ **Done, v2.15** — see the baseline spec's §12.5c.
+11. ~~Build the third dashboard (§5.3's Posterior Segment / Glaucoma Tracking), including the longitudinal IOP trend view it wants beyond the other dashboards' single-visit-snapshot shape.~~ **Done, v2.16** — see §5.3 and the baseline spec's §12.5e.
+12. ~~Build the fourth dashboard (§5.4's Binocular Vision & Pediatrics / Vision Therapy).~~ **Done, v2.17** — see §5.4 and the baseline spec's §12.5f.
+13. ~~Build the fifth and last dashboard (§5.5's Pre-/Post-Operative Co-Management), including its timeline view.~~ **Done, v2.18** — see §5.5 and the baseline spec's §12.5g. All five clinical dashboards from §5 are now built; the remaining open items in this document are §5.6/§6/§7's target-state-only material (e-prescribing/lab/inventory, billing/claims, and the FHIR/terminology alignment questions in items 1-2 above).

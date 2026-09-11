@@ -10,6 +10,7 @@ from ehr.auth.security import hash_password, verify_password, new_session_token
 from ehr.auth.deps import get_current_user, SESSION_COOKIE_NAME, SESSION_LIFETIME
 from ehr.auth.permissions import require_role, USER_MANAGEMENT, AUTH_AUDIT_VIEW, ALL_ROLES, ROLE_LABELS
 from ehr.auth.audit import log_auth_event
+from ehr.auth import csrf
 from ehr.env_info import EHR_ENV
 
 router = APIRouter(tags=["auth"])
@@ -28,12 +29,21 @@ def _client_ip(request: Request):
 
 @router.get("/login", response_class=HTMLResponse)
 def login_form(request: Request, next: str = "/"):
-    return templates.TemplateResponse(request, "login.html", {"next": next, "error": None})
+    # No session exists yet at this point, so login gets its own short-lived
+    # double-submit-cookie CSRF token rather than the session-bound scheme
+    # used everywhere else (ehr/auth/csrf.py).
+    login_csrf_token = csrf.generate_login_csrf()
+    response = templates.TemplateResponse(request, "login.html",
+        {"next": next, "error": None, "login_csrf_token": login_csrf_token})
+    response.set_cookie(csrf.LOGIN_CSRF_COOKIE_NAME, login_csrf_token, httponly=True,
+                         secure=request.url.scheme == "https", samesite="lax", max_age=600)
+    return response
 
 
 @router.post("/login", response_class=HTMLResponse)
 def login_submit(request: Request, email: str = Form(...), password: str = Form(...),
-                  next: str = Form("/"), db: Session = Depends(get_db)):
+                  next: str = Form("/"), csrf_token: str = Form(""), db: Session = Depends(get_db)):
+    csrf.verify_login_csrf(request.cookies.get(csrf.LOGIN_CSRF_COOKIE_NAME), csrf_token)
     email_norm = email.strip().lower()
     user = db.query(User).filter(User.email == email_norm).first()
     GENERIC_ERROR = "Invalid email or password."
@@ -46,7 +56,7 @@ def login_submit(request: Request, email: str = Form(...), password: str = Form(
                         detail="invalid credentials" if user else "unknown email")
         db.commit()
         return templates.TemplateResponse(request, "login.html",
-            {"next": next, "error": GENERIC_ERROR}, status_code=400)
+            {"next": next, "error": GENERIC_ERROR, "login_csrf_token": csrf_token}, status_code=400)
     token = new_session_token()
     now = datetime.utcnow()
     sess = UserSession(user_id=user.id, session_token=token, created_at=now,
@@ -67,8 +77,14 @@ def login_submit(request: Request, email: str = Form(...), password: str = Form(
 
 
 @router.post("/logout")
-def logout(request: Request, db: Session = Depends(get_db)):
+async def logout(request: Request, db: Session = Depends(get_db)):
     token = request.cookies.get(SESSION_COOKIE_NAME)
+    # No Depends(get_current_user) on this route (logout must still work
+    # against an already-expired/invalid session), so request.state.csrf_token
+    # isn't set here -- recompute the expected value straight from the raw
+    # session cookie instead.
+    form = await request.form()
+    csrf.verify_or_403(csrf.generate_csrf_token(token) if token else None, form.get("csrf_token"))
     user_id = None
     if token:
         sess = db.query(UserSession).filter(UserSession.session_token == token).first()
@@ -100,8 +116,9 @@ def new_user_form(request: Request, _user=Depends(get_current_user), _role=Depen
 
 @router.post("/admin/users/new")
 def create_user(request: Request, email: str = Form(...), first_name: str = Form(...), last_name: str = Form(...),
-                 role: str = Form(...), password: str = Form(...), db: Session = Depends(get_db),
+                 role: str = Form(...), password: str = Form(...), csrf_token: str = Form(""), db: Session = Depends(get_db),
                  _user=Depends(get_current_user), _role_check=Depends(require_role(*USER_MANAGEMENT))):
+    csrf.verify_or_403(request.state.csrf_token, csrf_token)
     email_norm = email.strip().lower()
     if role not in ALL_ROLES:
         return templates.TemplateResponse(request, "admin/users/form.html",
@@ -125,8 +142,10 @@ def create_user(request: Request, email: str = Form(...), first_name: str = Form
 
 
 @router.post("/admin/users/{target_id}/toggle-active")
-def toggle_user_active(request: Request, target_id: int, db: Session = Depends(get_db),
-                        _user=Depends(get_current_user), _role_check=Depends(require_role(*USER_MANAGEMENT))):
+async def toggle_user_active(request: Request, target_id: int, db: Session = Depends(get_db),
+                              _user=Depends(get_current_user), _role_check=Depends(require_role(*USER_MANAGEMENT))):
+    form = await request.form()
+    csrf.verify_or_403(request.state.csrf_token, form.get("csrf_token"))
     target = db.query(User).filter(User.id == target_id).first()
     if not target:
         return HTMLResponse("Not found", status_code=404)

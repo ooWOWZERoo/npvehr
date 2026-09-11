@@ -460,6 +460,9 @@ class EyeExam(Base):
     refractions = relationship("Refraction", back_populates="exam", cascade="all, delete-orphan")
     prescriptions = relationship("Prescription", back_populates="exam")
     anterior_segment_assessments = relationship("AnteriorSegmentAssessment", back_populates="exam", cascade="all, delete-orphan")
+    glaucoma_trackings = relationship("GlaucomaTracking", back_populates="exam", cascade="all, delete-orphan")
+    binocular_vision_assessments = relationship("BinocularVisionAssessment", back_populates="exam", cascade="all, delete-orphan")
+    surgery_comanagement_trackings = relationship("SurgeryComanagementTracking", back_populates="exam", cascade="all, delete-orphan")
 
 class Refraction(Base):
     __tablename__ = "refractions"
@@ -500,6 +503,89 @@ class AnteriorSegmentAssessment(Base):
     follow_up_interval = Column(String)
     clinical_notes = Column(Text)
     exam = relationship("EyeExam", back_populates="anterior_segment_assessments")
+
+class GlaucomaTracking(Base):
+    """Posterior Segment & Glaucoma Tracking structured Assessment & Plan
+    (VISION_EHR_DATA_STANDARDS_RESEARCH.md 5.3), the third of five clinical
+    dashboards reviewed in v2.9 -- built in v2.16. Kept as an exam_id-FK child
+    row, same shape as Refraction/AnteriorSegmentAssessment, rather than a
+    separate patient-scoped table -- trending across visits (the one thing
+    this dashboard wants that the other two don't) is achieved by querying
+    every row across a patient's exam history (joined via EyeExam.patient_id),
+    not by denormalizing patient_id onto this table."""
+    __tablename__ = "glaucoma_trackings"
+    id = Column(Integer, primary_key=True, index=True)
+    exam_id = Column(Integer, ForeignKey("eye_exams.id"), nullable=False)
+    primary_diagnosis_code = Column(String)  # free-text, e.g. 'H40.1132'
+    target_iop_od = Column(Integer); target_iop_os = Column(Integer)  # mmHg
+    iop_current_od = Column(Integer); iop_current_os = Column(Integer)  # mmHg
+    iop_time_measured = Column(String)  # 'HH:MM' -- IOP varies by time of day
+    iop_method = Column(String)  # Goldmann Applanation / Tono-Pen / iCare
+    cup_disc_ratio_od = Column(Float); cup_disc_ratio_os = Column(Float)  # 0.00-1.00
+    nerve_tissue_status_od = Column(String); nerve_tissue_status_os = Column(String)  # e.g. 'Healthy Rim', 'Inferior thinning'
+    oct_rnfl_average_microns_od = Column(Integer); oct_rnfl_average_microns_os = Column(Integer)
+    visual_field_md_db_od = Column(Float); visual_field_md_db_os = Column(Float)
+    vf_reliability_od = Column(String); vf_reliability_os = Column(String)  # Reliable / Borderline / Unreliable
+    prescribed_glaucoma_meds = Column(String)  # comma-delimited, e.g. 'Latanoprost 0.005% QHS OU'
+    diagnostic_orders = Column(String)  # comma-delimited, e.g. 'OCT RNFL, Humphrey VF 24-2'
+    follow_up_interval = Column(String)
+    clinical_notes = Column(Text)
+    exam = relationship("EyeExam", back_populates="glaucoma_trackings")
+
+class BinocularVisionAssessment(Base):
+    """Binocular Vision & Pediatrics (Vision Therapy) structured Assessment &
+    Plan (VISION_EHR_DATA_STANDARDS_RESEARCH.md 5.4), the fourth of five
+    clinical dashboards reviewed in v2.9 -- built in v2.17. Same exam_id-FK
+    child-row shape as AnteriorSegmentAssessment/GlaucomaTracking (one row per
+    exam) -- unlike Glaucoma, this dashboard's own field list has no
+    longitudinal-trending ask beyond therapy_session_number, so it stays a
+    single-visit-snapshot dashboard, no trend view."""
+    __tablename__ = "binocular_vision_assessments"
+    id = Column(Integer, primary_key=True, index=True)
+    exam_id = Column(Integer, ForeignKey("eye_exams.id"), nullable=False)
+    primary_diagnosis_code = Column(String)  # free-text, e.g. 'H51.11' (Convergence insufficiency)
+    phoria_distance_diopters = Column(Integer); phoria_near_diopters = Column(Integer)  # Negative = Exo, Positive = Eso
+    strabismus_present = Column(Boolean)
+    strabismus_direction = Column(String)  # Exotropia / Esotropia / Hypertropia
+    npc_break_cm = Column(Float); npc_recovery_cm = Column(Float)  # Near Point of Convergence
+    accommodation_amplitude_od = Column(Float); accommodation_amplitude_os = Column(Float)  # Diopters
+    assigned_home_exercises = Column(String)  # comma-delimited, e.g. 'Brock String, Lifesaver Card'
+    therapy_session_number = Column(Integer)  # e.g. session 4 of 12
+    therapy_compliance_rating = Column(String)  # Excellent / Good / Fair / Poor
+    follow_up_interval = Column(String)
+    clinical_notes = Column(Text)
+    exam = relationship("EyeExam", back_populates="binocular_vision_assessments")
+
+class SurgeryComanagementTracking(Base):
+    """Pre- and Post-Operative Co-Management structured Assessment & Plan
+    (VISION_EHR_DATA_STANDARDS_RESEARCH.md 5.5), the fifth and last of five
+    clinical dashboards reviewed in v2.9 -- built in v2.18. Same exam_id-FK
+    child-row shape as the other four -- the source document's own "one row
+    per follow-up visit along a timeline" (Pre-Op -> Day 1 -> Week 1 -> ...)
+    is naturally satisfied by this app's existing model, since every clinical
+    encounter is already an EyeExam row. The timeline itself is a query
+    across a patient's exam history (joined via EyeExam.patient_id, same as
+    Glaucoma's trend view), not a separate table or a mutable current-state
+    field."""
+    __tablename__ = "surgery_comanagement_trackings"
+    id = Column(Integer, primary_key=True, index=True)
+    exam_id = Column(Integer, ForeignKey("eye_exams.id"), nullable=False)
+    surgical_procedure = Column(String)  # Cataract Extraction with IOL / LASIK / PRK / SMILE / YAG Capsulotomy / Selective Laser Trabeculoplasty
+    operative_eye = Column(String)  # OD / OS / OU
+    date_of_surgery = Column(String)  # date, e.g. '2026-08-01'
+    surgeon_name = Column(String); co_managing_facility = Column(String)
+    current_milestone = Column(String)  # Pre-Op Clearance / Day 1 / Week 1 / Month 1 / Month 3 Post-Op / Released to Regular Care
+    best_corrected_visual_acuity = Column(String)  # e.g. '20/20'
+    intraocular_pressure = Column(Integer)  # mmHg
+    corneal_edema_present = Column(Boolean)
+    corneal_edema_grading = Column(String)  # same '0'/'1+'/'2+'/'3+'/'4+' grading scale as 5.2
+    anterior_chamber_cells_flare = Column(String)  # same grading scale
+    surgical_flap_or_wound_status = Column(String)  # e.g. 'Intact, Clear, Well-Apposed'
+    steroid_taper_schedule = Column(Text)  # e.g. 'Pred Forte: QID x 1 week, then TID...'
+    nsaid_drops_frequency = Column(String); antibiotic_drops_status = Column(String)
+    follow_up_interval = Column(String)
+    clinical_notes = Column(Text)
+    exam = relationship("EyeExam", back_populates="surgery_comanagement_trackings")
 
 class Prescription(Base):
     __tablename__ = "prescriptions"

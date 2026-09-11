@@ -19,6 +19,9 @@
     <div class="test-chip-list">
       <label class="test-chip"><input type="checkbox" class="focus-toggle" data-target="focus-refractive" checked> Comprehensive / Refractive</label>
       <label class="test-chip"><input type="checkbox" class="focus-toggle" data-target="focus-anterior"> Anterior Segment / Dry Eye</label>
+      <label class="test-chip"><input type="checkbox" class="focus-toggle" data-target="focus-glaucoma"> Posterior Segment / Glaucoma</label>
+      <label class="test-chip"><input type="checkbox" class="focus-toggle" data-target="focus-binocular"> Binocular Vision / Pediatrics</label>
+      <label class="test-chip"><input type="checkbox" class="focus-toggle" data-target="focus-surgery"> Pre-/Post-Op Co-Management</label>
     </div>
     <div class="section-title">Visual Acuity</div>
     <div class="table-responsive">
@@ -122,6 +125,149 @@
       <div class="form-group"><label>Clinical Notes</label><input name="asa_clinical_notes"></div>
     </div>
     </div>
+    <div id="focus-glaucoma">
+    <div class="section-title">Posterior Segment / Glaucoma Assessment <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; structured diagnosis fields (VISION_EHR_DATA_STANDARDS_RESEARCH.md 5.3)</span></div>
+    <div class="form-row cols-3">
+      <div class="form-group"><label>Primary Diagnosis Code</label><input name="gt_primary_diagnosis_code" placeholder="H40.1132"></div>
+      <div class="form-group"><label>IOP Time Measured</label><input name="gt_iop_time_measured" type="time"></div>
+      <div class="form-group"><label>IOP Method</label>
+        <select name="gt_iop_method"><option value="">&mdash;</option><option>Goldmann Applanation</option><option>Tono-Pen</option><option>iCare</option></select>
+      </div>
+    </div>
+    <div class="table-responsive">
+    <table class="exam-table">
+      <tr><th></th><th>Target IOP</th><th>Current IOP</th><th>Cup-Disc Ratio</th><th>Nerve Tissue Status</th></tr>
+      {% for eye in ['od', 'os'] %}
+      <tr><td>{{ eye|upper }}</td>
+        <td><input name="gt_target_iop_{{ eye }}" type="number" min="5" max="40"></td>
+        <td><input name="gt_iop_current_{{ eye }}" type="number" min="0" max="60"></td>
+        <td><input name="gt_cup_disc_ratio_{{ eye }}" type="number" step="0.05" min="0" max="1"></td>
+        <td><input name="gt_nerve_tissue_status_{{ eye }}" placeholder="Healthy Rim"></td>
+      </tr>
+      {% endfor %}
+    </table>
+    </div>
+    <div class="table-responsive">
+    <table class="exam-table">
+      <tr><th></th><th>OCT RNFL (&mu;m)</th><th>Visual Field MD (dB)</th><th>VF Reliability</th></tr>
+      {% for eye in ['od', 'os'] %}
+      <tr><td>{{ eye|upper }}</td>
+        <td><input name="gt_oct_rnfl_average_microns_{{ eye }}" type="number" min="0"></td>
+        <td><input name="gt_visual_field_md_db_{{ eye }}" type="number" step="0.1"></td>
+        <td><select name="gt_vf_reliability_{{ eye }}"><option value="">&mdash;</option><option>Reliable</option><option>Borderline</option><option>Unreliable</option></select></td>
+      </tr>
+      {% endfor %}
+    </table>
+    </div>
+    <div class="form-group"><label>Prescribed Glaucoma Meds</label></div>
+    <div class="test-chip-list">
+      {% for med in ['Latanoprost 0.005% QHS OU', 'Timolol 0.5% BID OU', 'Brimonidine 0.2% TID OU', 'Dorzolamide 2% TID OU'] %}
+      <label class="test-chip"><input type="checkbox" name="gt_prescribed_glaucoma_meds" value="{{ med }}"> {{ med }}</label>
+      {% endfor %}
+    </div>
+    <div class="form-group"><label>Diagnostic Orders</label></div>
+    <div class="test-chip-list">
+      {% for order in ['OCT RNFL', 'Humphrey VF 24-2', 'Gonioscopy', 'Pachymetry'] %}
+      <label class="test-chip"><input type="checkbox" name="gt_diagnostic_orders" value="{{ order }}"> {{ order }}</label>
+      {% endfor %}
+    </div>
+    <div class="form-row cols-2">
+      <div class="form-group"><label>Follow-up Interval</label>
+        <select name="gt_follow_up_interval"><option value="">&mdash;</option><option>1 month</option><option>3 months</option><option>6 months</option><option>1 year</option></select>
+      </div>
+      <div class="form-group"><label>Clinical Notes</label><input name="gt_clinical_notes"></div>
+    </div>
+    </div>
+    <div id="focus-binocular">
+    <div class="section-title">Binocular Vision / Pediatrics Assessment <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; structured diagnosis fields (VISION_EHR_DATA_STANDARDS_RESEARCH.md 5.4)</span></div>
+    <div class="form-row cols-3">
+      <div class="form-group"><label>Primary Diagnosis Code</label><input name="bv_primary_diagnosis_code" placeholder="H51.11"></div>
+      <div class="form-group"><label>Strabismus Present?</label>
+        <select name="bv_strabismus_present"><option value="">&mdash;</option><option>Yes</option><option>No</option></select>
+      </div>
+      <div class="form-group"><label>Strabismus Direction</label>
+        <select name="bv_strabismus_direction"><option value="">&mdash;</option><option>Exotropia</option><option>Esotropia</option><option>Hypertropia</option></select>
+      </div>
+    </div>
+    <div class="form-row cols-2">
+      <div class="form-group"><label>Phoria, Distance (&Delta;)</label><input name="bv_phoria_distance_diopters" type="number" placeholder="Negative = Exo, Positive = Eso"></div>
+      <div class="form-group"><label>Phoria, Near (&Delta;)</label><input name="bv_phoria_near_diopters" type="number" placeholder="Negative = Exo, Positive = Eso"></div>
+    </div>
+    <div class="form-row cols-2">
+      <div class="form-group"><label>NPC Break (cm)</label><input name="bv_npc_break_cm" type="number" step="0.5" min="0"></div>
+      <div class="form-group"><label>NPC Recovery (cm)</label><input name="bv_npc_recovery_cm" type="number" step="0.5" min="0"></div>
+    </div>
+    <div class="table-responsive">
+    <table class="exam-table">
+      <tr><th></th><th>Accommodation Amplitude (D)</th></tr>
+      {% for eye in ['od', 'os'] %}
+      <tr><td>{{ eye|upper }}</td><td><input name="bv_accommodation_amplitude_{{ eye }}" type="number" step="0.25" min="0"></td></tr>
+      {% endfor %}
+    </table>
+    </div>
+    <div class="form-group"><label>Assigned Home Exercises</label></div>
+    <div class="test-chip-list">
+      {% for ex in ['Brock String', 'Lifesaver Card', 'Pencil Push-Ups', 'Barrel Cards'] %}
+      <label class="test-chip"><input type="checkbox" name="bv_assigned_home_exercises" value="{{ ex }}"> {{ ex }}</label>
+      {% endfor %}
+    </div>
+    <div class="form-row cols-3">
+      <div class="form-group"><label>Therapy Session #</label><input name="bv_therapy_session_number" type="number" min="1" placeholder="e.g. 4 of 12"></div>
+      <div class="form-group"><label>Therapy Compliance</label>
+        <select name="bv_therapy_compliance_rating"><option value="">&mdash;</option><option>Excellent</option><option>Good</option><option>Fair</option><option>Poor</option></select>
+      </div>
+      <div class="form-group"><label>Follow-up Interval</label>
+        <select name="bv_follow_up_interval"><option value="">&mdash;</option><option>1 week</option><option>2 weeks</option><option>1 month</option><option>3 months</option></select>
+      </div>
+    </div>
+    <div class="form-group"><label>Clinical Notes</label><input name="bv_clinical_notes"></div>
+    </div>
+    <div id="focus-surgery">
+    <div class="section-title">Pre-/Post-Op Co-Management <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; structured diagnosis fields (VISION_EHR_DATA_STANDARDS_RESEARCH.md 5.5)</span></div>
+    <div class="form-row cols-3">
+      <div class="form-group"><label>Surgical Procedure</label>
+        <select name="sx_surgical_procedure"><option value="">&mdash;</option><option>Cataract Extraction with IOL</option><option>LASIK</option><option>PRK</option><option>SMILE</option><option>YAG Capsulotomy</option><option>Selective Laser Trabeculoplasty</option></select>
+      </div>
+      <div class="form-group"><label>Operative Eye</label>
+        <select name="sx_operative_eye"><option value="">&mdash;</option><option value="OD">OD (Right)</option><option value="OS">OS (Left)</option><option value="OU">OU (Both)</option></select>
+      </div>
+      <div class="form-group"><label>Date of Surgery</label><input name="sx_date_of_surgery" type="date"></div>
+    </div>
+    <div class="form-row cols-3">
+      <div class="form-group"><label>Surgeon</label><input name="sx_surgeon_name"></div>
+      <div class="form-group"><label>Co-Managing Facility</label><input name="sx_co_managing_facility"></div>
+      <div class="form-group"><label>Current Milestone</label>
+        <select name="sx_current_milestone"><option value="">&mdash;</option><option>Pre-Op Clearance</option><option>Day 1</option><option>Week 1</option><option>Month 1</option><option>Month 3 Post-Op</option><option>Released to Regular Care</option></select>
+      </div>
+    </div>
+    <div class="form-row cols-2">
+      <div class="form-group"><label>Best Corrected VA</label><input name="sx_best_corrected_visual_acuity" placeholder="20/20"></div>
+      <div class="form-group"><label>IOP (mmHg)</label><input name="sx_intraocular_pressure" type="number" step="0.5"></div>
+    </div>
+    <div class="form-row cols-3">
+      <div class="form-group"><label>Corneal Edema Present?</label>
+        <select name="sx_corneal_edema_present"><option value="">&mdash;</option><option>Yes</option><option>No</option></select>
+      </div>
+      <div class="form-group"><label>Corneal Edema Grading</label>
+        <select name="sx_corneal_edema_grading"><option value="">&mdash;</option>{% for g in ['0','1+','2+','3+','4+'] %}<option>{{ g }}</option>{% endfor %}</select>
+      </div>
+      <div class="form-group"><label>AC Cells/Flare</label>
+        <select name="sx_anterior_chamber_cells_flare"><option value="">&mdash;</option>{% for g in ['0','1+','2+','3+','4+'] %}<option>{{ g }}</option>{% endfor %}</select>
+      </div>
+    </div>
+    <div class="form-group"><label>Surgical Flap/Wound Status</label><input name="sx_surgical_flap_or_wound_status" placeholder="Intact, Clear, Well-Apposed"></div>
+    <div class="form-group"><label>Steroid Taper Schedule</label><textarea name="sx_steroid_taper_schedule" placeholder="Pred Forte: QID x 1 week, then TID..."></textarea></div>
+    <div class="form-row cols-2">
+      <div class="form-group"><label>NSAID Drops Frequency</label><input name="sx_nsaid_drops_frequency"></div>
+      <div class="form-group"><label>Antibiotic Drops Status</label><input name="sx_antibiotic_drops_status"></div>
+    </div>
+    <div class="form-row cols-2">
+      <div class="form-group"><label>Follow-up Interval</label>
+        <select name="sx_follow_up_interval"><option value="">&mdash;</option><option>1 day</option><option>1 week</option><option>1 month</option><option>3 months</option></select>
+      </div>
+      <div class="form-group"><label>Clinical Notes</label><input name="sx_clinical_notes"></div>
+    </div>
+    </div>
     <div class="section-title">Assessment &amp; Plan <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; auto-filled from the structured fields above as you fill them in; edit freely</span></div>
     <div class="form-row cols-2">
       <div class="form-group"><label>Assessment</label><textarea name="assessment" id="assessment"></textarea></div>
@@ -217,6 +363,39 @@ var ICD10_BY_DX = {
         parts.push(s2);
       }
     }
+    if (isFocusOn('focus-glaucoma')) {
+      var gtIopOd = fieldValue('gt_iop_current_od'), gtIopOs = fieldValue('gt_iop_current_os'),
+          gtTargetOd = fieldValue('gt_target_iop_od'), gtTargetOs = fieldValue('gt_target_iop_os'),
+          gtCode = fieldValue('gt_primary_diagnosis_code');
+      if (gtIopOd || gtIopOs || gtCode) {
+        var s3 = 'Glaucoma' + (gtCode ? ' (' + gtCode + ')' : '');
+        if (gtIopOd || gtIopOs) s3 += ', IOP ' + (gtIopOd || '—') + '/' + (gtIopOs || '—') + ' mmHg';
+        if (gtTargetOd || gtTargetOs) s3 += ' (target ' + (gtTargetOd || '—') + '/' + (gtTargetOs || '—') + ')';
+        s3 += '.';
+        parts.push(s3);
+      }
+    }
+    if (isFocusOn('focus-binocular')) {
+      var bvCode = fieldValue('bv_primary_diagnosis_code'), bvStrab = fieldValue('bv_strabismus_present'),
+          bvDir = fieldValue('bv_strabismus_direction');
+      if (bvCode || bvStrab) {
+        var s4 = 'Binocular vision dysfunction' + (bvCode ? ' (' + bvCode + ')' : '');
+        if (bvStrab === 'Yes') s4 += ', strabismus present' + (bvDir ? ' (' + bvDir + ')' : '');
+        else if (bvStrab === 'No') s4 += ', no strabismus';
+        s4 += '.';
+        parts.push(s4);
+      }
+    }
+    if (isFocusOn('focus-surgery')) {
+      var sxProc = fieldValue('sx_surgical_procedure'), sxEye = fieldValue('sx_operative_eye'),
+          sxMilestone = fieldValue('sx_current_milestone');
+      if (sxProc || sxMilestone) {
+        var s5 = 'Post-op' + (sxProc ? ' ' + sxProc : '') + (sxEye ? ' ' + sxEye : '');
+        if (sxMilestone) s5 += ', ' + sxMilestone;
+        s5 += '.';
+        parts.push(s5);
+      }
+    }
     return parts.join(' ');
   }
 
@@ -245,6 +424,27 @@ var ICD10_BY_DX = {
       if (tx.length) parts.push(tx.join(', ') + '.');
       if (fu) parts.push('Follow up in ' + fu + '.');
     }
+    if (isFocusOn('focus-glaucoma')) {
+      var meds = checkedValues('gt_prescribed_glaucoma_meds'), orders = checkedValues('gt_diagnostic_orders'),
+          gtFu = fieldValue('gt_follow_up_interval');
+      if (meds.length) parts.push(meds.join(', ') + '.');
+      if (orders.length) parts.push('Order ' + orders.join(', ') + '.');
+      if (gtFu) parts.push('Follow up in ' + gtFu + '.');
+    }
+    if (isFocusOn('focus-binocular')) {
+      var exercises = checkedValues('bv_assigned_home_exercises'), bvFu = fieldValue('bv_follow_up_interval'),
+          sessionNum = fieldValue('bv_therapy_session_number');
+      if (exercises.length) parts.push('Vision therapy: ' + exercises.join(', ') + (sessionNum ? ' (session ' + sessionNum + ')' : '') + '.');
+      if (bvFu) parts.push('Follow up in ' + bvFu + '.');
+    }
+    if (isFocusOn('focus-surgery')) {
+      var taper = fieldValue('sx_steroid_taper_schedule'), nsaid = fieldValue('sx_nsaid_drops_frequency'),
+          abx = fieldValue('sx_antibiotic_drops_status'), sxFu = fieldValue('sx_follow_up_interval');
+      if (taper) parts.push(taper + (taper.trim().slice(-1) === '.' ? '' : '.'));
+      if (nsaid) parts.push('NSAID drops ' + nsaid + '.');
+      if (abx) parts.push('Antibiotic drops ' + abx + '.');
+      if (sxFu) parts.push('Follow up in ' + sxFu + '.');
+    }
     if (!parts.length) {
       var weeks = fieldValue('follow_up_weeks');
       if (weeks) parts.push('Follow up in ' + weeks + ' weeks.');
@@ -264,6 +464,9 @@ var ICD10_BY_DX = {
 
   document.querySelectorAll(
     '#focus-refractive input, #focus-refractive select, #focus-anterior input, #focus-anterior select, ' +
+    '#focus-glaucoma input, #focus-glaucoma select, ' +
+    '#focus-binocular input, #focus-binocular select, ' +
+    '#focus-surgery input, #focus-surgery select, #focus-surgery textarea, ' +
     '.focus-toggle, [name="follow_up_weeks"]'
   ).forEach(function (el) {
     // 'change' covers selects/checkboxes immediately; 'input' is also needed

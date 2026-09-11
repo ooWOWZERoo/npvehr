@@ -3,10 +3,11 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
-from ehr.models.database import get_db, EyeExam, Refraction, AnteriorSegmentAssessment, Patient, Provider
+from ehr.models.database import get_db, EyeExam, Refraction, AnteriorSegmentAssessment, GlaucomaTracking, BinocularVisionAssessment, SurgeryComanagementTracking, Patient, Provider
 from ehr.env_info import EHR_ENV
 from ehr.utils import patient_context
 from ehr.auth.permissions import require_role, EXAM_VIEW, EXAM_EDIT, ROLE_LABELS
+from ehr.auth import csrf
 
 router = APIRouter(prefix="/exams", tags=["exams"])
 templates = Jinja2Templates(directory="ehr/templates")
@@ -19,6 +20,10 @@ def _f(v):
 def _i(v):
     try: return int(v) if v and str(v).strip() else None
     except: return None
+def _b(v):
+    # Tri-state: "Yes"/"No" dropdown, not a checkbox -- an unset finding is
+    # clinically different from a confirmed-absent one.
+    return {"Yes": True, "No": False}.get(v)
 
 @router.get("/new", response_class=HTMLResponse, dependencies=[Depends(require_role(*EXAM_EDIT))])
 def new_exam_form(request: Request, patient_id: int = None, db: Session = Depends(get_db)):
@@ -31,6 +36,7 @@ def new_exam_form(request: Request, patient_id: int = None, db: Session = Depend
 @router.post("/new", dependencies=[Depends(require_role(*EXAM_EDIT))])
 async def create_exam(request: Request, db: Session = Depends(get_db)):
     form = await request.form()
+    csrf.verify_or_403(request.state.csrf_token, form.get("csrf_token"))
     g = lambda k: form.get(k, "")
     gl = lambda k: ", ".join(form.getlist(k))  # comma-join a multi-value (checkbox) field
     exam = EyeExam(
@@ -78,6 +84,52 @@ async def create_exam(request: Request, db: Session = Depends(get_db)):
         clinical_notes=g("asa_clinical_notes"))
     if any(v not in (None, "") for v in asa_fields.values()):
         db.add(AnteriorSegmentAssessment(exam_id=exam.id, **asa_fields))
+    # Posterior Segment / Glaucoma tracking (5.3) -- same all-optional rule.
+    gt_fields = dict(
+        primary_diagnosis_code=g("gt_primary_diagnosis_code"),
+        target_iop_od=_i(g("gt_target_iop_od")), target_iop_os=_i(g("gt_target_iop_os")),
+        iop_current_od=_i(g("gt_iop_current_od")), iop_current_os=_i(g("gt_iop_current_os")),
+        iop_time_measured=g("gt_iop_time_measured"), iop_method=g("gt_iop_method"),
+        cup_disc_ratio_od=_f(g("gt_cup_disc_ratio_od")), cup_disc_ratio_os=_f(g("gt_cup_disc_ratio_os")),
+        nerve_tissue_status_od=g("gt_nerve_tissue_status_od"), nerve_tissue_status_os=g("gt_nerve_tissue_status_os"),
+        oct_rnfl_average_microns_od=_i(g("gt_oct_rnfl_average_microns_od")), oct_rnfl_average_microns_os=_i(g("gt_oct_rnfl_average_microns_os")),
+        visual_field_md_db_od=_f(g("gt_visual_field_md_db_od")), visual_field_md_db_os=_f(g("gt_visual_field_md_db_os")),
+        vf_reliability_od=g("gt_vf_reliability_od"), vf_reliability_os=g("gt_vf_reliability_os"),
+        prescribed_glaucoma_meds=gl("gt_prescribed_glaucoma_meds"), diagnostic_orders=gl("gt_diagnostic_orders"),
+        follow_up_interval=g("gt_follow_up_interval"), clinical_notes=g("gt_clinical_notes"))
+    if any(v not in (None, "") for v in gt_fields.values()):
+        db.add(GlaucomaTracking(exam_id=exam.id, **gt_fields))
+    # Binocular Vision & Pediatrics (Vision Therapy) assessment (5.4) -- same
+    # all-optional rule.
+    bv_fields = dict(
+        primary_diagnosis_code=g("bv_primary_diagnosis_code"),
+        phoria_distance_diopters=_i(g("bv_phoria_distance_diopters")), phoria_near_diopters=_i(g("bv_phoria_near_diopters")),
+        strabismus_present=_b(g("bv_strabismus_present")), strabismus_direction=g("bv_strabismus_direction"),
+        npc_break_cm=_f(g("bv_npc_break_cm")), npc_recovery_cm=_f(g("bv_npc_recovery_cm")),
+        accommodation_amplitude_od=_f(g("bv_accommodation_amplitude_od")), accommodation_amplitude_os=_f(g("bv_accommodation_amplitude_os")),
+        assigned_home_exercises=gl("bv_assigned_home_exercises"),
+        therapy_session_number=_i(g("bv_therapy_session_number")), therapy_compliance_rating=g("bv_therapy_compliance_rating"),
+        follow_up_interval=g("bv_follow_up_interval"), clinical_notes=g("bv_clinical_notes"))
+    if any(v not in (None, "") for v in bv_fields.values()):
+        db.add(BinocularVisionAssessment(exam_id=exam.id, **bv_fields))
+    # Pre-/Post-Operative Co-Management tracking (5.5) -- same all-optional
+    # rule. One row per exam; the "timeline" (Pre-Op -> Day 1 -> Week 1 ...)
+    # comes from a patient having one row per follow-up visit, not from a
+    # mutable current_milestone field.
+    sx_fields = dict(
+        surgical_procedure=g("sx_surgical_procedure"), operative_eye=g("sx_operative_eye"),
+        date_of_surgery=g("sx_date_of_surgery"), surgeon_name=g("sx_surgeon_name"),
+        co_managing_facility=g("sx_co_managing_facility"), current_milestone=g("sx_current_milestone"),
+        best_corrected_visual_acuity=g("sx_best_corrected_visual_acuity"),
+        intraocular_pressure=_i(g("sx_intraocular_pressure")),
+        corneal_edema_present=_b(g("sx_corneal_edema_present")), corneal_edema_grading=g("sx_corneal_edema_grading"),
+        anterior_chamber_cells_flare=g("sx_anterior_chamber_cells_flare"),
+        surgical_flap_or_wound_status=g("sx_surgical_flap_or_wound_status"),
+        steroid_taper_schedule=g("sx_steroid_taper_schedule"),
+        nsaid_drops_frequency=g("sx_nsaid_drops_frequency"), antibiotic_drops_status=g("sx_antibiotic_drops_status"),
+        follow_up_interval=g("sx_follow_up_interval"), clinical_notes=g("sx_clinical_notes"))
+    if any(v not in (None, "") for v in sx_fields.values()):
+        db.add(SurgeryComanagementTracking(exam_id=exam.id, **sx_fields))
     db.commit()
     return RedirectResponse(f"/exams/{exam.id}", status_code=303)
 

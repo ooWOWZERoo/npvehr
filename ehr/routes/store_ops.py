@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from ehr.models.database import get_db, DailyClosing
 from ehr.env_info import EHR_ENV
 from ehr.auth.permissions import require_role, STORE_OPS_VIEW, STORE_OPS_EDIT, CLAIMS_VIEW, CATALOG_ORDERS_VIEW, ROLE_LABELS
+from ehr.auth import csrf
 
 router = APIRouter(tags=["store-ops"])
 templates = Jinja2Templates(directory="ehr/templates")
@@ -60,6 +61,7 @@ def daily_closing(request: Request, posting_date: str = None, db: Session = Depe
 @router.post("/store-ops/daily-closing", dependencies=[Depends(require_role(*STORE_OPS_EDIT))])
 async def save_daily_closing(request: Request, db: Session = Depends(get_db)):
     form = await request.form()
+    csrf.verify_or_403(request.state.csrf_token, form.get("csrf_token"))
     posting_date = form.get("posting_date") or date.today().isoformat()
     now = datetime.utcnow()
     for code, _label in PAYMENT_TYPES:
