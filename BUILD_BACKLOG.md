@@ -1,6 +1,6 @@
 # New Path Vision EHR — Master Build Backlog
 
-**Status:** Living tracking document. **Baseline as of:** spec v2.17 / research doc v2.17 (2026-09-10).
+**Status:** Living tracking document. **Baseline as of:** spec v2.18 / research doc v2.18 (2026-09-11).
 
 ## Purpose and how to use this document
 
@@ -20,13 +20,14 @@ This consolidates every outstanding build item, investigation, and test scattere
 
 - [x] **ICD-10 auto-suggestion + diagnosis-driven recall interval** — extends the v2.12 Assessment & Plan composer. **Done, v2.15** — see baseline spec §12.5d, research doc §7.2.
 - [x] **Posterior Segment & Glaucoma Tracking dashboard, with trend view** — third of five clinical dashboards. **Done, v2.16** — see baseline spec §12.5e, research doc §5.3.
-- [x] **Binocular Vision & Pediatrics (Vision Therapy) dashboard** — fourth of five clinical dashboards. **Done, v2.17** — see baseline spec §12.5f, research doc §5.4. Pick the next item from the sections below.
+- [x] **Binocular Vision & Pediatrics (Vision Therapy) dashboard** — fourth of five clinical dashboards. **Done, v2.17** — see baseline spec §12.5f, research doc §5.4.
+- [x] **Pre-/Post-Operative Co-Management dashboard, with timeline view** — fifth and last clinical dashboard. **Done, v2.18** — see baseline spec §12.5g, research doc §5.5. §1 (Clinical Dashboards) is now fully closed out. Pick the next item from the sections below.
 
 ---
 
-## 1. Remaining Clinical Dashboards (research doc §5)
+## 1. Clinical Dashboards (research doc §5) — closed out, v2.18
 
-Three of five dashboards from the original reviewed requirements document remain unbuilt. Each follows the exact 7-step pattern used for §5.1 (Refractive) and §5.2 (Anterior Segment/Dry Eye) — new child table keyed on `exam_id`, one more Visit Focus chip, one more wrapped `<div>` in `exams/form.html`, no changes to the toggle/composer mechanism itself.
+All five dashboards from the original reviewed requirements document are now built (v2.10–v2.18), each following the same 7-step pattern — a child table keyed on `exam_id`, one Visit Focus chip, one wrapped `<div>` in `exams/form.html`, no changes to the toggle/composer mechanism itself. Kept here briefly for traceability.
 
 - [x] **§5.3 Posterior Segment & Glaucoma Tracking dashboard. Done, v2.16** — see baseline spec §12.5e. Built in full, including the longitudinal IOP trend view (a new patient-workspace tab with a server-computed inline SVG chart) — confirmed with the user to build the complete spec rather than deferring trending as a separate follow-up.
   - [x] Schema: new `GlaucomaTracking` table (exam-scoped child row)
@@ -39,9 +40,8 @@ Three of five dashboards from the original reviewed requirements document remain
   - [x] Spec update
 - [x] **§5.4 Binocular Vision & Pediatrics (Vision Therapy) dashboard. Done, v2.17** — see baseline spec §12.5f. No trend view needed (nothing in this field list asks for cross-visit trending beyond a plain session-number counter).
   - [x] Schema, migration, routes, templates, seed, tests, spec (same 7-step pattern)
-- [ ] **§5.5 Pre-/Post-Operative Co-Management dashboard.** The most structurally different of the five — the source document models it as **one row per follow-up visit along a timeline** (Day 1, Week 1, Month 1, Month 3...), which doesn't fit the "one row per exam" shape every other dashboard uses. Needs its own design pass before the standard 7-step pattern applies cleanly:
-  - [ ] Decide the per-visit-row vs. single-row-with-mutable-milestone modeling question (research doc §5.5 already leans toward per-visit-row, matching this app's append-only audit style — confirm before building)
-  - [ ] Schema, migration, routes, templates, seed, tests, spec
+- [x] **§5.5 Pre-/Post-Operative Co-Management dashboard. Done, v2.18** — see baseline spec §12.5g. The per-visit-row vs. single-row-with-mutable-milestone question resolved by reusing §5.3's Glaucoma trend-view precedent: every clinical encounter is already an `EyeExam` row, so "one row per follow-up visit" needs no new modeling primitive. All five clinical dashboards from research doc §5 are now built.
+  - [x] Schema, migration, routes, templates, seed, tests, spec (same 7-step pattern)
 
 ---
 

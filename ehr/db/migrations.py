@@ -680,6 +680,39 @@ def migration_018_create_binocular_vision_assessments(conn):
         "ON binocular_vision_assessments (exam_id)"
     ))
 
+# ---------------------------------------------------------------------------
+# Migration: 019 -- create `surgery_comanagement_trackings`
+# (VISION_EHR_DATA_STANDARDS_RESEARCH.md 5.5), reviewed in v2.9, built in
+# v2.18. Brand-new table -- plain CREATE TABLE IF NOT EXISTS, same pattern as
+# migrations 017/018.
+# ---------------------------------------------------------------------------
+def migration_019_create_surgery_comanagement_trackings(conn):
+    conn.execute(text(f"""
+        CREATE TABLE IF NOT EXISTS surgery_comanagement_trackings (
+            id {_pk_ddl(conn)},
+            exam_id INTEGER NOT NULL,
+            surgical_procedure VARCHAR,
+            operative_eye VARCHAR,
+            date_of_surgery VARCHAR,
+            surgeon_name VARCHAR, co_managing_facility VARCHAR,
+            current_milestone VARCHAR,
+            best_corrected_visual_acuity VARCHAR,
+            intraocular_pressure INTEGER,
+            corneal_edema_present BOOLEAN,
+            corneal_edema_grading VARCHAR,
+            anterior_chamber_cells_flare VARCHAR,
+            surgical_flap_or_wound_status VARCHAR,
+            steroid_taper_schedule TEXT,
+            nsaid_drops_frequency VARCHAR, antibiotic_drops_status VARCHAR,
+            follow_up_interval VARCHAR,
+            clinical_notes TEXT
+        )
+    """))
+    conn.execute(text(
+        "CREATE INDEX IF NOT EXISTS ix_surgery_comanagement_trackings_exam "
+        "ON surgery_comanagement_trackings (exam_id)"
+    ))
+
 # Ordered list of (id, function). Adding new migrations: append, never edit past entries.
 COLUMN_MIGRATIONS = [
     ("001_appointment_columns", migration_001_appointment_columns),
@@ -695,6 +728,7 @@ COLUMN_MIGRATIONS = [
     ("016_create_anterior_segment_assessments", migration_016_create_anterior_segment_assessments),
     ("017_create_glaucoma_trackings", migration_017_create_glaucoma_trackings),
     ("018_create_binocular_vision_assessments", migration_018_create_binocular_vision_assessments),
+    ("019_create_surgery_comanagement_trackings", migration_019_create_surgery_comanagement_trackings),
 ]
 POST_CREATE_ALL_MIGRATIONS = [
     ("002_seed_appointment_types", migration_002_seed_appointment_types),

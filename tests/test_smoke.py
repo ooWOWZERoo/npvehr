@@ -204,6 +204,49 @@ def test_binocular_vision_focus_toggle_and_composer(logged_in_page, live_server)
     assert "2 weeks" in plan
 
 
+def test_surgery_comanagement_focus_toggle_composer_and_timeline(logged_in_page, live_server):
+    """Pre-/Post-Op Co-Management (ehr/templates/exams/form.html,
+    ehr/templates/patients/surgery_timeline_tab.html) -- the fifth and last
+    Visit Focus chip shows/hides its section like the existing four, the
+    composer's surgery clauses populate Assessment & Plan, and the new
+    patient-workspace timeline tab renders a populated table for the seeded
+    demo patient (Carol Davis, a three-visit LASIK timeline) and an empty
+    state for a patient with none."""
+    page = logged_in_page
+    page.goto(live_server + "/exams/new")
+    surgery_section = page.locator("#focus-surgery")
+    assert not surgery_section.is_visible()
+    page.locator('.focus-toggle[data-target="focus-surgery"]').check()
+    assert surgery_section.is_visible()
+
+    page.locator('select[name="sx_surgical_procedure"]').select_option("LASIK")
+    page.locator('select[name="sx_operative_eye"]').select_option("OU")
+    page.locator('select[name="sx_current_milestone"]').select_option("Day 1")
+    assessment = page.locator("#assessment").input_value()
+    assert "Post-op LASIK OU" in assessment
+    assert "Day 1" in assessment
+
+    page.fill('textarea[name="sx_steroid_taper_schedule"]', "Pred Forte QID x 1 week")
+    page.locator('select[name="sx_follow_up_interval"]').select_option("1 week")
+    plan = page.locator("#plan").input_value()
+    assert "Pred Forte" in plan
+    assert "1 week" in plan
+
+    # Patient-workspace timeline view: seeded demo patient (Carol Davis) has
+    # a three-visit LASIK timeline -- populated table, newest first.
+    page.goto(live_server + "/patients/")
+    page.locator("a", has_text="Davis").first.click()
+    page.locator('a[href$="/surgery-timeline"]').click()
+    assert "surgery-timeline" in page.url
+    assert page.locator("table tbody tr").count() == 3
+
+    # A patient with no surgery-tracking history sees the empty state instead.
+    page.goto(live_server + "/patients/")
+    page.locator("a", has_text="Johnson").first.click()
+    page.locator('a[href$="/surgery-timeline"]').click()
+    assert page.locator("text=No surgical co-management recorded").is_visible()
+
+
 def test_new_prescription_form_loads(logged_in_page, live_server):
     page = logged_in_page
     page.goto(live_server + "/prescriptions/new")

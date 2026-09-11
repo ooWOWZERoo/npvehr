@@ -2,7 +2,8 @@ import secrets
 from datetime import datetime, timedelta
 from ehr.models.database import (init_db, engine, SessionLocal, Provider, Patient, Appointment, EyeExam,
     Refraction, Prescription, AppointmentStatus, AppointmentType, AppointmentTypeVersion, User,
-    ProviderAvailabilityTemplate, AnteriorSegmentAssessment, GlaucomaTracking, BinocularVisionAssessment)
+    ProviderAvailabilityTemplate, AnteriorSegmentAssessment, GlaucomaTracking, BinocularVisionAssessment,
+    SurgeryComanagementTracking)
 from ehr.db.migrations import run_column_migrations, run_post_create_all_migrations
 from ehr.auth.security import hash_password
 from ehr.auth.permissions import SYSTEM_ADMINISTRATOR, OPTOMETRIST_PROVIDER, FRONT_DESK, ROLE_LABELS
@@ -256,6 +257,61 @@ def seed_demo_data(db):
         assigned_home_exercises="Brock String, Pencil Push-Ups",
         therapy_session_number=4, therapy_compliance_rating="Good",
         follow_up_interval="2 weeks"))
+
+    # Pre-/Post-Operative Co-Management timeline (VISION_EHR_DATA_STANDARDS_RESEARCH.md
+    # 5.5) -- a short LASIK follow-up timeline (Pre-Op -> Day 1 -> Week 1) for
+    # Carol Davis, three exams demonstrating the surgery timeline view with
+    # real multi-visit data rather than an empty state.
+    lasik_preop_exam = EyeExam(
+        patient_id=pts[2].id, provider_id=p1.id, exam_date="2026-07-20",
+        chief_complaint="LASIK pre-op clearance",
+        od_sc="20/400", os_sc="20/400", od_cc="20/20", os_cc="20/20",
+        assessment="Cleared for LASIK OU.", plan="Proceed to surgery.",
+        diagnosis_codes="H52.13", follow_up_weeks=1,
+    )
+    db.add(lasik_preop_exam); db.flush()
+    db.add(SurgeryComanagementTracking(exam_id=lasik_preop_exam.id,
+        surgical_procedure="LASIK", operative_eye="OU", date_of_surgery="2026-07-27",
+        surgeon_name="Dr. Patel", co_managing_facility="Springfield Laser Vision Center",
+        current_milestone="Pre-Op Clearance", best_corrected_visual_acuity="20/20",
+        follow_up_interval="1 day"))
+
+    lasik_day1_exam = EyeExam(
+        patient_id=pts[2].id, provider_id=p1.id, exam_date="2026-07-28",
+        chief_complaint="LASIK post-op day 1",
+        od_sc="20/20", os_sc="20/20",
+        iop_od=14.0, iop_os=14.5, iop_method="Non-contact",
+        assessment="Post-op LASIK OU, Day 1.", plan="Continue drops per taper. RTC 1 week.",
+        follow_up_weeks=1,
+    )
+    db.add(lasik_day1_exam); db.flush()
+    db.add(SurgeryComanagementTracking(exam_id=lasik_day1_exam.id,
+        surgical_procedure="LASIK", operative_eye="OU", date_of_surgery="2026-07-27",
+        surgeon_name="Dr. Patel", co_managing_facility="Springfield Laser Vision Center",
+        current_milestone="Day 1", best_corrected_visual_acuity="20/20",
+        intraocular_pressure=14, corneal_edema_present=False,
+        surgical_flap_or_wound_status="Intact, Clear, Well-Apposed",
+        steroid_taper_schedule="Pred Forte: QID x 1 week, then BID x 1 week, then discontinue",
+        nsaid_drops_frequency="QID x 1 week", antibiotic_drops_status="QID x 1 week",
+        follow_up_interval="1 week"))
+
+    lasik_week1_exam = EyeExam(
+        patient_id=pts[2].id, provider_id=p1.id, exam_date="2026-08-03",
+        chief_complaint="LASIK post-op week 1",
+        od_sc="20/20", os_sc="20/20",
+        iop_od=13.0, iop_os=13.5, iop_method="Non-contact",
+        assessment="Post-op LASIK OU, Week 1, stable.", plan="Taper drops. RTC 1 month.",
+        follow_up_weeks=4,
+    )
+    db.add(lasik_week1_exam); db.flush()
+    db.add(SurgeryComanagementTracking(exam_id=lasik_week1_exam.id,
+        surgical_procedure="LASIK", operative_eye="OU", date_of_surgery="2026-07-27",
+        surgeon_name="Dr. Patel", co_managing_facility="Springfield Laser Vision Center",
+        current_milestone="Week 1", best_corrected_visual_acuity="20/20",
+        intraocular_pressure=13, corneal_edema_present=False,
+        surgical_flap_or_wound_status="Intact, Clear, Well-Apposed",
+        steroid_taper_schedule="Pred Forte: BID x 1 week, then discontinue",
+        follow_up_interval="1 month"))
 
     db.commit(); db.close()
     print("Seeded database.")

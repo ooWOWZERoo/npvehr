@@ -153,9 +153,11 @@ Built as an `exam_id`-FK child row (`BinocularVisionAssessment`), same shape as 
 | therapy_compliance_rating | String | Excellent / Good / Fair / Poor |
 | follow_up_interval, clinical_notes | String / Text | |
 
-### 5.5 Pre- and Post-Operative Co-Management dashboard
+### 5.5 Pre- and Post-Operative Co-Management dashboard — **implemented in v2.18**
 
-A new table, e.g. `SurgeryComanagementTracking`, with one row per follow-up encounter along a patient's surgical timeline (the source document models `current_milestone` as a single mutable field; a per-visit row is more consistent with this app's append-only, audit-friendly style — see §26.6/§26.9's `AppointmentAuditEvent` pattern).
+Built as an `exam_id`-FK child row (`SurgeryComanagementTracking`), same shape as the other four dashboards — the source document's own "one row per follow-up encounter along a timeline" (Pre-Op Clearance → Day 1 → Week 1 → Month 1 → Month 3 → Released) is naturally satisfied here, since every clinical encounter in this app is already an `EyeExam` row; a per-visit row falls out of that for free rather than requiring a new modeling decision (the concern originally flagged — see `BUILD_BACKLOG.md`'s note that this dashboard needed its own design pass before building — resolved by recognizing it as the same shape as §5.3's Glaucoma trend view, not a new one). `current_milestone` records where a given visit sits in the timeline; the timeline itself is a query across a patient's exam history, not a mutable field.
+
+The new patient-workspace tab ("Surgery Co-Management," `GET /patients/{id}/surgery-timeline`) renders this as an ordered table (Date, Milestone, Procedure/Eye, BCVA, IOP, Corneal Edema), newest first — no chart, since milestones are categorical/ordinal rather than a continuous quantity worth trending visually; the ordered table itself is the timeline the source document wanted. `corneal_edema_present` is captured as a tri-state Yes/No dropdown, same convention as §5.4's `strabismus_present`.
 
 | Field | Translated type | Notes |
 | --- | --- | --- |
@@ -246,4 +248,5 @@ The source document includes a sample ASC X12 EDI 837 segment sequence and a CMS
 9. **New, v2.13:** §6's billing/claims/EDI material remains target-state only, same treatment as §5.6 — revisit only with a real clearinghouse/payer relationship and compliance review, not attempted here. **Not started.**
 10. ~~§7's two compatible ideas (ICD-10 auto-suggestion, diagnosis-driven recall interval) are candidates for a future narrow slice extending the existing v2.12 composer.~~ **Done, v2.15** — see the baseline spec's §12.5c.
 11. ~~Build the third dashboard (§5.3's Posterior Segment / Glaucoma Tracking), including the longitudinal IOP trend view it wants beyond the other dashboards' single-visit-snapshot shape.~~ **Done, v2.16** — see §5.3 and the baseline spec's §12.5e.
-12. ~~Build the fourth dashboard (§5.4's Binocular Vision & Pediatrics / Vision Therapy).~~ **Done, v2.17** — see §5.4 and the baseline spec's §12.5f. §5.5 (Pre/Post-Op Co-Management) remains undone; it adds one more Visit Focus chip by the same pattern.
+12. ~~Build the fourth dashboard (§5.4's Binocular Vision & Pediatrics / Vision Therapy).~~ **Done, v2.17** — see §5.4 and the baseline spec's §12.5f.
+13. ~~Build the fifth and last dashboard (§5.5's Pre-/Post-Operative Co-Management), including its timeline view.~~ **Done, v2.18** — see §5.5 and the baseline spec's §12.5g. All five clinical dashboards from §5 are now built; the remaining open items in this document are §5.6/§6/§7's target-state-only material (e-prescribing/lab/inventory, billing/claims, and the FHIR/terminology alignment questions in items 1-2 above).

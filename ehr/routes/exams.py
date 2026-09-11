@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
-from ehr.models.database import get_db, EyeExam, Refraction, AnteriorSegmentAssessment, GlaucomaTracking, BinocularVisionAssessment, Patient, Provider
+from ehr.models.database import get_db, EyeExam, Refraction, AnteriorSegmentAssessment, GlaucomaTracking, BinocularVisionAssessment, SurgeryComanagementTracking, Patient, Provider
 from ehr.env_info import EHR_ENV
 from ehr.utils import patient_context
 from ehr.auth.permissions import require_role, EXAM_VIEW, EXAM_EDIT, ROLE_LABELS
@@ -110,6 +110,24 @@ async def create_exam(request: Request, db: Session = Depends(get_db)):
         follow_up_interval=g("bv_follow_up_interval"), clinical_notes=g("bv_clinical_notes"))
     if any(v not in (None, "") for v in bv_fields.values()):
         db.add(BinocularVisionAssessment(exam_id=exam.id, **bv_fields))
+    # Pre-/Post-Operative Co-Management tracking (5.5) -- same all-optional
+    # rule. One row per exam; the "timeline" (Pre-Op -> Day 1 -> Week 1 ...)
+    # comes from a patient having one row per follow-up visit, not from a
+    # mutable current_milestone field.
+    sx_fields = dict(
+        surgical_procedure=g("sx_surgical_procedure"), operative_eye=g("sx_operative_eye"),
+        date_of_surgery=g("sx_date_of_surgery"), surgeon_name=g("sx_surgeon_name"),
+        co_managing_facility=g("sx_co_managing_facility"), current_milestone=g("sx_current_milestone"),
+        best_corrected_visual_acuity=g("sx_best_corrected_visual_acuity"),
+        intraocular_pressure=_i(g("sx_intraocular_pressure")),
+        corneal_edema_present=_b(g("sx_corneal_edema_present")), corneal_edema_grading=g("sx_corneal_edema_grading"),
+        anterior_chamber_cells_flare=g("sx_anterior_chamber_cells_flare"),
+        surgical_flap_or_wound_status=g("sx_surgical_flap_or_wound_status"),
+        steroid_taper_schedule=g("sx_steroid_taper_schedule"),
+        nsaid_drops_frequency=g("sx_nsaid_drops_frequency"), antibiotic_drops_status=g("sx_antibiotic_drops_status"),
+        follow_up_interval=g("sx_follow_up_interval"), clinical_notes=g("sx_clinical_notes"))
+    if any(v not in (None, "") for v in sx_fields.values()):
+        db.add(SurgeryComanagementTracking(exam_id=exam.id, **sx_fields))
     db.commit()
     return RedirectResponse(f"/exams/{exam.id}", status_code=303)
 

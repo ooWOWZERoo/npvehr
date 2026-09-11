@@ -482,6 +482,27 @@ def patient_glaucoma_trend(request: Request, patient_id: int, db: Session = Depe
     return templates.TemplateResponse(request, "patients/glaucoma_trend_tab.html", ctx)
 
 
+@router.get("/{patient_id}/surgery-timeline", response_class=HTMLResponse)
+def patient_surgery_timeline(request: Request, patient_id: int, db: Session = Depends(get_db)):
+    """Pre-/Post-Operative Co-Management's longitudinal view
+    (VISION_EHR_DATA_STANDARDS_RESEARCH.md 5.5), the fifth and last of five
+    clinical dashboards. The source document models this as one row per
+    follow-up visit along a timeline (Pre-Op -> Day 1 -> Week 1 -> ...); that
+    is naturally satisfied here since SurgeryComanagementTracking stays
+    exam-scoped like the others -- this route just walks a patient's exam
+    history collecting each exam's tracking row, same shape as
+    patient_glaucoma_trend above, minus the chart (milestones are
+    categorical, not a quantity worth trending visually -- the ordered table
+    itself is the timeline)."""
+    p = _get_patient_or_404(db, patient_id)
+    if not p: return HTMLResponse("Not found", status_code=404)
+    ctx = _workspace_ctx(db, p, "surgery-timeline")
+    exams_oldest_first = sorted(p.eye_exams, key=lambda e: e.exam_date or "")
+    rows_oldest_first = [(e, e.surgery_comanagement_trackings[0]) for e in exams_oldest_first if e.surgery_comanagement_trackings]
+    ctx["sx_rows"] = list(reversed(rows_oldest_first))  # newest first for the table
+    return templates.TemplateResponse(request, "patients/surgery_timeline_tab.html", ctx)
+
+
 @router.get("/{patient_id}/orders/eyeglass", response_class=HTMLResponse)
 def patient_orders_eyeglass(request: Request, patient_id: int, db: Session = Depends(get_db)):
     return _placeholder_tab(request, db, patient_id, "orders-eyeglass", "Eyeglass Order", "&#128083;",

@@ -192,6 +192,33 @@
   </dl>
 </div>
 {% endif %}
+{% if exam.surgery_comanagement_trackings %}
+{% set sx = exam.surgery_comanagement_trackings[0] %}
+<div class="card" style="margin-top:1rem">
+  <div style="display:flex;justify-content:space-between;align-items:baseline">
+    <h3>Pre-/Post-Op Co-Management</h3>
+    <a href="/patients/{{ exam.patient_id }}/surgery-timeline" class="btn btn-secondary btn-sm">View full timeline &rarr;</a>
+  </div>
+  <dl class="dl-grid">
+    <dt>Procedure</dt><dd>{{ sx.surgical_procedure or '—' }} {{ sx.operative_eye or '' }}</dd>
+    <dt>Date of Surgery</dt><dd>{{ sx.date_of_surgery or '—' }}</dd>
+    <dt>Surgeon / Facility</dt><dd>{{ sx.surgeon_name or '—' }} / {{ sx.co_managing_facility or '—' }}</dd>
+    <dt>Milestone</dt><dd>{{ sx.current_milestone or '—' }}</dd>
+    <dt>BCVA</dt><dd>{{ sx.best_corrected_visual_acuity or '—' }}</dd>
+    <dt>IOP</dt><dd>{{ sx.intraocular_pressure if sx.intraocular_pressure is not none else '—' }} mmHg</dd>
+    <dt>Corneal Edema</dt><dd>{% if sx.corneal_edema_present is none %}—{% elif sx.corneal_edema_present %}Present{{ ' (' + sx.corneal_edema_grading + ')' if sx.corneal_edema_grading else '' }}{% else %}Absent{% endif %}</dd>
+    <dt>AC Cells/Flare</dt><dd>{{ sx.anterior_chamber_cells_flare or '—' }}</dd>
+    <dt>Flap/Wound Status</dt><dd>{{ sx.surgical_flap_or_wound_status or '—' }}</dd>
+  </dl>
+  <dl class="dl-grid" style="margin-top:0.75rem">
+    <dt>Steroid Taper</dt><dd>{{ sx.steroid_taper_schedule or '—' }}</dd>
+    <dt>NSAID Drops</dt><dd>{{ sx.nsaid_drops_frequency or '—' }}</dd>
+    <dt>Antibiotic Drops</dt><dd>{{ sx.antibiotic_drops_status or '—' }}</dd>
+    <dt>Follow-up</dt><dd>{{ sx.follow_up_interval or '—' }}</dd>
+    {% if sx.clinical_notes %}<dt>Notes</dt><dd>{{ sx.clinical_notes }}</dd>{% endif %}
+  </dl>
+</div>
+{% endif %}
 <div class="card" style="margin-top:1rem"><h3>Assessment &amp; Plan</h3>
   <div class="form-row cols-2">
     <div><strong>Assessment</strong><p>{{ exam.assessment or '—' }}</p></div>
