@@ -5,7 +5,7 @@
     <dt>First Name</dt><dd>{{ patient.first_name }}</dd>
     <dt>Last Name</dt><dd>{{ patient.last_name }}</dd>
     <dt>Preferred Name</dt><dd>{{ patient.preferred_name or '—' }}</dd>
-    <dt>MRN</dt><dd>{{ patient.mrn or '—' }}</dd>
+    <dt>MRN</dt><dd class="mono-data">{{ patient.mrn or '—' }}</dd>
     <dt>DOB</dt><dd>{{ patient.date_of_birth or '—' }}</dd>
     <dt>Gender</dt><dd>{{ patient.gender or '—' }}</dd>
     <dt>Phone</dt><dd>{{ patient.phone or '—' }}</dd>

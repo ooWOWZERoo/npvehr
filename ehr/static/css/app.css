@@ -13,7 +13,7 @@
   --accent: #C9A227;
   --accent-soft: #FBF3DC;
 
-  --font-display: 'Fraunces', Georgia, 'Times New Roman', serif;
+  --font-display: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-body: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-mono: 'IBM Plex Mono', 'SF Mono', Consolas, monospace;
 
@@ -44,9 +44,9 @@ a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
 
-h1, h2, h3 { font-family: var(--font-display); color: var(--ink); text-wrap: balance; font-weight: 700; }
-h1 { font-size: 1.85rem; margin: 0 0 var(--space-5); line-height: 1.15; }
-h2 { font-size: 1.35rem; font-weight: 600; margin: 0 0 var(--space-4); line-height: 1.2; }
+h1, h2, h3 { font-family: var(--font-display); color: var(--ink); text-wrap: balance; font-weight: 700; letter-spacing: -0.01em; }
+h1 { font-size: 1.85rem; font-weight: 800; margin: 0 0 var(--space-5); line-height: 1.15; }
+h2 { font-size: 1.35rem; font-weight: 700; margin: 0 0 var(--space-4); line-height: 1.2; }
 h3 { font-size: 1.05rem; font-weight: 600; margin: 0 0 var(--space-3); line-height: 1.25; }
 
 .navbar { background: var(--primary-strong); color: white; padding: 0 var(--space-5); display: flex; align-items: center; height: 56px; gap: var(--space-6); }
@@ -92,8 +92,14 @@ h3 { font-size: 1.05rem; font-weight: 600; margin: 0 0 var(--space-3); line-heig
    pages (.detail-grid, dashboard .stats-grid) are NOT capped here -- those already make good use
    of full fluid width and should keep doing so. */
 .form-card { max-width: 1400px; }
-.card-title { font-family: var(--font-body); font-size: 0.75rem; font-weight: 600; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.06em; margin: 0 0 var(--space-2); }
-.card-value { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 2.5rem; font-weight: 600; color: var(--primary-strong); line-height: 1.1; }
+.card-title { font-family: var(--font-body); font-size: 0.75rem; font-weight: 600; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.08em; margin: 0 0 var(--space-2); }
+.card-value { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 2.75rem; font-weight: 700; color: var(--primary-strong); line-height: 1.1; }
+/* Reusable callout for MRNs, diagnosis/procedure codes, and other short
+   coded values shown inline in prose/definition lists -- pairs the same
+   --font-mono treatment already used for dashboard stat numbers and exam
+   tables with the surrounding data, so a code always reads visually
+   distinct from free text at a glance. */
+.mono-data { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 .btn { display: inline-flex; align-items: center; gap: 0.4em; padding: 0.5rem 1.1rem; border-radius: 6px; font-size: 0.875rem; border: 1px solid transparent; cursor: pointer; font-weight: 600; font-family: var(--font-body); transition: background 0.12s ease, border-color 0.12s ease, transform 0.08s ease, box-shadow 0.12s ease; }
 .btn-primary { background: var(--primary); color: white; box-shadow: 0 1px 2px rgba(19,36,32,0.12); }
 .btn-primary:hover { background: var(--primary-strong); text-decoration: none; color: white; transform: translateY(-1px); box-shadow: 0 3px 8px rgba(19,36,32,0.18); }
@@ -279,9 +285,8 @@ tr:hover td { background: var(--primary-soft); }
 .patient-switcher-results a:hover { background: var(--primary-soft); text-decoration: none; }
 .patient-switcher-results .psr-empty { padding: 0.5rem 0.7rem; font-size: 0.8rem; color: var(--ink-muted); }
 .topbar-spacer { flex: 1; }
-.topbar-clock { text-align: right; line-height: 1.1; flex-shrink: 0; }
-.topbar-clock-time { font-family: var(--font-mono); font-size: 0.8rem; font-weight: 500; font-variant-numeric: tabular-nums; }
-.topbar-clock-caption { font-size: 0.6rem; color: rgba(255,255,255,0.6); }
+.topbar-clock { text-align: right; flex-shrink: 0; display: flex; align-items: center; }
+.topbar-clock-time { font-family: var(--font-mono); font-size: 0.8rem; font-weight: 500; font-variant-numeric: tabular-nums; line-height: 1; }
 .staff-picker { flex-shrink: 0; font-size: 0.8rem; }
 .staff-display-btn { background: none; border: none; color: #fff; cursor: pointer; font-size: 0.8rem; padding: 0.3rem 0.55rem; border-radius: 5px; font-family: var(--font-body); }
 .staff-display-btn:hover { background: rgba(255,255,255,0.12); }
@@ -343,7 +348,6 @@ tr:hover td { background: var(--primary-soft); }
 @media (max-width: 600px) {
   .topbar { gap: var(--space-2); padding: 0 0.6rem; }
   .topbar-brand span.topbar-brand-text { display: none; }
-  .topbar-clock-caption { display: none; }
   .staff-picker input { width: 90px; }
   .patient-switcher { width: 88px; }
   .patient-context-strip { padding: 0.6rem var(--space-4); gap: 0.6rem; }
