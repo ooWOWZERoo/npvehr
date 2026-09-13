@@ -4,14 +4,10 @@
 <div class="page-header"><h1>Patients</h1><a href="/patients/new" class="btn btn-primary">+ New Patient</a></div>
 <div class="card" style="margin-bottom:1rem">
   <form method="get" class="patient-search-form">
-    <div class="form-row cols-4">
+    <div class="form-row cols-3">
       <div class="form-group"><label>Last Name</label><input type="text" name="last_name" value="{{ last_name }}"></div>
       <div class="form-group"><label>First Name</label><input type="text" name="first_name" value="{{ first_name }}"></div>
       <div class="form-group"><label>Date of Birth</label><input type="text" name="dob" placeholder="YYYY-MM-DD" value="{{ dob }}"></div>
-      <div class="form-group"><label>Phone</label><input type="text" name="phone" value="{{ phone }}"></div>
-    </div>
-    <div class="form-row cols-4">
-      <div class="form-group"><label>MRN</label><input type="text" name="mrn" value="{{ mrn }}"></div>
     </div>
     <!--
       "Show Inactive" was deliberately left OFF this form rather than added as a disabled,
@@ -21,9 +17,16 @@
       column, which is a value that legitimately reads as $0.00 either way). When a real
       patient-status field exists, add the filter here alongside a functioning checkbox.
     -->
-    <div class="form-actions" style="margin-top:0">
-      <button type="submit" class="btn btn-secondary">Search</button>
-      {% if last_name or first_name or dob or phone or mrn or q %}<a href="/patients/" class="btn btn-secondary">Clear</a>{% endif %}
+    <div class="form-row cols-3" style="margin-bottom:0">
+      <div class="form-group"><label>Phone</label><input type="text" name="phone" value="{{ phone }}"></div>
+      <div class="form-group"><label>MRN</label><input type="text" name="mrn" value="{{ mrn }}"></div>
+      <div class="form-group form-group-actions">
+        <label>&nbsp;</label>
+        <div class="form-actions">
+          <button type="submit" class="btn btn-secondary">Search</button>
+          {% if last_name or first_name or dob or phone or mrn or q %}<a href="/patients/" class="btn btn-secondary">Clear</a>{% endif %}
+        </div>
+      </div>
     </div>
   </form>
 </div>
