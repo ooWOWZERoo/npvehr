@@ -9,6 +9,7 @@ from ehr.models.database import (get_db, AppointmentType, AppointmentTypeVersion
 from ehr.services import scheduling as sched
 from ehr.env_info import EHR_ENV
 from ehr.auth.permissions import require_role, ADMIN_SCHEDULING_VIEW, ADMIN_SCHEDULING_EDIT, ROLE_LABELS
+from ehr.auth import csrf
 
 router = APIRouter(prefix="/admin/scheduling", tags=["admin-scheduling"])
 templates = Jinja2Templates(directory="ehr/templates")
@@ -40,13 +41,14 @@ def new_type_form(request: Request):
 
 
 @router.post("/appointment-types/new", dependencies=[Depends(require_role(*ADMIN_SCHEDULING_EDIT))])
-def create_type(code: str = Form(...), internal_name: str = Form(...), display_name: str = Form(...),
+def create_type(request: Request, code: str = Form(...), internal_name: str = Form(...), display_name: str = Form(...),
     calendar_abbreviation: str = Form(...), description: str = Form(""), service_line: str = Form(...),
     display_order: int = Form(0), allows_new: bool = Form(False), allows_established: bool = Form(False),
     new_duration_minutes: str = Form(""), established_duration_minutes: str = Form(""),
     buffer_before_minutes: int = Form(0), buffer_after_minutes: int = Form(0),
     arrival_lead_minutes: int = Form(0), base_color: str = Form(""), active: bool = Form(False),
-    db: Session = Depends(get_db)):
+    csrf_token: str = Form(""), db: Session = Depends(get_db)):
+    csrf.verify_or_403(request.state.csrf_token, csrf_token)
     code = code.strip().upper()
     if db.query(AppointmentType).filter(AppointmentType.code == code).first():
         return HTMLResponse(f"Appointment type code '{code}' already exists.", status_code=400)
@@ -106,9 +108,10 @@ def color_rules(request: Request, type_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/appointment-types/{type_id}/color-rules", dependencies=[Depends(require_role(*ADMIN_SCHEDULING_EDIT))])
-def create_color_rule(type_id: int, priority: int = Form(0), patient_relationship: str = Form(""),
+def create_color_rule(request: Request, type_id: int, priority: int = Form(0), patient_relationship: str = Form(""),
     is_follow_up: str = Form(""), minimum_countable_tests: str = Form(""), maximum_countable_tests: str = Form(""),
-    color: str = Form(...), reason_code: str = Form(""), db: Session = Depends(get_db)):
+    color: str = Form(...), reason_code: str = Form(""), csrf_token: str = Form(""), db: Session = Depends(get_db)):
+    csrf.verify_or_403(request.state.csrf_token, csrf_token)
     t = db.query(AppointmentType).filter(AppointmentType.id == type_id).first()
     if not t: return HTMLResponse("Not found", status_code=404)
     v = _latest_version(t)
@@ -129,7 +132,8 @@ def create_color_rule(type_id: int, priority: int = Form(0), patient_relationshi
 
 
 @router.post("/appointment-types/{type_id}/color-rules/{rule_id}/delete", dependencies=[Depends(require_role(*ADMIN_SCHEDULING_EDIT))])
-def delete_color_rule(type_id: int, rule_id: int, db: Session = Depends(get_db)):
+def delete_color_rule(request: Request, type_id: int, rule_id: int, csrf_token: str = Form(""), db: Session = Depends(get_db)):
+    csrf.verify_or_403(request.state.csrf_token, csrf_token)
     t = db.query(AppointmentType).filter(AppointmentType.id == type_id).first()
     if not t: return HTMLResponse("Not found", status_code=404)
     v = _latest_version(t)
@@ -153,16 +157,17 @@ def edit_type_form(request: Request, type_id: int, db: Session = Depends(get_db)
 
 
 @router.post("/appointment-types/{type_id}/versions", dependencies=[Depends(require_role(*ADMIN_SCHEDULING_EDIT))])
-def publish_new_version(type_id: int, internal_name: str = Form(...), display_name: str = Form(...),
+def publish_new_version(request: Request, type_id: int, internal_name: str = Form(...), display_name: str = Form(...),
     calendar_abbreviation: str = Form(...), description: str = Form(""), service_line: str = Form(...),
     display_order: int = Form(0), allows_new: bool = Form(False), allows_established: bool = Form(False),
     new_duration_minutes: str = Form(""), established_duration_minutes: str = Form(""),
     buffer_before_minutes: int = Form(0), buffer_after_minutes: int = Form(0),
     arrival_lead_minutes: int = Form(0), base_color: str = Form(""), active: bool = Form(False),
-    change_reason: str = Form(...), db: Session = Depends(get_db)):
+    change_reason: str = Form(...), csrf_token: str = Form(""), db: Session = Depends(get_db)):
     """Publish an immutable new AppointmentTypeVersion (spec 8.3, 17.4). Existing
     appointments keep referencing their original version_id -- nothing here rewrites
     previously booked appointments (spec 3.22-3.24, 17.4)."""
+    csrf.verify_or_403(request.state.csrf_token, csrf_token)
     t = db.query(AppointmentType).filter(AppointmentType.id == type_id).first()
     if not t: return HTMLResponse("Not found", status_code=404)
     if not change_reason:
@@ -198,7 +203,8 @@ def publish_new_version(type_id: int, internal_name: str = Form(...), display_na
 
 
 @router.post("/appointment-types/{type_id}/activate", dependencies=[Depends(require_role(*ADMIN_SCHEDULING_EDIT))])
-def activate_type(type_id: int, db: Session = Depends(get_db)):
+def activate_type(request: Request, type_id: int, csrf_token: str = Form(""), db: Session = Depends(get_db)):
+    csrf.verify_or_403(request.state.csrf_token, csrf_token)
     t = db.query(AppointmentType).filter(AppointmentType.id == type_id).first()
     if not t: return HTMLResponse("Not found", status_code=404)
     v = _latest_version(t)
@@ -213,7 +219,8 @@ def activate_type(type_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/appointment-types/{type_id}/deactivate", dependencies=[Depends(require_role(*ADMIN_SCHEDULING_EDIT))])
-def deactivate_type(type_id: int, db: Session = Depends(get_db)):
+def deactivate_type(request: Request, type_id: int, csrf_token: str = Form(""), db: Session = Depends(get_db)):
+    csrf.verify_or_403(request.state.csrf_token, csrf_token)
     t = db.query(AppointmentType).filter(AppointmentType.id == type_id).first()
     if not t: return HTMLResponse("Not found", status_code=404)
     v = _latest_version(t)
@@ -226,7 +233,8 @@ def deactivate_type(type_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/appointment-types/{type_id}/clone", dependencies=[Depends(require_role(*ADMIN_SCHEDULING_EDIT))])
-def clone_type(type_id: int, new_code: str = Form(...), db: Session = Depends(get_db)):
+def clone_type(request: Request, type_id: int, new_code: str = Form(...), csrf_token: str = Form(""), db: Session = Depends(get_db)):
+    csrf.verify_or_403(request.state.csrf_token, csrf_token)
     t = db.query(AppointmentType).filter(AppointmentType.id == type_id).first()
     if not t: return HTMLResponse("Not found", status_code=404)
     new_code = new_code.strip().upper()
@@ -272,9 +280,10 @@ def list_tests(request: Request, db: Session = Depends(get_db)):
 
 
 @router.post("/tests/new", dependencies=[Depends(require_role(*ADMIN_SCHEDULING_EDIT))])
-def create_test(code: str = Form(...), display_name: str = Form(...), calendar_abbreviation: str = Form(...),
+def create_test(request: Request, code: str = Form(...), display_name: str = Form(...), calendar_abbreviation: str = Form(...),
     counts_toward_color: bool = Form(False), default_duration_minutes: str = Form(""),
-    display_order: int = Form(0), db: Session = Depends(get_db)):
+    display_order: int = Form(0), csrf_token: str = Form(""), db: Session = Depends(get_db)):
+    csrf.verify_or_403(request.state.csrf_token, csrf_token)
     code = code.strip().upper()
     if db.query(DiagnosticTest).filter(DiagnosticTest.code == code).first():
         return HTMLResponse(f"Test code '{code}' already exists.", status_code=400)
@@ -287,7 +296,8 @@ def create_test(code: str = Form(...), display_name: str = Form(...), calendar_a
 
 
 @router.post("/tests/{test_id}/toggle", dependencies=[Depends(require_role(*ADMIN_SCHEDULING_EDIT))])
-def toggle_test(test_id: int, db: Session = Depends(get_db)):
+def toggle_test(request: Request, test_id: int, csrf_token: str = Form(""), db: Session = Depends(get_db)):
+    csrf.verify_or_403(request.state.csrf_token, csrf_token)
     t = db.query(DiagnosticTest).filter(DiagnosticTest.id == test_id).first()
     if t:
         t.active = not t.active
@@ -302,8 +312,9 @@ def list_resources(request: Request, db: Session = Depends(get_db)):
 
 
 @router.post("/resources/new", dependencies=[Depends(require_role(*ADMIN_SCHEDULING_EDIT))])
-def create_resource(code: str = Form(...), display_name: str = Form(...), resource_class: str = Form(...),
-    exclusive: bool = Form(True), db: Session = Depends(get_db)):
+def create_resource(request: Request, code: str = Form(...), display_name: str = Form(...), resource_class: str = Form(...),
+    exclusive: bool = Form(True), csrf_token: str = Form(""), db: Session = Depends(get_db)):
+    csrf.verify_or_403(request.state.csrf_token, csrf_token)
     code = code.strip().upper()
     if db.query(Resource).filter(Resource.code == code).first():
         return HTMLResponse(f"Resource code '{code}' already exists.", status_code=400)
@@ -321,8 +332,9 @@ def list_availability(request: Request, db: Session = Depends(get_db)):
 
 
 @router.post("/availability/new", dependencies=[Depends(require_role(*ADMIN_SCHEDULING_EDIT))])
-def create_availability(resource_id: int = Form(...), day_of_week: int = Form(...), start_time: str = Form(...),
-    end_time: str = Form(...), db: Session = Depends(get_db)):
+def create_availability(request: Request, resource_id: int = Form(...), day_of_week: int = Form(...), start_time: str = Form(...),
+    end_time: str = Form(...), csrf_token: str = Form(""), db: Session = Depends(get_db)):
+    csrf.verify_or_403(request.state.csrf_token, csrf_token)
     db.add(AvailabilityTemplate(resource_id=resource_id, day_of_week=day_of_week, start_time=start_time,
         end_time=end_time, active=True))
     db.commit()
@@ -343,8 +355,9 @@ def list_provider_availability(request: Request, db: Session = Depends(get_db)):
 
 
 @router.post("/provider-availability/new", dependencies=[Depends(require_role(*ADMIN_SCHEDULING_EDIT))])
-def create_provider_availability(provider_id: int = Form(...), day_of_week: int = Form(...),
-    start_time: str = Form(...), end_time: str = Form(...), db: Session = Depends(get_db)):
+def create_provider_availability(request: Request, provider_id: int = Form(...), day_of_week: int = Form(...),
+    start_time: str = Form(...), end_time: str = Form(...), csrf_token: str = Form(""), db: Session = Depends(get_db)):
+    csrf.verify_or_403(request.state.csrf_token, csrf_token)
     db.add(ProviderAvailabilityTemplate(provider_id=provider_id, day_of_week=day_of_week, start_time=start_time,
         end_time=end_time, active=True))
     db.commit()
@@ -358,8 +371,9 @@ def list_holidays(request: Request, db: Session = Depends(get_db)):
 
 
 @router.post("/holidays/new", dependencies=[Depends(require_role(*ADMIN_SCHEDULING_EDIT))])
-def create_holiday(closure_date: str = Form(...), label: str = Form(...), notes: str = Form(""),
-    db: Session = Depends(get_db)):
+def create_holiday(request: Request, closure_date: str = Form(...), label: str = Form(...), notes: str = Form(""),
+    csrf_token: str = Form(""), db: Session = Depends(get_db)):
+    csrf.verify_or_403(request.state.csrf_token, csrf_token)
     if db.query(PracticeClosure).filter(PracticeClosure.closure_date == closure_date).first():
         return HTMLResponse(f"A closure already exists for {closure_date}.", status_code=400)
     db.add(PracticeClosure(closure_date=closure_date, label=label, notes=notes or None))
@@ -368,7 +382,8 @@ def create_holiday(closure_date: str = Form(...), label: str = Form(...), notes:
 
 
 @router.post("/holidays/{closure_id}/delete", dependencies=[Depends(require_role(*ADMIN_SCHEDULING_EDIT))])
-def delete_holiday(closure_id: int, db: Session = Depends(get_db)):
+def delete_holiday(request: Request, closure_id: int, csrf_token: str = Form(""), db: Session = Depends(get_db)):
+    csrf.verify_or_403(request.state.csrf_token, csrf_token)
     c = db.query(PracticeClosure).filter(PracticeClosure.id == closure_id).first()
     if c:
         db.delete(c)

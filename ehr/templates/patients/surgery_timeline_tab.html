@@ -1,0 +1,28 @@
+{% extends "patients/_workspace.html" %}
+{% block wcontent %}
+<div class="card">
+  <h2>Surgery Co-Management</h2>
+  {% if not sx_rows %}
+  <p style="color:#64748b">No surgical co-management recorded for this patient yet.</p>
+  {% else %}
+  <div class="table-responsive">
+  <table>
+    <thead><tr><th>Date</th><th>Milestone</th><th>Procedure / Eye</th><th>BCVA</th><th>IOP</th><th>Corneal Edema</th><th></th></tr></thead>
+    <tbody>
+    {% for e, sx in sx_rows %}
+    <tr>
+      <td>{{ e.exam_date }}</td>
+      <td>{{ sx.current_milestone or '—' }}</td>
+      <td>{{ sx.surgical_procedure or '—' }} {{ sx.operative_eye or '' }}</td>
+      <td>{{ sx.best_corrected_visual_acuity or '—' }}</td>
+      <td>{{ sx.intraocular_pressure if sx.intraocular_pressure is not none else '—' }}</td>
+      <td>{% if sx.corneal_edema_present is none %}—{% elif sx.corneal_edema_present %}Present{{ ' (' + sx.corneal_edema_grading + ')' if sx.corneal_edema_grading else '' }}{% else %}Absent{% endif %}</td>
+      <td><a href="/exams/{{ e.id }}" class="btn btn-sm btn-secondary">View Exam</a></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

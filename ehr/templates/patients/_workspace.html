@@ -19,7 +19,7 @@
     <div class="pw-header-info">
       <h1>{{ display_name }}<a href="/patients/{{ patient.id }}/edit" class="icon-btn" style="margin-left:0.5rem;vertical-align:middle" title="Edit patient" aria-label="Edit patient">&#9998;</a></h1>
       <div class="pw-header-meta">
-        <span>MRN: {{ patient.mrn or '—' }}</span>
+        <span>MRN: <span class="mono-data">{{ patient.mrn or '—' }}</span></span>
         <span>{% if age is not none %}Age {{ age }} &middot; {% endif %}DOB {{ patient.date_of_birth or '—' }}</span>
         <span>{{ patient.phone or 'No phone on file' }}</span>
         <span>Provider: {{ provider_label or '—' }}</span>
@@ -44,6 +44,8 @@
     <a href="/patients/{{ patient.id }}/addresses" class="{{ 'active' if active_tab == 'addresses' }}">Additional Addresses</a>
     <a href="/patients/{{ patient.id }}/appointments" class="{{ 'active' if active_tab == 'appointments' }}">Appointments</a>
     <a href="/patients/{{ patient.id }}/recalls" class="{{ 'active' if active_tab == 'recalls' }}">Recalls</a>
+    <a href="/patients/{{ patient.id }}/glaucoma-trend" class="{{ 'active' if active_tab == 'glaucoma-trend' }}">Glaucoma Tracking</a>
+    <a href="/patients/{{ patient.id }}/surgery-timeline" class="{{ 'active' if active_tab == 'surgery-timeline' }}">Surgery Co-Management</a>
     <a href="/patients/{{ patient.id }}/insurance" class="{{ 'active' if active_tab == 'insurance' }}">Insurance</a>
     <div class="pw-subgroup">
       <a href="/patients/{{ patient.id }}/insurance/eligibility" class="{{ 'active' if active_tab == 'insurance-eligibility' }}">Eligibility / Authorization</a>

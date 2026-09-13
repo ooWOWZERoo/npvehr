@@ -133,7 +133,148 @@ def test_icd10_suggestion_and_diagnosis_driven_recall_interval(logged_in_page, l
     assert weeks.input_value() == "99"
 
 
+def test_glaucoma_focus_toggle_composer_and_trend_view(logged_in_page, live_server):
+    """Posterior Segment / Glaucoma (ehr/templates/exams/form.html,
+    ehr/templates/patients/glaucoma_trend_tab.html) -- verifies the third
+    Visit Focus chip shows/hides its section like the existing two, the
+    composer's glaucoma clauses populate Assessment & Plan, and the new
+    patient-workspace trend tab renders a populated chart+table for the
+    seeded demo patient (David Wilson, two glaucoma-tracking exams six
+    months apart) and an empty state for a patient with none."""
+    page = logged_in_page
+    page.goto(live_server + "/exams/new")
+    glaucoma_section = page.locator("#focus-glaucoma")
+    assert not glaucoma_section.is_visible()
+    page.locator('.focus-toggle[data-target="focus-glaucoma"]').check()
+    assert glaucoma_section.is_visible()
+
+    page.fill('input[name="gt_primary_diagnosis_code"]', "H40.0011")
+    page.fill('input[name="gt_iop_current_od"]', "24")
+    page.fill('input[name="gt_iop_current_os"]', "25")
+    assert "Glaucoma (H40.0011)" in page.locator("#assessment").input_value()
+    assert "24/25 mmHg" in page.locator("#assessment").input_value()
+
+    page.locator('input[name="gt_prescribed_glaucoma_meds"][value="Latanoprost 0.005% QHS OU"]').check()
+    page.locator('select[name="gt_follow_up_interval"]').select_option("3 months")
+    plan = page.locator("#plan").input_value()
+    assert "Latanoprost" in plan
+    assert "3 months" in plan
+
+    # Patient-workspace trend view: seeded demo patient (David Wilson) has
+    # two glaucoma-tracking exams -- populated table + non-empty chart.
+    page.goto(live_server + "/patients/")
+    page.locator("a", has_text="Wilson").first.click()
+    page.locator('a[href$="/glaucoma-trend"]').click()
+    assert "glaucoma-trend" in page.url
+    assert page.locator("table tbody tr").count() >= 2
+    assert page.locator("svg polyline").count() == 2
+
+    # A patient with no glaucoma-tracking history sees the empty state instead.
+    page.goto(live_server + "/patients/")
+    page.locator("a", has_text="Johnson").first.click()
+    page.locator('a[href$="/glaucoma-trend"]').click()
+    assert page.locator("text=No glaucoma tracking recorded").is_visible()
+
+
+def test_binocular_vision_focus_toggle_and_composer(logged_in_page, live_server):
+    """Binocular Vision / Pediatrics (ehr/templates/exams/form.html) -- the
+    fourth Visit Focus chip shows/hides its section like the existing three,
+    and the composer's binocular clauses populate Assessment & Plan from the
+    strabismus/home-exercise fields."""
+    page = logged_in_page
+    page.goto(live_server + "/exams/new")
+    binocular_section = page.locator("#focus-binocular")
+    assert not binocular_section.is_visible()
+    page.locator('.focus-toggle[data-target="focus-binocular"]').check()
+    assert binocular_section.is_visible()
+
+    page.fill('input[name="bv_primary_diagnosis_code"]', "H51.11")
+    page.locator('select[name="bv_strabismus_present"]').select_option("Yes")
+    page.locator('select[name="bv_strabismus_direction"]').select_option("Esotropia")
+    assessment = page.locator("#assessment").input_value()
+    assert "H51.11" in assessment
+    assert "strabismus present (Esotropia)" in assessment
+
+    page.locator('input[name="bv_assigned_home_exercises"][value="Brock String"]').check()
+    page.fill('input[name="bv_therapy_session_number"]', "4")
+    page.locator('select[name="bv_follow_up_interval"]').select_option("2 weeks")
+    plan = page.locator("#plan").input_value()
+    assert "Brock String" in plan
+    assert "session 4" in plan
+    assert "2 weeks" in plan
+
+
+def test_surgery_comanagement_focus_toggle_composer_and_timeline(logged_in_page, live_server):
+    """Pre-/Post-Op Co-Management (ehr/templates/exams/form.html,
+    ehr/templates/patients/surgery_timeline_tab.html) -- the fifth and last
+    Visit Focus chip shows/hides its section like the existing four, the
+    composer's surgery clauses populate Assessment & Plan, and the new
+    patient-workspace timeline tab renders a populated table for the seeded
+    demo patient (Carol Davis, a three-visit LASIK timeline) and an empty
+    state for a patient with none."""
+    page = logged_in_page
+    page.goto(live_server + "/exams/new")
+    surgery_section = page.locator("#focus-surgery")
+    assert not surgery_section.is_visible()
+    page.locator('.focus-toggle[data-target="focus-surgery"]').check()
+    assert surgery_section.is_visible()
+
+    page.locator('select[name="sx_surgical_procedure"]').select_option("LASIK")
+    page.locator('select[name="sx_operative_eye"]').select_option("OU")
+    page.locator('select[name="sx_current_milestone"]').select_option("Day 1")
+    assessment = page.locator("#assessment").input_value()
+    assert "Post-op LASIK OU" in assessment
+    assert "Day 1" in assessment
+
+    page.fill('textarea[name="sx_steroid_taper_schedule"]', "Pred Forte QID x 1 week")
+    page.locator('select[name="sx_follow_up_interval"]').select_option("1 week")
+    plan = page.locator("#plan").input_value()
+    assert "Pred Forte" in plan
+    assert "1 week" in plan
+
+    # Patient-workspace timeline view: seeded demo patient (Carol Davis) has
+    # a three-visit LASIK timeline -- populated table, newest first.
+    page.goto(live_server + "/patients/")
+    page.locator("a", has_text="Davis").first.click()
+    page.locator('a[href$="/surgery-timeline"]').click()
+    assert "surgery-timeline" in page.url
+    assert page.locator("table tbody tr").count() == 3
+
+    # A patient with no surgery-tracking history sees the empty state instead.
+    page.goto(live_server + "/patients/")
+    page.locator("a", has_text="Johnson").first.click()
+    page.locator('a[href$="/surgery-timeline"]').click()
+    assert page.locator("text=No surgical co-management recorded").is_visible()
+
+
 def test_new_prescription_form_loads(logged_in_page, live_server):
     page = logged_in_page
     page.goto(live_server + "/prescriptions/new")
     assert "/login" not in page.url
+
+
+def test_csrf_token_required_on_post(logged_in_page, live_server):
+    """CSRF protection (ehr/auth/csrf.py) -- app.js auto-injects a real,
+    session-bound token from base.html's <meta name="csrf-token"> into every
+    form (verified implicitly by every other test in this file still passing
+    with real browser form submissions), but a POST missing that token, or
+    carrying a wrong one, must be rejected with 403."""
+    page = logged_in_page
+    token = page.locator('meta[name="csrf-token"]').get_attribute("content")
+    assert token
+
+    # A real form's own submission (Playwright driving a real browser) is
+    # already covered elsewhere -- here, bypass the form entirely to prove
+    # the server independently verifies the token rather than trusting the
+    # client not to strip it.
+    resp = page.request.post(live_server + "/patients/new",
+        form={"first_name": "No", "last_name": "Token"})
+    assert resp.status == 403
+
+    resp = page.request.post(live_server + "/patients/new",
+        form={"first_name": "Wrong", "last_name": "Token", "csrf_token": "not-the-real-token"})
+    assert resp.status == 403
+
+    resp = page.request.post(live_server + "/patients/new",
+        form={"first_name": "Correct", "last_name": "Token", "csrf_token": token})
+    assert resp.status in (200, 303)

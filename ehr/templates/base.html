@@ -3,10 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="csrf-token" content="{{ request.state.csrf_token }}">
   <title>{% block title %}New Path Vision EHR{% endblock %}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@600;700;800&display=swap">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap">
   <link rel="stylesheet" href="/static/css/app.css">
@@ -134,7 +135,6 @@
         <div class="topbar-spacer"></div>
         <div class="topbar-clock">
           <div class="topbar-clock-time" id="topbarClock">&mdash;</div>
-          <div class="topbar-clock-caption">Local time</div>
         </div>
         <!--
           Real logged-in user (replaces the old decorative cookie-based staff picker).
@@ -167,7 +167,7 @@
         </div>
         <div class="pcs-info">
           <span class="pcs-name"><a href="/patients/{{ context_patient.id }}">{{ context_patient.name }}</a></span>
-          {% if context_patient.mrn %}<span>MRN: {{ context_patient.mrn }}</span>{% endif %}
+          {% if context_patient.mrn %}<span>MRN: <span class="mono-data">{{ context_patient.mrn }}</span></span>{% endif %}
           <span>{% if context_patient.age is not none %}Age {{ context_patient.age }} &middot; {% endif %}{{ context_patient.gender or 'Sex/Gender —' }}</span>
           <span>DOB: {{ context_patient.dob or '—' }}</span>
           <span>{{ context_patient.phone or 'No phone on file' }}</span>

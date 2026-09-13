@@ -1,8 +1,31 @@
 // New Path Vision EHR -- global layout behavior (vanilla JS, no build step, no deps).
 // Covers: sidebar collapse/expand + mobile drawer, live local clock, staff name picker,
-// recently-viewed patients (sidebar mini-list), and the top-bar quick patient switcher.
+// recently-viewed patients (sidebar mini-list), the top-bar quick patient switcher, and
+// CSRF token auto-injection (see ehr/auth/csrf.py) into every form on the page.
 (function () {
   "use strict";
+
+  // ---------- CSRF token auto-injection ----------
+  // base.html renders the real, server-verified token into a <meta> tag on
+  // every authenticated page (ehr/auth/deps.py sets it once per request);
+  // this just delivers that value into every <form> so individual templates
+  // never need their own hidden field. Purely a delivery mechanism -- the
+  // server independently verifies the submitted value against the session,
+  // so this injection carries no security weight of its own.
+  (function injectCsrfTokens() {
+    var meta = document.querySelector('meta[name="csrf-token"]');
+    var token = meta ? meta.getAttribute("content") : "";
+    if (!token) return;
+    var forms = document.forms;
+    for (var i = 0; i < forms.length; i++) {
+      if (forms[i].querySelector('input[name="csrf_token"]')) continue;
+      var input = document.createElement("input");
+      input.type = "hidden";
+      input.name = "csrf_token";
+      input.value = token;
+      forms[i].appendChild(input);
+    }
+  })();
 
   var shell = document.getElementById("appShell");
 

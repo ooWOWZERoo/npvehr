@@ -42,7 +42,7 @@
           {{ p.last_name }}, {{ p.first_name }}{% if p.preferred_name %} "{{ p.preferred_name }}"{% endif %}
         </a>
       </td>
-      <td>{{ p.mrn or '—' }}</td>
+      <td class="mono-data">{{ p.mrn or '—' }}</td>
       <td>{{ ages.get(p.id) if ages.get(p.id) is not none else '—' }}</td>
       <td>{{ p.date_of_birth or '—' }}</td>
       <td>{{ p.phone or '—' }}</td>

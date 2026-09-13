@@ -29,6 +29,7 @@ from fastapi import Request, Depends
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 from ehr.models.database import get_db, User, UserSession
+from ehr.auth.csrf import generate_csrf_token
 
 SESSION_COOKIE_NAME = "npv_session"
 SESSION_LIFETIME = timedelta(hours=12)
@@ -78,4 +79,5 @@ def get_current_user(request: Request, db: Session = Depends(get_db)):
     sess.last_seen_at = datetime.utcnow()
     db.commit()
     request.state.user = user
+    request.state.csrf_token = generate_csrf_token(sess.session_token)
     return user

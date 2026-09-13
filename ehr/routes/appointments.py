@@ -11,6 +11,7 @@ from ehr.env_info import EHR_ENV
 from ehr.utils import patient_context
 from ehr.auth.permissions import require_role, APPOINTMENT_EDIT, ROLE_LABELS
 from ehr.auth.deps import get_current_user
+from ehr.auth import csrf
 
 router = APIRouter(prefix="/appointments", tags=["appointments"])
 templates = Jinja2Templates(directory="ehr/templates")
@@ -371,7 +372,8 @@ def create_appointment(request: Request, patient_id: int = Form(...), provider_i
     duration_override: str = Form(""), duration_override_reason: str = Form(""),
     conflict_override: bool = Form(False), conflict_override_reason: str = Form(""),
     reason: str = Form(""), notes: str = Form(""), test_ids: list = Form([]),
-    db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    csrf_token: str = Form(""), db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    csrf.verify_or_403(request.state.csrf_token, csrf_token)
 
     version = db.query(AppointmentTypeVersion).filter(AppointmentTypeVersion.id == appointment_type_version_id).first()
     posted = dict(patient_id=patient_id, provider_id=provider_id, appointment_type_version_id=appointment_type_version_id,
@@ -451,7 +453,8 @@ def update_appointment(request: Request, appt_id: int, provider_id: int = Form(.
     duration_override: str = Form(""), duration_override_reason: str = Form(""),
     conflict_override: bool = Form(False), conflict_override_reason: str = Form(""),
     reason: str = Form(""), notes: str = Form(""), status: str = Form(None), test_ids: list = Form([]),
-    db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    csrf_token: str = Form(""), db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    csrf.verify_or_403(request.state.csrf_token, csrf_token)
     a = db.query(Appointment).filter(Appointment.id == appt_id).first()
     if not a: return HTMLResponse("Not found", status_code=404)
 
@@ -501,9 +504,10 @@ def update_appointment(request: Request, appt_id: int, provider_id: int = Form(.
 
 
 @router.post("/{appt_id}/reschedule", dependencies=[Depends(require_role(*APPOINTMENT_EDIT))])
-def reschedule_appointment(appt_id: int, scheduled_at: str = Form(...),
+def reschedule_appointment(request: Request, appt_id: int, scheduled_at: str = Form(...),
     conflict_override: bool = Form(False), conflict_override_reason: str = Form(""),
-    db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    csrf_token: str = Form(""), db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    csrf.verify_or_403(request.state.csrf_token, csrf_token)
     a = db.query(Appointment).filter(Appointment.id == appt_id).first()
     if not a: return HTMLResponse("Not found", status_code=404)
     version = a.appointment_type_version
@@ -528,8 +532,9 @@ def reschedule_appointment(appt_id: int, scheduled_at: str = Form(...),
 
 
 @router.post("/{appt_id}/status", dependencies=[Depends(require_role(*APPOINTMENT_EDIT))])
-def update_status(appt_id: int, status: str = Form(...), db: Session = Depends(get_db),
-                   user: User = Depends(get_current_user)):
+def update_status(request: Request, appt_id: int, status: str = Form(...), csrf_token: str = Form(""),
+                   db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    csrf.verify_or_403(request.state.csrf_token, csrf_token)
     a = db.query(Appointment).filter(Appointment.id == appt_id).first()
     if not a: return HTMLResponse("Not found", status_code=404)
     try:
