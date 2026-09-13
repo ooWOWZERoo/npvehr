@@ -139,7 +139,7 @@ tr:hover td { background: var(--primary-soft); }
    gap/margin already provide correct spacing -- no extra vertical rhythm
    needed beyond what .form-group already gives every other cell. */
 .form-group-actions label { visibility: hidden; }
-.form-group-actions .form-actions { margin-top: 0; height: 100%; align-items: center; }
+.form-group-actions .form-actions { margin-top: 0; height: 100%; align-items: center; justify-content: flex-end; }
 .section-title { font-family: var(--font-display); font-size: 1.05rem; font-weight: 600; color: var(--primary-strong); border-bottom: 2px solid var(--border); padding-bottom: var(--space-2); margin: var(--space-5) 0 var(--space-4); }
 .table-responsive { width: 100%; max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
 .exam-table { width: 100%; border-collapse: collapse; font-size: 0.875rem; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
