@@ -268,6 +268,17 @@
       <div class="form-group"><label>Clinical Notes</label><input name="sx_clinical_notes"></div>
     </div>
     </div>
+    {% if active_problems %}
+    <div class="section-title">Problems Addressed <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; check any chronic problem touched at this visit to append a dated follow-up note to its Problem List entry</span></div>
+    {% for problem in active_problems %}
+    <div class="form-row cols-2" style="align-items:end">
+      <div class="form-group">
+        <label class="test-chip"><input type="checkbox" name="problems_addressed" value="{{ problem.id }}"> {{ problem.diagnosis_name }}{% if problem.laterality %} {{ problem.laterality }}{% endif %}{% if problem.icd10_code %} <span class="mono-data" style="color:#64748b">({{ problem.icd10_code }})</span>{% endif %}</label>
+      </div>
+      <div class="form-group"><label>Follow-up Note</label><input name="problem_note_{{ problem.id }}" placeholder="Addressed at this visit."></div>
+    </div>
+    {% endfor %}
+    {% endif %}
     <div class="section-title">Assessment &amp; Plan <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; auto-filled from the structured fields above as you fill them in; edit freely</span></div>
     <div class="form-row cols-2">
       <div class="form-group"><label>Assessment</label><textarea name="assessment" id="assessment"></textarea></div>

@@ -35,6 +35,19 @@ ALLOWED_EXT = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 CLOUDINARY_FOLDER = "npvehr/patients"
 CLOUDINARY_MARKER_PREFIX = "cloudinary:"
 
+# Generic per-patient document storage (BUILD_BACKLOG.md's "Documents" tab,
+# distinct from the single photo above): same dual-backend/opaque-marker/
+# authenticated-delivery security posture, extended to arbitrary file types.
+# Documents get their own local dir and Cloudinary folder/marker prefix so
+# the two storage classes never collide even though they share this module.
+LOCAL_DOCUMENT_DIR = os.path.join("ehr", "static", "documents")
+CLOUDINARY_DOCUMENT_FOLDER = "npvehr/documents"
+CLOUDINARY_DOCUMENT_MARKER_PREFIX = "cloudinary-doc:"
+# Deliberately broad but not unlimited -- outside records/consent forms/
+# correspondence are typically PDFs, images, or office documents.
+ALLOWED_DOCUMENT_EXT = {".pdf", ".jpg", ".jpeg", ".png", ".gif", ".webp",
+                         ".doc", ".docx", ".txt", ".rtf"}
+
 
 def _cloudinary_configured() -> bool:
     return bool(os.environ.get("CLOUDINARY_URL"))
@@ -134,3 +147,90 @@ def delete_patient_photo(photo_path: Optional[str]):
             cloudinary.uploader.destroy(public_id, type="authenticated")
         except Exception:
             pass  # best-effort; never let cleanup failure block saving the patient record
+
+
+def save_patient_document(upload: UploadFile) -> Optional[str]:
+    """Save an uploaded patient document (any type in ALLOWED_DOCUMENT_EXT),
+    returning the opaque marker to store on PatientDocument.storage_marker,
+    or None if there's nothing valid to save. Same dual-backend/authenticated
+    posture as save_patient_photo above -- see this module's docstring."""
+    if not upload or not upload.filename:
+        return None
+    ext = os.path.splitext(upload.filename)[1].lower()
+    if ext not in ALLOWED_DOCUMENT_EXT:
+        return None
+
+    if _cloudinary_configured():
+        import cloudinary.uploader
+        public_id = f"{CLOUDINARY_DOCUMENT_FOLDER}/{uuid.uuid4().hex}"
+        cloudinary.uploader.upload(upload.file, public_id=public_id, overwrite=False,
+                                    resource_type="raw", type="authenticated")
+        return f"{CLOUDINARY_DOCUMENT_MARKER_PREFIX}{public_id}"
+
+    os.makedirs(LOCAL_DOCUMENT_DIR, exist_ok=True)
+    fname = f"{uuid.uuid4().hex}{ext}"
+    dest = os.path.join(LOCAL_DOCUMENT_DIR, fname)
+    with open(dest, "wb") as f:
+        f.write(upload.file.read())
+    return f"doc-local:{fname}"
+
+
+def get_document_bytes(storage_marker: Optional[str]) -> Optional[Tuple[bytes, str]]:
+    """Resolve a stored document marker to (bytes, content_type), or None if
+    missing/unreadable. Called only from the auth-gated, patient-ownership-
+    checked document route (ehr/routes/patients.py) -- see that route for
+    the cross-patient-contamination guard, which lives at the route level
+    (verifying document.patient_id matches the URL's patient_id) rather than
+    here, since this function only ever sees the marker, not which patient
+    it belongs to."""
+    if not storage_marker:
+        return None
+    if storage_marker.startswith(CLOUDINARY_DOCUMENT_MARKER_PREFIX):
+        public_id = storage_marker[len(CLOUDINARY_DOCUMENT_MARKER_PREFIX):]
+        import cloudinary.utils
+        signed_url, _ = cloudinary.utils.cloudinary_url(public_id, resource_type="raw",
+                                                          type="authenticated", sign_url=True)
+        try:
+            with urllib.request.urlopen(signed_url, timeout=10) as resp:
+                data = resp.read()
+                content_type = resp.headers.get_content_type() or "application/octet-stream"
+                return data, content_type
+        except Exception:
+            return None
+    if storage_marker.startswith("doc-local:"):
+        fname = os.path.basename(storage_marker[len("doc-local:"):])
+        full_path = os.path.join(LOCAL_DOCUMENT_DIR, fname)
+        if os.path.commonpath([os.path.abspath(full_path), os.path.abspath(LOCAL_DOCUMENT_DIR)]) != os.path.abspath(LOCAL_DOCUMENT_DIR):
+            return None
+        if not os.path.isfile(full_path):
+            return None
+        content_type = mimetypes.guess_type(full_path)[0] or "application/octet-stream"
+        with open(full_path, "rb") as f:
+            return f.read(), content_type
+    return None
+
+
+def delete_patient_document(storage_marker: Optional[str]):
+    """Best-effort delete of a previously-saved patient document, whichever
+    backend it lives in. Never raises -- see delete_patient_photo's docstring
+    for the same reasoning."""
+    if not storage_marker:
+        return
+    if storage_marker.startswith("doc-local:"):
+        fname = os.path.basename(storage_marker[len("doc-local:"):])
+        full_path = os.path.join(LOCAL_DOCUMENT_DIR, fname)
+        try:
+            if os.path.commonpath([os.path.abspath(full_path), os.path.abspath(LOCAL_DOCUMENT_DIR)]) != os.path.abspath(LOCAL_DOCUMENT_DIR):
+                return
+            if os.path.isfile(full_path):
+                os.remove(full_path)
+        except OSError:
+            pass
+        return
+    if storage_marker.startswith(CLOUDINARY_DOCUMENT_MARKER_PREFIX) and _cloudinary_configured():
+        public_id = storage_marker[len(CLOUDINARY_DOCUMENT_MARKER_PREFIX):]
+        try:
+            import cloudinary.uploader
+            cloudinary.uploader.destroy(public_id, resource_type="raw", type="authenticated")
+        except Exception:
+            pass

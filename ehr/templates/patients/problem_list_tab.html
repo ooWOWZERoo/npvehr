@@ -1,0 +1,74 @@
+{% extends "patients/_workspace.html" %}
+{% block wcontent %}
+<div class="card" style="margin-bottom:1rem">
+  <h2>Add a Problem</h2>
+  <form method="post" action="/patients/{{ patient.id }}/problems/new">
+    <div class="form-row cols-3">
+      <div class="form-group"><label>Diagnosis</label><input type="text" name="diagnosis_name" required placeholder="Primary Open Angle Glaucoma"></div>
+      <div class="form-group"><label>ICD-10 Code</label><input type="text" name="icd10_code" placeholder="H40.1132"></div>
+      <div class="form-group"><label>Laterality</label>
+        <select name="laterality"><option value="">&mdash;</option><option value="OD">OD (Right)</option><option value="OS">OS (Left)</option><option value="OU">OU (Both)</option></select>
+      </div>
+    </div>
+    <div class="form-row cols-2">
+      <div class="form-group"><label>Severity / Stage</label><input type="text" name="severity_or_stage" placeholder="moderate stage OU"></div>
+      <div class="form-group"><label>Date First Diagnosed</label><input type="date" name="date_first_diagnosed"></div>
+    </div>
+    <div class="form-group"><label>Counseling &mdash; Eye Care</label><textarea name="counseling_eye_care"></textarea></div>
+    <div class="form-group"><label>Counseling &mdash; Expectations</label><textarea name="counseling_expectations"></textarea></div>
+    <div class="form-group"><label>Counseling &mdash; Contact Office If</label><textarea name="counseling_contact_office_if"></textarea></div>
+    <div class="form-actions"><button type="submit" class="btn btn-primary">Add Problem</button></div>
+  </form>
+</div>
+<div class="card">
+  <h2>Problem List</h2>
+  {% if not problems %}
+  <p style="color:#64748b">No problems recorded for this patient yet.</p>
+  {% else %}
+  {% for problem in problems %}
+  <div class="card" style="margin-bottom:1rem{{ ';opacity:0.6' if problem.status == 'Resolved' }}">
+    <div style="display:flex;justify-content:space-between;align-items:baseline">
+      <h3>{{ problem.diagnosis_name }}{% if problem.laterality %} {{ problem.laterality }}{% endif %}
+        {% if problem.status == 'Resolved' %}<span class="badge" style="background:#e2e8f0;color:#475569">Resolved</span>{% endif %}
+      </h3>
+      {% if problem.status != 'Resolved' %}
+      <form method="post" action="/patients/{{ patient.id }}/problems/{{ problem.id }}/resolve" style="display:inline">
+        <button type="submit" class="btn btn-sm btn-secondary">Mark Resolved</button>
+      </form>
+      {% endif %}
+    </div>
+    <dl class="dl-grid">
+      <dt>ICD-10</dt><dd class="mono-data">{{ problem.icd10_code or '—' }}</dd>
+      <dt>Severity/Stage</dt><dd>{{ problem.severity_or_stage or '—' }}</dd>
+      <dt>First Diagnosed</dt><dd>{{ problem.date_first_diagnosed or '—' }}</dd>
+    </dl>
+    {% if problem.counseling_eye_care or problem.counseling_expectations or problem.counseling_contact_office_if %}
+    <dl class="dl-grid" style="margin-top:0.75rem">
+      {% if problem.counseling_eye_care %}<dt>Eye Care</dt><dd>{{ problem.counseling_eye_care }}</dd>{% endif %}
+      {% if problem.counseling_expectations %}<dt>Expectations</dt><dd>{{ problem.counseling_expectations }}</dd>{% endif %}
+      {% if problem.counseling_contact_office_if %}<dt>Contact Office If</dt><dd>{{ problem.counseling_contact_office_if }}</dd>{% endif %}
+    </dl>
+    {% endif %}
+    {% if problem.addenda %}
+    <div style="margin-top:0.75rem">
+      <strong style="font-size:0.8rem;color:var(--ink-muted)">Follow-up Notes</strong>
+      <ul style="margin:0.4rem 0 0;padding-left:1.2rem">
+        {% for addendum in problem.addenda %}
+        <li style="font-size:0.85rem">
+          <span class="mono-data" style="color:var(--ink-muted)">{{ addendum.created_at.strftime('%Y-%m-%d') if addendum.created_at else '' }}</span>
+          &mdash; {{ addendum.note }}
+          {% if addendum.exam_id %}(<a href="/exams/{{ addendum.exam_id }}">exam</a>){% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+    <form method="post" action="/patients/{{ patient.id }}/problems/{{ problem.id }}/addendum" style="margin-top:0.75rem;display:flex;gap:0.5rem">
+      <input type="text" name="note" placeholder="Add a follow-up note..." style="flex:1">
+      <button type="submit" class="btn btn-sm btn-secondary">Add Note</button>
+    </form>
+  </div>
+  {% endfor %}
+  {% endif %}
+</div>
+{% endblock %}

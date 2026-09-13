@@ -219,6 +219,22 @@
   </dl>
 </div>
 {% endif %}
+{% if problem_addenda %}
+<div class="card" style="margin-top:1rem">
+  <div style="display:flex;justify-content:space-between;align-items:baseline">
+    <h3>Problems Addressed at This Visit</h3>
+    <a href="/patients/{{ exam.patient_id }}/problems" class="btn btn-secondary btn-sm">View Problem List &rarr;</a>
+  </div>
+  <ul style="margin:0.4rem 0 0;padding-left:1.2rem">
+    {% for addendum in problem_addenda %}
+    <li>
+      <strong>{{ addendum.problem.diagnosis_name }}{% if addendum.problem.laterality %} {{ addendum.problem.laterality }}{% endif %}</strong>
+      &mdash; {{ addendum.note }}
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
 <div class="card" style="margin-top:1rem"><h3>Assessment &amp; Plan</h3>
   <div class="form-row cols-2">
     <div><strong>Assessment</strong><p>{{ exam.assessment or '—' }}</p></div>

@@ -713,6 +713,70 @@ def migration_019_create_surgery_comanagement_trackings(conn):
         "ON surgery_comanagement_trackings (exam_id)"
     ))
 
+# ---------------------------------------------------------------------------
+# Migration: 020 -- create `patient_documents`, `problems`, `problem_addenda`
+# Generic per-patient document storage (replacing the Correspondence >
+# Documents placeholder) and a first slice of a structured, longitudinal
+# problem list. Built in v2.20 -- see BUILD_BACKLOG.md and the models'
+# own docstrings in ehr/models/database.py. Plain CREATE TABLE IF NOT
+# EXISTS, same pattern as every dashboard migration above.
+# ---------------------------------------------------------------------------
+def migration_020_create_documents_and_problems(conn):
+    conn.execute(text(f"""
+        CREATE TABLE IF NOT EXISTS patient_documents (
+            id {_pk_ddl(conn)},
+            patient_id INTEGER NOT NULL,
+            uploaded_by_user_id INTEGER NOT NULL,
+            exam_id INTEGER,
+            category VARCHAR,
+            original_filename VARCHAR NOT NULL,
+            content_type VARCHAR,
+            file_size_bytes INTEGER,
+            storage_marker VARCHAR NOT NULL,
+            description VARCHAR,
+            uploaded_at TIMESTAMP
+        )
+    """))
+    conn.execute(text(
+        "CREATE INDEX IF NOT EXISTS ix_patient_documents_patient "
+        "ON patient_documents (patient_id)"
+    ))
+    conn.execute(text(f"""
+        CREATE TABLE IF NOT EXISTS problems (
+            id {_pk_ddl(conn)},
+            patient_id INTEGER NOT NULL,
+            exam_id_first_noted INTEGER,
+            diagnosis_name VARCHAR NOT NULL,
+            icd10_code VARCHAR,
+            laterality VARCHAR,
+            severity_or_stage VARCHAR,
+            status VARCHAR,
+            counseling_eye_care TEXT,
+            counseling_expectations TEXT,
+            counseling_contact_office_if TEXT,
+            date_first_diagnosed VARCHAR,
+            created_at TIMESTAMP
+        )
+    """))
+    conn.execute(text(
+        "CREATE INDEX IF NOT EXISTS ix_problems_patient "
+        "ON problems (patient_id)"
+    ))
+    conn.execute(text(f"""
+        CREATE TABLE IF NOT EXISTS problem_addenda (
+            id {_pk_ddl(conn)},
+            problem_id INTEGER NOT NULL,
+            exam_id INTEGER,
+            author_user_id INTEGER NOT NULL,
+            note TEXT NOT NULL,
+            created_at TIMESTAMP
+        )
+    """))
+    conn.execute(text(
+        "CREATE INDEX IF NOT EXISTS ix_problem_addenda_problem "
+        "ON problem_addenda (problem_id)"
+    ))
+
 # Ordered list of (id, function). Adding new migrations: append, never edit past entries.
 COLUMN_MIGRATIONS = [
     ("001_appointment_columns", migration_001_appointment_columns),
@@ -729,6 +793,7 @@ COLUMN_MIGRATIONS = [
     ("017_create_glaucoma_trackings", migration_017_create_glaucoma_trackings),
     ("018_create_binocular_vision_assessments", migration_018_create_binocular_vision_assessments),
     ("019_create_surgery_comanagement_trackings", migration_019_create_surgery_comanagement_trackings),
+    ("020_create_documents_and_problems", migration_020_create_documents_and_problems),
 ]
 POST_CREATE_ALL_MIGRATIONS = [
     ("002_seed_appointment_types", migration_002_seed_appointment_types),
