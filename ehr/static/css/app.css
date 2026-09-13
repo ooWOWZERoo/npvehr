@@ -130,6 +130,16 @@ tr:hover td { background: var(--primary-soft); }
 .form-row.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
 .form-row.cols-4 { grid-template-columns: repeat(4, 1fr); }
 .form-actions { margin-top: var(--space-5); display: flex; gap: var(--space-3); }
+/* Reusable pattern for short search/filter forms (as opposed to full
+   data-entry forms, which correctly keep a dedicated full-width Save row
+   below every field): put the submit/clear buttons in the last cell of the
+   same .form-row grid as the fields, rather than stranding them alone on
+   their own row below a mostly-empty one. The invisible label keeps the
+   button's baseline flush with the inputs beside it, and the row's own
+   gap/margin already provide correct spacing -- no extra vertical rhythm
+   needed beyond what .form-group already gives every other cell. */
+.form-group-actions label { visibility: hidden; }
+.form-group-actions .form-actions { margin-top: 0; height: 100%; align-items: center; }
 .section-title { font-family: var(--font-display); font-size: 1.05rem; font-weight: 600; color: var(--primary-strong); border-bottom: 2px solid var(--border); padding-bottom: var(--space-2); margin: var(--space-5) 0 var(--space-4); }
 .table-responsive { width: 100%; max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
 .exam-table { width: 100%; border-collapse: collapse; font-size: 0.875rem; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
