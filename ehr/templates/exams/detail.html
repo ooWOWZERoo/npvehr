@@ -70,6 +70,17 @@
     </dl>
   </div>
   {% endif %}
+  {% if exam.motility_od or exam.motility_os or exam.confrontation_vf_od or exam.confrontation_vf_os %}
+  <div class="card"><h3>Motility &amp; Confrontation VF</h3>
+    <div class="table-responsive">
+    <table class="exam-table">
+      <tr><th></th><th>Motility</th><th>Confrontation VF</th></tr>
+      <tr><td>OD</td><td>{{ exam.motility_od or '—' }}</td><td>{{ exam.confrontation_vf_od or '—' }}</td></tr>
+      <tr><td>OS</td><td>{{ exam.motility_os or '—' }}</td><td>{{ exam.confrontation_vf_os or '—' }}</td></tr>
+    </table>
+    </div>
+  </div>
+  {% endif %}
   <div class="card"><h3>Slit Lamp</h3>
     <div class="table-responsive">
     <table class="exam-table">
@@ -98,35 +109,77 @@
 </dl></div>
 {% endif %}
 {% if exam.anterior_segment_assessments %}
-{% set asa = exam.anterior_segment_assessments[0] %}
-<div class="card" style="margin-top:1rem"><h3>Anterior Segment / Dry Eye Assessment</h3>
+{% set ant = exam.anterior_segment_assessments[0] %}
+<div class="card" style="margin-top:1rem"><h3>Anterior Segment Assessment</h3>
   <dl class="dl-grid">
-    <dt>Diagnosis</dt><dd class="mono-data">{{ asa.primary_diagnosis_code or '—' }}</dd>
-    <dt>Severity</dt><dd>{{ asa.severity or '—' }}</dd>
+    <dt>Diagnosis</dt><dd class="mono-data">{{ ant.primary_diagnosis_code or '—' }}</dd>
+    <dt>Severity</dt><dd>{{ ant.severity or '—' }}</dd>
+  </dl>
+  <div class="table-responsive">
+  <table class="exam-table">
+    <tr><th></th><th>Conj. Injection</th><th>Discharge</th><th>Follicles/Papillae</th><th>Chemosis</th></tr>
+    <tr><td>OD</td><td>{{ ant.conjunctival_injection_od or '—' }}</td><td>{{ ant.conjunctival_discharge_od or '—' }}</td><td>{{ ant.conjunctival_follicles_papillae_od or '—' }}</td><td>{{ ant.conjunctival_chemosis_od or '—' }}</td></tr>
+    <tr><td>OS</td><td>{{ ant.conjunctival_injection_os or '—' }}</td><td>{{ ant.conjunctival_discharge_os or '—' }}</td><td>{{ ant.conjunctival_follicles_papillae_os or '—' }}</td><td>{{ ant.conjunctival_chemosis_os or '—' }}</td></tr>
+  </table>
+  </div>
+  <div class="table-responsive" style="margin-top:0.5rem">
+  <table class="exam-table">
+    <tr><th></th><th>Epithelial Defect</th><th>Edema</th><th>Infiltrate</th><th>Arcus</th><th>Guttata</th><th>Pterygium/Pinguecula</th></tr>
+    <tr><td>OD</td><td>{{ ant.corneal_epithelial_defect_od or '—' }}</td><td>{{ ant.corneal_edema_od or '—' }}</td><td>{{ ant.corneal_infiltrate_od or '—' }}</td><td>{{ ant.corneal_arcus_od or '—' }}</td><td>{{ ant.corneal_guttata_od or '—' }}</td><td>{{ ant.pterygium_pinguecula_od or '—' }}</td></tr>
+    <tr><td>OS</td><td>{{ ant.corneal_epithelial_defect_os or '—' }}</td><td>{{ ant.corneal_edema_os or '—' }}</td><td>{{ ant.corneal_infiltrate_os or '—' }}</td><td>{{ ant.corneal_arcus_os or '—' }}</td><td>{{ ant.corneal_guttata_os or '—' }}</td><td>{{ ant.pterygium_pinguecula_os or '—' }}</td></tr>
+  </table>
+  </div>
+  <div class="table-responsive" style="margin-top:0.5rem">
+  <table class="exam-table">
+    <tr><th></th><th>Van Herick</th><th>AC Cells/Flare</th><th>Iris Pattern</th><th>Iris NVI</th><th>PI Status</th></tr>
+    <tr><td>OD</td><td>{{ ant.van_herick_grade_od or '—' }}</td><td>{{ ant.ac_cells_flare_od or '—' }}</td><td>{{ ant.iris_pattern_od or '—' }}</td><td>{{ ant.iris_nvi_present_od or '—' }}</td><td>{{ ant.iris_pi_status_od or '—' }}</td></tr>
+    <tr><td>OS</td><td>{{ ant.van_herick_grade_os or '—' }}</td><td>{{ ant.ac_cells_flare_os or '—' }}</td><td>{{ ant.iris_pattern_os or '—' }}</td><td>{{ ant.iris_nvi_present_os or '—' }}</td><td>{{ ant.iris_pi_status_os or '—' }}</td></tr>
+  </table>
+  </div>
+  <div class="table-responsive" style="margin-top:0.5rem">
+  <table class="exam-table">
+    <tr><th></th><th>Cataract Type</th><th>Cataract Grade</th></tr>
+    <tr><td>OD</td><td>{{ ant.lens_cataract_type_od or '—' }}</td><td>{{ ant.lens_cataract_grade_od or '—' }}</td></tr>
+    <tr><td>OS</td><td>{{ ant.lens_cataract_type_os or '—' }}</td><td>{{ ant.lens_cataract_grade_os or '—' }}</td></tr>
+  </table>
+  </div>
+  <dl class="dl-grid" style="margin-top:0.75rem">
+    <dt>Plan Therapeutics</dt><dd>{{ ant.plan_therapeutics or '—' }}</dd>
+    <dt>Follow-up</dt><dd>{{ ant.follow_up_interval or '—' }}</dd>
+    {% if ant.clinical_notes %}<dt>Notes</dt><dd>{{ ant.clinical_notes }}</dd>{% endif %}
+  </dl>
+</div>
+{% endif %}
+{% if exam.dry_eye_assessments %}
+{% set de = exam.dry_eye_assessments[0] %}
+<div class="card" style="margin-top:1rem"><h3>Dry Eye / Ocular Surface Disease Assessment</h3>
+  <dl class="dl-grid">
+    <dt>Diagnosis</dt><dd class="mono-data">{{ de.primary_diagnosis_code or '—' }}</dd>
+    <dt>Severity</dt><dd>{{ de.severity or '—' }}</dd>
   </dl>
   <div class="table-responsive">
   <table class="exam-table">
     <tr><th></th><th>Conj. Injection</th><th>Corneal Staining</th><th>MGD Expression</th><th>TBUT (sec)</th><th>Schirmer (mm)</th></tr>
     <tr><td>OD</td>
-      <td>{{ asa.conjunctival_injection_od or '—' }}</td>
-      <td>{{ asa.corneal_staining_od or '—' }}</td>
-      <td>{{ asa.mgd_expression_od or '—' }}</td>
-      <td>{{ asa.tbut_seconds_od if asa.tbut_seconds_od is not none else '—' }}</td>
-      <td>{{ asa.schirmer_mm_od if asa.schirmer_mm_od is not none else '—' }}</td>
+      <td>{{ de.conjunctival_injection_od or '—' }}</td>
+      <td>{{ de.corneal_staining_od or '—' }}</td>
+      <td>{{ de.mgd_expression_od or '—' }}</td>
+      <td>{{ de.tbut_seconds_od if de.tbut_seconds_od is not none else '—' }}</td>
+      <td>{{ de.schirmer_mm_od if de.schirmer_mm_od is not none else '—' }}</td>
     </tr>
     <tr><td>OS</td>
-      <td>{{ asa.conjunctival_injection_os or '—' }}</td>
-      <td>{{ asa.corneal_staining_os or '—' }}</td>
-      <td>{{ asa.mgd_expression_os or '—' }}</td>
-      <td>{{ asa.tbut_seconds_os if asa.tbut_seconds_os is not none else '—' }}</td>
-      <td>{{ asa.schirmer_mm_os if asa.schirmer_mm_os is not none else '—' }}</td>
+      <td>{{ de.conjunctival_injection_os or '—' }}</td>
+      <td>{{ de.corneal_staining_os or '—' }}</td>
+      <td>{{ de.mgd_expression_os or '—' }}</td>
+      <td>{{ de.tbut_seconds_os if de.tbut_seconds_os is not none else '—' }}</td>
+      <td>{{ de.schirmer_mm_os if de.schirmer_mm_os is not none else '—' }}</td>
     </tr>
   </table>
   </div>
   <dl class="dl-grid" style="margin-top:0.75rem">
-    <dt>Plan Therapeutics</dt><dd>{{ asa.plan_therapeutics or '—' }}</dd>
-    <dt>Follow-up</dt><dd>{{ asa.follow_up_interval or '—' }}</dd>
-    {% if asa.clinical_notes %}<dt>Notes</dt><dd>{{ asa.clinical_notes }}</dd>{% endif %}
+    <dt>Plan Therapeutics</dt><dd>{{ de.plan_therapeutics or '—' }}</dd>
+    <dt>Follow-up</dt><dd>{{ de.follow_up_interval or '—' }}</dd>
+    {% if de.clinical_notes %}<dt>Notes</dt><dd>{{ de.clinical_notes }}</dd>{% endif %}
   </dl>
 </div>
 {% endif %}

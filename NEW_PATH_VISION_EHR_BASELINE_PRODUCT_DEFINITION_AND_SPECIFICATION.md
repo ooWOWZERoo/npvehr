@@ -1,7 +1,7 @@
 # New Path Vision EHR
 ## Baseline Product Definition and Current-State Functional Specification
 
-**Document version:** 2.21 (supersedes v2.20; adds structured pupil exam fields to `EyeExam` — size at light/dark/near and reactivity per eye, plus an APD finding — the next item picked from the v2.20 visit-summary gap analysis; see new §40; none of this bears on the four go-live prerequisites, which are unchanged from v2.6)
+**Document version:** 2.24 (supersedes v2.23; redesigns the New Exam form's Visit Focus activation into a status-dot-plus-accordion pattern with a sticky chip row, layered on top of the existing chip/hidden-attribute mechanism rather than replacing it; see new §43; none of this bears on the four go-live prerequisites, which are unchanged from v2.6)
 **Baseline date:** September 9, 2026
 **Application-reported version:** 1.0.0
 **Baseline source:** `setup_ehr.py` self-contained scaffold script (locally generated `visioncare_ehr/` project directory; see §2.2)
@@ -931,6 +931,8 @@ erDiagram
 Added via migration `015_refractive_assessment_and_plan`, verified against fresh SQLite and Postgres databases (including idempotent re-run). All four are optional — an exam with none of them set renders identically to a pre-v2.10 exam (the new "Refractive Assessment" card on the detail page is conditionally hidden when all four are empty). The new-exam form captures diagnosis and secondary findings as checkbox groups (this app's existing `test-chip` pattern) and laterality/stability as dropdowns. Diagnosis coding stays free-text via the existing `diagnosis_codes` field — no ICD-10 lookup table, per the v2.9 decision to defer terminology-server work (§22, §4.4 of the research doc).
 
 ### 12.5b Anterior Segment / Dry Eye dashboard and the Visit Focus navigation model (v2.11)
+
+**Superseded, v2.23 — see new §42.** Everything this section built was, and always is described below as, entirely dry-eye/OSD content (conjunctival injection, corneal staining, MGD, TBUT, Schirmer) despite the "Anterior Segment" name — there was never a structural anterior-segment exam. In v2.23 the table/dashboard documented here was renamed to `DryEyeAssessment` (no column or data change) and given its own Visit Focus chip, and a real, new `AnteriorSegmentAssessment` structural dashboard was built alongside it. This section is kept verbatim for historical accuracy about what v2.11 actually built and named; the Visit Focus navigation model it introduced remains exactly as described below.
 
 `VISION_EHR_DATA_STANDARDS_RESEARCH.md` §5.2, the second of five clinical dashboards from the same reviewed requirements document, needed a genuinely new table (not an extension of `EyeExam`/`Prescription` the way §5.1 was):
 
@@ -2968,3 +2970,115 @@ No changes to any of the five existing Visit Focus dashboards. No motility/confr
 | New capability | Ten new nullable columns on `EyeExam` (migration `021_pupil_exam_fields`): pupil size at light/dark/near and reactivity per eye, plus a single APD (afferent pupillary defect) finding field. Modeled as flat columns, not a new Visit Focus dashboard, since pupils are core exam data like Visual Acuity/Slit Lamp/Fundus rather than a diagnosis-driven specialty assessment. See new §40. |
 | Updated | `exams/form.html` gained a new "Pupils" section; `exams/detail.html` gained a conditional Pupils card. `BUILD_BACKLOG.md` §12 updated to mark this item done. |
 | Explicitly not done | No changes to the five existing Visit Focus dashboards. No motility/confrontation-visual-field, review-of-systems, social-history, or diagnostic-imaging-order work — all remain tracked in `BUILD_BACKLOG.md` §12. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |
+
+## 41. Motility and Confrontation Visual Field Fields (v2.22)
+
+### 41.1 Origin
+
+The next item picked from the v2.20 visit-summary gap analysis (§39.1, research doc §8), following the same pattern as pupil exam fields (§40): motility (extraocular muscle movement through the cardinal gaze positions) and confrontation visual fields (peripheral vision screened by hand-motion/finger-counting per eye) had no structured fields — only the pre-existing `cover_test` free-text field, which covers ocular *alignment* (phoria/tropia), a distinct clinical concept from muscle *movement* or *peripheral field* testing.
+
+### 41.2 Modeling decision: flat `EyeExam` columns, same treatment as pupils
+
+Like pupils (§40.2), motility and confrontation VF are routine, per-eye exam elements checked on nearly every comprehensive visit — not a diagnosis-driven Visit Focus area. This round added four new nullable `VARCHAR` columns to `EyeExam` (migration `022_motility_and_confrontation_vf`, same `_add_column_if_missing` pattern as migration 021): `motility_od`/`motility_os` (e.g. "Full", or a description of any restriction) and `confrontation_vf_od`/`confrontation_vf_os` (e.g. "Full to finger counting", or a description of any field defect).
+
+### 41.3 Routes and templates
+
+`ehr/routes/exams.py`'s `create_exam` reads and stores all four fields unconditionally, the same as the other core exam fields it sits beside. `exams/form.html` gained a new "Motility & Confrontation Visual Fields" section (an OD/OS table) positioned after Pupils and before IOP & Cover Test. `exams/detail.html` gained a conditional "Motility & Confrontation VF" card (shown only when at least one of the four fields was filled in), alongside the existing Pupils/Slit Lamp/Fundus cards.
+
+### 41.4 Verified
+
+`python3 -m py_compile` on every touched Python file. Local SQLite instance: migration `022_motility_and_confrontation_vf` adds all four columns cleanly to a fresh database and is idempotent on re-run; `sqlalchemy.inspect` confirms the columns. End-to-end via `curl` against a running instance: an exam saved with motility/confrontation-VF data displays it correctly on the detail page; an exam saved with none of the four fields filled in shows no card at all. Full Playwright suite passes (19 tests), including a new `test_motility_and_confrontation_vf_save_and_display` covering both the populated and empty-state cases through a real browser.
+
+### 41.5 Explicitly not done
+
+No changes to any of the five existing Visit Focus dashboards or to the pre-existing `cover_test` field. No conjunctiva/anterior-chamber/iris/vitreous discrete structures, structured review of systems, structured social history, or diagnostic-imaging order/result tracking — all remain tracked in `BUILD_BACKLOG.md` §12.
+
+**Version 2.22 change log (relative to v2.21) — adds structured motility and confrontation visual field data, the next item from the v2.20 visit-summary gap analysis:**
+
+| Area | Change |
+| --- | --- |
+| New capability | Four new nullable `VARCHAR` columns on `EyeExam` (migration `022_motility_and_confrontation_vf`): motility and confrontation visual field per eye. Modeled as flat columns, same treatment as pupil exam fields (§40), since these are core exam data rather than a diagnosis-driven specialty assessment. See new §41. |
+| Updated | `exams/form.html` gained a new "Motility & Confrontation Visual Fields" section; `exams/detail.html` gained a conditional card. `BUILD_BACKLOG.md` §12 updated to mark this item done. |
+| Explicitly not done | No changes to the five existing Visit Focus dashboards or the pre-existing `cover_test` field. No discrete conjunctiva/AC/iris/vitreous structures, review-of-systems, social-history, or diagnostic-imaging-order work — all remain tracked in `BUILD_BACKLOG.md` §12. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |
+
+## 42. Anterior Segment / Dry Eye Split (v2.23)
+
+### 42.1 Origin
+
+The user asked to fix the New Exam form's Visit Focus setup and separate "Anterior Segment" from "Dry Eye," and to make sure both were fully, thoughtfully scoped. Investigation confirmed the v2.11 dashboard (§12.5b) — labeled "Anterior Segment / Dry Eye" from the start, in both the app's UI and the research doc's own §5.2 field list — was in fact 100% dry-eye/OSD content (conjunctival injection, corneal staining, MGD expression, TBUT, Schirmer, dry-eye therapeutics): there was never a structural anterior-segment exam (conjunctiva/cornea/anterior chamber/iris/lens as discrete findings) anywhere in the app. This was already a known, separately-tracked gap (`BUILD_BACKLOG.md` §12: "Conjunctiva / anterior chamber / iris as discrete slit-lamp structures"). Confirmed with the user before building: (1) rename the existing table/dashboard to its true name rather than keep a misleading one, and (2) build a full structural Anterior Segment exam covering conjunctiva, cornea, anterior chamber, iris, and lens/cataract grading — not a narrower subset.
+
+### 42.2 Rename: `AnteriorSegmentAssessment` → `DryEyeAssessment`
+
+No column or data change — only the table and model name. Migration `023_rename_anterior_segment_to_dry_eye` (`ALTER TABLE anterior_segment_assessments RENAME TO dry_eye_assessments`), guarded to fire only when the old name exists and the new one doesn't yet, so a fresh install (where neither table exists at this migration-phase point) simply skips it and `create_all()` creates both tables fresh from the current models. Verified directly: a simulated pre-v2.23 database with a seeded row in the old-named table, run through the full migration sequence, ends with that exact row present and intact in `dry_eye_assessments`, and a fresh, empty `anterior_segment_assessments` table alongside it.
+
+The dashboard's own fields, behavior, and Visit Focus chip (now labeled "Dry Eye / Ocular Surface Disease" rather than "Anterior Segment / Dry Eye") are otherwise unchanged from §12.5b — same grading scales, same plan-therapeutics options, same composer clauses (now reading `de_*` form field names instead of `asa_*`).
+
+### 42.3 New: a real, structural `AnteriorSegmentAssessment`
+
+A new `exam_id`-FK child table (same shape as every other dashboard), covering:
+
+| Structure | Fields | Notes |
+| --- | --- | --- |
+| Conjunctiva | injection (grading scale), discharge (None/Serous/Mucoid/Purulent), follicles/papillae (None/Follicles/Papillae/Both), chemosis (grading scale) | per eye |
+| Cornea | epithelial defect (Yes/No), edema (grading scale), infiltrate (None/Present), arcus (Yes/No), guttata (grading scale), pterygium/pinguecula (None/Pterygium/Pinguecula/Both) | per eye; distinct from Slit Lamp's plain clarity field and from Dry Eye's staining field |
+| Anterior Chamber | Van Herick grade (Grade 1-4), cells/flare (grading scale) | per eye |
+| Iris | pattern (free text), NVI present (Yes/No), PI status (None/Patent/Non-patent) | per eye |
+| Lens | cataract type (None/Nuclear Sclerosis/Cortical/Posterior Subcapsular/Combined), cataract grade (Trace/1+/2+/3+/4+) | per eye |
+| | primary_diagnosis_code, severity, plan_therapeutics, follow_up_interval, clinical_notes | same shape as every other dashboard |
+
+Added via migration `024_create_anterior_segment_assessments` (plain `CREATE TABLE IF NOT EXISTS`, same pattern as every other new-table migration), which runs after migration 023 has freed up the table name. A second Visit Focus chip, "Anterior Segment," joins "Dry Eye / Ocular Surface Disease" — both independently toggleable, each showing/hiding its own section. The composer gained a new clause: populated diagnosis code/severity/pterygium/cataract findings compose into `assessment`; checked plan-therapeutics options and follow-up interval compose into `plan` — same never-overwrite-a-manual-edit behavior as every other dashboard's clause.
+
+### 42.4 Templates and seed data
+
+`exams/form.html`: the Visit Focus chip list now reads "Comprehensive / Refractive," "Anterior Segment," "Dry Eye / Ocular Surface Disease," "Posterior Segment / Glaucoma," "Binocular Vision / Pediatrics," "Pre-/Post-Op Co-Management" — Anterior Segment positioned before Dry Eye, matching front-to-back clinical exam order. `exams/detail.html` gained a new Anterior Segment card (four sub-tables: Conjunctiva, Cornea, Anterior Chamber + Iris, Lens) and kept the Dry Eye card (renamed, same layout as before). `ehr/db/seed.py`'s existing dry-eye demo exam now creates a `DryEyeAssessment` row; a new third demo exam for the same patient (Bob Smith) demonstrates the new Anterior Segment dashboard with a nasal pterygium and trace cataract finding.
+
+### 42.5 Verified
+
+`python3 -m py_compile` on every touched Python file. Local SQLite instance, two scenarios: (1) a fresh database — migration run produces both `dry_eye_assessments` and `anterior_segment_assessments` with exactly the columns their models declare; (2) a simulated pre-v2.23 database with existing dry-eye data — the full migration sequence renames the old table (data intact, confirmed by direct row query) and creates the new table fresh and empty. Both idempotent on re-run. End-to-end via a running instance: the New Exam form shows both chips independently toggleable; an exam saved with both Anterior Segment and Dry Eye fields creates two independent rows, each rendering its own correct card on the detail page; the seeded demo exams (dry eye and the new anterior segment/pterygium exam) both render correctly. Visual check (desktop and 400px mobile) confirms both new sections lay out cleanly, with wide tables scrolling horizontally within `.table-responsive` at narrow widths — consistent with this app's existing pattern for every other multi-column dashboard table. Full Playwright suite passes (21 tests), including two new tests (`test_anterior_segment_focus_toggle_and_composer`, `test_dry_eye_focus_toggle_and_composer`) verifying the two dashboards toggle and compose independently.
+
+### 42.6 Explicitly not done
+
+No change to the pre-existing Slit Lamp core-exam fields (`sl_cornea_od/os`, `sl_lens_od/os`) — those stay as the quick-glance summary; the new Anterior Segment dashboard is the detailed, diagnosis-driven structural exam, following this app's established core-fields-vs-specialty-dashboard split (the same relationship Pupils/Motility have to a hypothetical "detailed neuro-ophthalmic exam" dashboard, were one ever built). No vitreous fields (still tracked, `BUILD_BACKLOG.md` §12). No real ICD-10 code-set integration (still deferred, research doc §4.4). No stored `visit_focus` field — the chip mechanism remains client-side-only, per §12.5b's original design note.
+
+**Version 2.23 change log (relative to v2.22) — splits the v2.11 "Anterior Segment / Dry Eye" dashboard, which was entirely dry-eye content, into two correctly-scoped dashboards:**
+
+| Area | Change |
+| --- | --- |
+| Renamed, no data change | `AnteriorSegmentAssessment` table/model (v2.11, entirely dry-eye/OSD content despite its name) renamed to `DryEyeAssessment` / `dry_eye_assessments` via migration `023_rename_anterior_segment_to_dry_eye`. Its own Visit Focus chip is now labeled "Dry Eye / Ocular Surface Disease." See new §42.2; supersedes §12.5b. |
+| New capability | A real, new `AnteriorSegmentAssessment` structural dashboard: conjunctiva, cornea, anterior chamber, iris, and lens/cataract grading per eye, via migration `024_create_anterior_segment_assessments`. New "Anterior Segment" Visit Focus chip, form section, composer clause, and detail-page card. See new §42.3. |
+| Updated | `exams/form.html`'s Visit Focus chip list and section order; `exams/detail.html` gained the new card; `ehr/db/seed.py` updated to the new model name and gained a third demo exam for the new dashboard. `VISION_EHR_DATA_STANDARDS_RESEARCH.md` §5.2 and §8 annotated; `BUILD_BACKLOG.md` §12 item marked done. |
+| Explicitly not done | No change to Slit Lamp's core cornea/lens fields. No vitreous fields. No real ICD-10 code-set integration. No stored `visit_focus` field. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |
+
+## 43. Visit Focus Activation Redesign (v2.24)
+
+### 43.1 Origin
+
+With six Visit Focus dashboards now on one form (§12.5b introduced two; §12.5e–g and §42 brought the total to six), the plain checkbox-chip-reveals-a-buried-div mechanism from v2.11 had two real gaps: nothing showed which dashboards had actually been filled in once a section scrolled out of view, and the whole dashboard's field set rendered flat with no way to tuck a finished section out of the way without losing it. The user asked for prototype redesigns to compare, specifically calling out a fast-paced, high-volume practice (48 patients/day) as the design target; several interactive options were built and reviewed as a standalone prototype before this round ported the chosen direction into the real form.
+
+### 43.2 What changed
+
+**Status dots** — a small dot on every Visit Focus chip and every card header: a hollow ring while the section is active but empty, filling solid (`--primary`) the instant any field in it has a value. Computed generically (`updateVfStatus()` in `exams/form.html`'s script) by walking every `input`/`select`/`textarea` inside the section's existing `#focus-*` div — no per-dashboard field list to maintain, so a future seventh dashboard gets this for free by following the same markup shape.
+
+**Real accordions** — each dashboard is now a `.vf-card` with a `.vf-head` button (title, dot, a muted one-line description when inactive, a live one-line summary when collapsed-but-filled, and a chevron) wrapping the existing `.vf-body` (the same `id="focus-*"` div the original chip/hidden-attribute mechanism already targets — collapsing is a new, orthogonal `.vf-collapsed` class, never touching `hidden`, so nothing about the existing active/inactive semantics changed). Turning a chip on always opens its card; the header's own click toggles collapsed state independently, and only has an effect on an active card.
+
+**Sticky Visit Focus row** — the section-title-plus-chip-row block (`.vf-sticky`) sticks to the top of the viewport as the page scrolls (plain `position: sticky; top: 0`, no JS beyond a class toggle that adds a border/shadow once actually stuck), so turning on another assessment area mid-exam never means scrolling back to the top of a long visit.
+
+None of this touches how an exam is saved: `create_exam` still reads exactly the same field names, `isFocusOn()` in the composer script still reads the checkbox's own `.checked` state directly (unaffected by collapse), and the six existing `#focus-*` ids are unchanged, so every pre-existing selector (composer script, Playwright tests) continues to work without modification.
+
+### 43.3 Verified
+
+`python3 -m py_compile` on the one touched Python file that imports nothing new (routes were untouched — this is a template/CSS/JS-only round). Local instance via a real browser: default state (Refractive on and open, the other five off); checking a chip opens its card and fills its chip/head dots on end-to-end data entry; collapsing a card via its header hides the fields (confirmed the underlying value is retained, not cleared) and shows a live summary; re-expanding restores the visible, still-populated fields; unchecking a chip still hides its `#focus-*` div exactly as before. Confirmed no JavaScript errors during any of the above. Full Playwright suite passes (22 tests, including a new `test_visit_focus_status_dots_and_collapse`); every pre-existing Visit Focus/composer test passed unmodified, confirming the layered-on-top approach didn't disturb the existing mechanism.
+
+### 43.4 Explicitly not done
+
+No change to which fields exist on any dashboard, or to the composer's narrative-generation logic. No stored `visit_focus` field (the mechanism remains client-side-only, per §12.5b's original design note — still true here). No fix to a pre-existing, app-wide 400px-width horizontal-overflow issue found incidentally while testing this round (reproduces identically on the dashboard page, which has no exam-table content at all, confirming it predates and is unrelated to this work) — worth its own investigation, tracked as a new `BUILD_BACKLOG.md` §10 item rather than fixed as a drive-by here.
+
+**Version 2.24 change log (relative to v2.23) — redesigns Visit Focus activation (status dots, real accordions, a sticky chip row), layered on top of the existing mechanism rather than replacing it:**
+
+| Area | Change |
+| --- | --- |
+| New capability | A status dot on every Visit Focus chip and card header (hollow while active-and-empty, solid once the section has a value), computed generically from any `input`/`select`/`textarea` inside the section — no per-dashboard list to maintain. See new §43.2. |
+| New capability | Each dashboard is now a real accordion: collapsing (the card header) is independent of deactivating (the chip) and never clears entered data; a collapsed, filled card shows a live one-line summary. See §43.2. |
+| New capability | The Visit Focus chip row is sticky within the page as it scrolls, so adding another assessment area mid-exam never means scrolling back to the top of a long visit. See §43.2. |
+| Updated | `ehr/templates/exams/form.html` (Visit Focus markup + script) and `ehr/static/css/app.css` (new `.vf-*` rules). No Python route changes. `tests/test_smoke.py` gained `test_visit_focus_status_dots_and_collapse`; every pre-existing Visit Focus/composer test passed unmodified. |
+| Explicitly not done | No new or changed dashboard fields. No stored `visit_focus` field. A pre-existing, unrelated mobile-width overflow issue was found but not fixed (now tracked, `BUILD_BACKLOG.md` §10). None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |

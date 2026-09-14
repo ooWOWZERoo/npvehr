@@ -234,6 +234,40 @@ tr:hover td { background: var(--primary-soft); }
 .checkbox-row input[type=checkbox] { width: auto; }
 .test-chip-list { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .test-chip { display: flex; align-items: center; gap: 0.3rem; border: 1px solid var(--border); border-radius: 14px; padding: 0.2rem 0.65rem; font-size: 0.78rem; background: var(--surface); }
+
+/* Visit Focus (New Exam form, v2.24): a status dot on each chip and each
+   card header shows empty (hollow ring) vs. filled (solid) without a new
+   click anywhere, and each dashboard becomes a real accordion -- collapsing
+   is not the same action as deactivating it, so a finished section tucks
+   away to a one-line summary instead of disappearing or staying sprawled
+   open. The chip row stays reachable while scrolling a long exam via
+   position:sticky, so turning on another assessment area mid-exam never
+   means scrolling back to the top. All of this is layered onto the existing
+   .focus-toggle/hidden-attribute mechanism (ehr/templates/exams/form.html)
+   rather than replacing it -- .vf-body keeps the same id targeted by that
+   script, so active/inactive is still purely which chips are checked. */
+.vf-sticky { position: sticky; top: 0; z-index: 5; background: var(--surface); padding-block: var(--space-1) var(--space-2); border-bottom: 1px solid transparent; }
+.vf-sticky.vf-stuck { border-bottom-color: var(--border); box-shadow: 0 6px 14px -10px rgba(19,36,32,0.25); }
+.vf-dot { width: 7px; height: 7px; border-radius: 50%; border: 1.5px solid var(--border); background: transparent; flex-shrink: 0; display: none; }
+.test-chip.vf-chip-on .vf-dot { display: inline-block; }
+.vf-dot.vf-filled { background: var(--primary); border-color: var(--primary); }
+.vf-card { border: 1px solid var(--border); border-left: 4px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--surface-sunken); margin-bottom: var(--space-3); }
+.vf-card.vf-on { border-color: var(--primary); border-left-color: var(--primary); background: var(--surface); }
+.vf-head { all: unset; box-sizing: border-box; display: flex; align-items: center; gap: var(--space-2); width: 100%; padding: var(--space-3) var(--space-4); cursor: pointer; }
+.vf-head:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 6px; }
+.vf-title { font-family: var(--font-display); font-weight: 700; font-size: 0.92rem; color: var(--ink-muted); }
+.vf-card.vf-on .vf-title { color: var(--primary-strong); }
+.vf-desc { font-size: 0.78rem; color: var(--ink-muted); }
+.vf-card.vf-on .vf-desc { display: none; }
+.vf-summary { font-family: var(--font-mono); font-size: 0.75rem; color: var(--ink-muted); display: none; }
+.vf-card.vf-on.vf-collapsed .vf-summary { display: inline; }
+.vf-chevron { margin-left: auto; color: var(--ink-muted); font-size: 0.75rem; transition: transform 0.15s ease; display: none; }
+.vf-card.vf-on .vf-chevron { display: inline-block; }
+.vf-card.vf-on:not(.vf-collapsed) .vf-chevron { transform: rotate(180deg); }
+.vf-dot-head { display: none; }
+.vf-card.vf-on .vf-dot-head { display: inline-block; }
+.vf-body { padding: var(--space-4); border-top: 1px solid var(--border); }
+.vf-card.vf-collapsed .vf-body:not([hidden]) { display: none; }
 .badge-version { background: var(--primary-soft); color: var(--primary-strong); border: 1px solid #bbf7d0; padding: 0.1rem 0.45rem; border-radius: 8px; font-size: 0.68rem; font-weight: 700; }
 .admin-nav-tabs { display: flex; gap: var(--space-2); margin-bottom: var(--space-4); flex-wrap: wrap; }
 .admin-nav-tabs a { padding: 0.45rem 0.9rem; border-radius: 6px; background: var(--surface-sunken); color: var(--primary-strong); font-size: 0.85rem; font-weight: 600; }

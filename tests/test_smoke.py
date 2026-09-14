@@ -89,6 +89,32 @@ def test_pupil_exam_fields_save_and_display(logged_in_page, live_server):
     assert page.locator("h3", has_text="Pupils").count() == 0
 
 
+def test_motility_and_confrontation_vf_save_and_display(logged_in_page, live_server):
+    """Motility & confrontation visual fields (ehr/models/database.py
+    EyeExam.motility_*/confrontation_vf_*, v2.22) -- flat columns on EyeExam,
+    same treatment as pupils (v2.21), not a Visit Focus dashboard. Verifies
+    the fields save and show on the exam detail page, and that the card
+    doesn't render at all for an exam where none of them were filled in."""
+    page = logged_in_page
+    page.goto(live_server + "/exams/new")
+    page.fill('input[name="motility_od"]', "Full")
+    page.fill('input[name="motility_os"]', "Full")
+    page.fill('input[name="confrontation_vf_od"]', "Full to finger counting")
+    page.fill('input[name="confrontation_vf_os"]', "Full to finger counting")
+    page.locator('button[type="submit"]', has_text="Save Exam").click()
+
+    page.wait_for_url(re.compile(r"/exams/\d+"))
+    assert page.locator("h3", has_text="Motility & Confrontation VF").is_visible()
+    assert page.locator("text=Full to finger counting").first.is_visible()
+
+    # An exam with no motility/CVF data at all shows no card for this section.
+    page.goto(live_server + "/exams/new")
+    page.locator('select[name="provider_id"]').select_option(index=1)
+    page.locator('button[type="submit"]', has_text="Save Exam").click()
+    page.wait_for_url(re.compile(r"/exams/\d+"))
+    assert page.locator("h3", has_text="Motility & Confrontation VF").count() == 0
+
+
 def test_visit_focus_toggle_shows_hides_assessment_sections(logged_in_page, live_server):
     """The Visit Focus checkboxes (ehr/templates/exams/form.html) are the one
     behavior curl-based route checks can't confirm -- this is real client-side
@@ -107,6 +133,37 @@ def test_visit_focus_toggle_shows_hides_assessment_sections(logged_in_page, live
 
     page.locator('.focus-toggle[data-target="focus-refractive"]').uncheck()
     assert not refractive_section.is_visible()
+
+
+def test_visit_focus_status_dots_and_collapse(logged_in_page, live_server):
+    """Visit Focus status dots + collapsible cards (ehr/templates/exams/form.html,
+    ehr/static/css/app.css, v2.24) -- each chip and card header carries a dot
+    that's hollow until its section has a value, then fills solid; each active
+    section is a real accordion, so collapsing (a click on the card header)
+    is a distinct action from deactivating (unchecking the chip) -- collapsing
+    must not clear anything entered, and a collapsed-but-filled card shows a
+    one-line summary instead of looking empty."""
+    page = logged_in_page
+    page.goto(live_server + "/exams/new")
+
+    page.locator('[data-chip-wrap="focus-anterior"]').click()
+    dot_chip = page.locator('[data-dot-chip="focus-anterior"]')
+    dot_head = page.locator('[data-dot-head="focus-anterior"]')
+    assert "vf-filled" not in (dot_chip.get_attribute("class") or "")
+
+    page.fill('input[name="ant_primary_diagnosis_code"]', "H11.031")
+    assert "vf-filled" in dot_chip.get_attribute("class")
+    assert "vf-filled" in dot_head.get_attribute("class")
+
+    # Collapsing (the header, not the chip) hides the fields but keeps them --
+    # the value must still be there on re-expand, and a summary appears meanwhile.
+    page.locator('[data-vf-head="focus-anterior"]').click()
+    assert not page.locator("#focus-anterior").is_visible()
+    assert "H11.031" in page.locator('[data-vf-summary="focus-anterior"]').inner_text()
+
+    page.locator('[data-vf-head="focus-anterior"]').click()
+    assert page.locator("#focus-anterior").is_visible()
+    assert page.input_value('input[name="ant_primary_diagnosis_code"]') == "H11.031"
 
 
 def test_assessment_plan_auto_composed_then_not_overwritten_after_manual_edit(logged_in_page, live_server):
@@ -162,6 +219,70 @@ def test_icd10_suggestion_and_diagnosis_driven_recall_interval(logged_in_page, l
     page.locator('input[name="refractive_diagnosis"][value="Hyperopia"]').check()
     assert dx_codes.input_value() == "CUSTOM"
     assert weeks.input_value() == "99"
+
+
+def test_anterior_segment_focus_toggle_and_composer(logged_in_page, live_server):
+    """Anterior Segment (ehr/templates/exams/form.html, v2.23) -- a real
+    structural exam (conjunctiva/cornea/anterior chamber/iris/lens), split
+    out from the old combined "Anterior Segment / Dry Eye" dashboard (which
+    was entirely dry-eye content -- see test_dry_eye_focus_toggle_and_composer
+    below for that one). Verifies the second Visit Focus chip shows/hides its
+    own section independently of Dry Eye's, and the composer's anterior-
+    segment clauses populate Assessment & Plan from the pterygium/cataract
+    findings."""
+    page = logged_in_page
+    page.goto(live_server + "/exams/new")
+    anterior_section = page.locator("#focus-anterior")
+    dryeye_section = page.locator("#focus-dryeye")
+    assert not anterior_section.is_visible()
+    assert not dryeye_section.is_visible()
+    page.locator('.focus-toggle[data-target="focus-anterior"]').check()
+    assert anterior_section.is_visible()
+    assert not dryeye_section.is_visible()
+
+    page.fill('input[name="ant_primary_diagnosis_code"]', "H11.031")
+    page.locator('select[name="ant_severity"]').select_option("Mild")
+    page.locator('select[name="ant_pterygium_pinguecula_od"]').select_option("Pterygium")
+    assessment = page.locator("#assessment").input_value()
+    assert "H11.031" in assessment
+    assert "Pterygium OD" in assessment
+
+    page.locator('select[name="ant_lens_cataract_type_od"]').select_option("Nuclear Sclerosis")
+    assert "Nuclear Sclerosis cataract OD" in page.locator("#assessment").input_value()
+
+    page.locator('input[name="ant_plan_therapeutics"][value="Cataract Surgery Referral"]').check()
+    page.locator('select[name="ant_follow_up_interval"]').select_option("6 months")
+    plan = page.locator("#plan").input_value()
+    assert "Cataract Surgery Referral" in plan
+    assert "6 months" in plan
+
+
+def test_dry_eye_focus_toggle_and_composer(logged_in_page, live_server):
+    """Dry Eye / Ocular Surface Disease (ehr/templates/exams/form.html,
+    v2.23) -- the dashboard built in v2.11 under the misleading name
+    "Anterior Segment / Dry Eye" (it was entirely dry-eye/OSD content:
+    conjunctival injection, corneal staining, MGD, TBUT, Schirmer), renamed
+    and given its own dedicated Visit Focus chip separate from the real,
+    new Anterior Segment structural exam above. Verifies the toggle and
+    composer behave exactly as the old combined dashboard did."""
+    page = logged_in_page
+    page.goto(live_server + "/exams/new")
+    dryeye_section = page.locator("#focus-dryeye")
+    assert not dryeye_section.is_visible()
+    page.locator('.focus-toggle[data-target="focus-dryeye"]').check()
+    assert dryeye_section.is_visible()
+
+    page.fill('input[name="de_primary_diagnosis_code"]', "H04.123")
+    page.locator('select[name="de_severity"]').select_option("Moderate")
+    assessment = page.locator("#assessment").input_value()
+    assert "Moderate dry eye disease" in assessment
+    assert "H04.123" in assessment
+
+    page.locator('input[name="de_plan_therapeutics"][value="Preservative-Free Tears"]').check()
+    page.locator('select[name="de_follow_up_interval"]').select_option("2 weeks")
+    plan = page.locator("#plan").input_value()
+    assert "Preservative-Free Tears" in plan
+    assert "2 weeks" in plan
 
 
 def test_glaucoma_focus_toggle_composer_and_trend_view(logged_in_page, live_server):
