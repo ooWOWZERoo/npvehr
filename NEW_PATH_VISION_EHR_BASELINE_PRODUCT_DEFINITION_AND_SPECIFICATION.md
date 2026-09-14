@@ -1,7 +1,7 @@
 # New Path Vision EHR
 ## Baseline Product Definition and Current-State Functional Specification
 
-**Document version:** 2.19 (supersedes v2.18; adds CSRF protection to every POST route — a session-bound synchronizer token via a new `ehr/auth/csrf.py`, this app's first server-side secret (`SECRET_KEY`), and a JS-delivered hidden field on every form; see §37.7; resolves the pre-existing gap tracked since §15.1/§26.10 item 4/§36.5 item 3/§37.6; none of this bears on the four go-live prerequisites, which are unchanged from v2.6)
+**Document version:** 2.21 (supersedes v2.20; adds structured pupil exam fields to `EyeExam` — size at light/dark/near and reactivity per eye, plus an APD finding — the next item picked from the v2.20 visit-summary gap analysis; see new §40; none of this bears on the four go-live prerequisites, which are unchanged from v2.6)
 **Baseline date:** September 9, 2026
 **Application-reported version:** 1.0.0
 **Baseline source:** `setup_ehr.py` self-contained scaffold script (locally generated `visioncare_ehr/` project directory; see §2.2)
@@ -2898,3 +2898,73 @@ Two of four prerequisites are now fully done, with real, verifiable technical wo
 | New capability | `SECRET_KEY` (`ehr/env_info.py`) — this app's first server-side secret, read from the environment; auto-generated per-process if unset (dev-only convenience, not a substitute for setting it explicitly in any real deployment, same operational expectation as `DATABASE_URL`). |
 | Updated | §15.1, §26.10 item 4, §36.5 item 3, and §37.6 all marked resolved. New §37.7 documents the implementation and its verification; the prior §37.7 ("Testing performed") renumbered to §37.8, with its one cross-reference updated. |
 | Explicitly not done | No session-storage schema change (the token stays derived, not stored — no migration needed). No change to the session cookie's own shape. No broader secret-management system beyond the one new `SECRET_KEY` env var. No CSRF scheme for any future JSON/API-style endpoint (none exist today). |
+
+## 39. Per-Patient Document Storage and Problem List, First Slice (v2.20)
+
+### 39.1 Origin
+
+The user uploaded a real optometry "Visit Note" export — a comprehensive visit-summary document with practice header, demographics, medications, ocular/social/medical/surgical history, allergies, a structured alerts checklist, review of systems, chief complaint/HPI, a detailed per-eye exam, diagnostic-imaging results, a numbered ICD-10-coded Impression/Plan with templated per-diagnosis counseling and dated follow-up addenda, and an e-signature block — and asked for a component-by-component gap analysis against this application, plus a plan to store documents per patient with no cross-patient contamination. The full gap map was reported to the user before any code was written; this section records what that round actually built. Everything else the source document needs remains tracked in `BUILD_BACKLOG.md` (new §12), not built in this round.
+
+### 39.2 Per-patient document storage
+
+New `PatientDocument` table (`ehr/models/database.py`, migration `020_create_documents_and_problems`) — a generic, categorized file attachment (Outside Records / Consent Form / Correspondence / Visit Summary / Other) with an optional link to the `EyeExam` it was generated from. Storage reuses the exact security posture already proven for `Patient.photo_path` (§38.4): an opaque `storage_marker` column that is never a browser-facing URL, and a dual local-disk/Cloudinary backend selected by whether `CLOUDINARY_URL` is set (`ehr/services/media.py`'s new `save_patient_document`/`get_document_bytes`/`delete_patient_document`, using Cloudinary's `resource_type="raw"` and `type="authenticated"` so no marker resolves publicly).
+
+**The cross-patient-contamination guard**, the specific requirement this round exists to satisfy: `GET /patients/{patient_id}/correspondence/documents/{doc_id}` looks up the document by `doc_id`, then verifies `document.patient_id == patient_id` (both taken from the URL) before serving any bytes — a mismatch returns 404, not the document. This is strictly tighter than the photo route's own precedent (which has no such check, since a photo URL only ever carries one ID): a valid `doc_id` alone is never sufficient to reach another patient's document, even by guessing. Verified directly: a document uploaded for one patient downloads correctly through its own patient's URL and 404s through a different patient's URL carrying the same `doc_id`.
+
+New patient-workspace routes replace the previous placeholder render for this tab: list+upload (`GET`/`POST /patients/{id}/correspondence/documents`), the guarded download proxy above, and delete (`POST .../{doc_id}/delete`) — all CSRF-protected like every other POST in this app (§37.7). New template `patients/correspondence_documents_tab.html`.
+
+### 39.3 Problem List, first slice
+
+New `Problem` and `ProblemAddendum` tables (same migration). Deliberately **patient-scoped, not exam-scoped** like the five clinical dashboards (§12.5c–g): a chronic diagnosis (e.g. glaucoma) outlives any single visit and needs to accumulate dated notes across many exams without being re-entered each time — the source visit-summary document's own `***<date> - <note>` pattern on each numbered diagnosis is exactly this shape. `Problem` carries diagnosis name, free-text ICD-10 code (same narrow-lookup treatment as the existing composer, real terminology integration remains tracked separately, research doc §4.4), laterality, severity/stage, Active/Resolved status, and three templated counseling fields (Eye Care / Expectations / Contact Office If) mirrored from the source document's own per-diagnosis plan structure. `ProblemAddendum` is append-only — never edited — matching this app's existing `AppointmentAuditEvent` convention.
+
+New patient-workspace tab, Problem List (`GET /patients/{id}/problems`, new template `patients/problem_list_tab.html`): add a problem, add a dated note, mark resolved.
+
+**Exam-form integration** (`ehr/routes/exams.py`, `exams/form.html`): when the New Exam form already has a known `patient_id` (reached via the patient workspace's "New Exam" link, matching how `context_patient` already works elsewhere in this form), a new "Problems Addressed" section lists the patient's Active problems as checkboxes, each with its own follow-up-note field. Checking one and saving the exam appends a `ProblemAddendum` linked to that `exam_id` — this is how a visit "touches" a chronic problem without re-entering its whole diagnosis record, matching the source document's dated-addendum pattern exactly. `exams/detail.html` gained a conditional card listing which problems were addressed at that specific exam, linking back to the Problem List tab.
+
+### 39.4 Verified
+
+`python3 -m py_compile` on every touched Python file. Local SQLite instance: migration `020_create_documents_and_problems` creates all three tables cleanly on a fresh database and is idempotent on re-run; `sqlalchemy.inspect` confirms all three tables' columns. End-to-end via `curl` against a running instance: document upload/list/download/delete all round-trip correctly; the cross-patient-contamination guard returns 404 as designed (§39.2); a problem created on one patient appears as a checkbox on that patient's New Exam form; checking it while saving an exam creates the expected `ProblemAddendum`, visible on both the exam detail page and the Problem List tab; marking a problem resolved updates its status and visual treatment; a POST missing a valid `csrf_token` against the new routes correctly returns 403. Full Playwright suite passes, including two new tests (`test_patient_document_upload_download_and_cross_patient_guard`, `test_problem_list_create_addendum_via_exam_and_resolve`) covering the above through a real browser.
+
+### 39.5 Explicitly not done
+
+No PDF rendering of any kind (this app still has zero PDF-generation capability; `prescriptions/print.html`'s browser-print-dialog approach remains the only precedent). No pupil exam, structured review-of-systems, structured social history, motility/confrontation-visual-field structured data, or diagnostic-imaging order/result tracking — all newly logged to `BUILD_BACKLOG.md` §12 rather than attempted here. No e-signature/lock/sign-amend workflow (pre-existing tracked gap, §18.2 item 4/§37.6). No record-level authorization beyond this app's existing session-auth-for-any-staff model (§37.6). No change to the existing free-text `EyeExam.assessment`/`diagnosis_codes` fields — `Problem` is additive, for chronic/persistent diagnoses; a one-off same-visit-only diagnosis can still just use those fields directly.
+
+**Version 2.20 change log (relative to v2.19) — adds per-patient document storage and a first slice of a structured Problem List, prompted by a gap analysis against a real visit-summary document:**
+
+| Area | Change |
+| --- | --- |
+| New capability | Generic per-patient document storage: new `PatientDocument` table (migration `020_create_documents_and_problems`), reusing the patient-photo security pattern (opaque storage marker, dual local/Cloudinary-authenticated backend). New Documents tab routes and template replace the previous placeholder. See new §39.2. |
+| New capability, security | An explicit cross-patient-contamination guard on the document download route: the URL's own `patient_id` must match the document's actual owner, or the request 404s — stricter than the pre-existing photo-route precedent. See §39.2. |
+| New capability | Problem List, first slice: new `Problem`/`ProblemAddendum` tables, patient-scoped (not exam-scoped, unlike the five clinical dashboards) so a chronic diagnosis can accumulate dated notes across many visits. New Problem List tab; new-exam-form integration lets checking an active problem while saving an exam append a linked, dated addendum. See new §39.3. |
+| Updated | `VISION_EHR_DATA_STANDARDS_RESEARCH.md` and `BUILD_BACKLOG.md` updated to record what this round built and to track the remaining visit-summary gaps (pupil exam, structured ROS/social history, diagnostic-imaging order/result tracking, e-signature/lock, PDF rendering) as a new backlog section. |
+| Explicitly not done | No PDF rendering. No pupil exam, review-of-systems, social-history, or diagnostic-imaging-order data model work. No e-signature/lock workflow. No record-level authorization beyond the existing session-auth-for-any-staff model. No change to the existing free-text `EyeExam.assessment`/`diagnosis_codes` fields. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |
+
+## 40. Pupil Exam Fields (v2.21)
+
+### 40.1 Origin
+
+The next item picked from the v2.20 visit-summary gap analysis (§39.1, research doc §8): pupil exam data (size at light/dark/near, reactivity, and an afferent pupillary defect finding) had no fields anywhere in the schema, despite being a routine, near-universal part of a comprehensive eye exam — unlike the five clinical dashboards (§12.5c–g), which are diagnosis-driven and only apply when a Visit Focus chip is checked.
+
+### 40.2 Modeling decision: flat `EyeExam` columns, not a Visit Focus dashboard
+
+Pupils are core exam data, present on nearly every visit, the same category as Visual Acuity, Slit Lamp, and Fundus — all of which are already flat columns directly on `EyeExam`, not exam_id-FK child tables behind a Visit Focus toggle. The five specialty dashboards (§12.5c–g) exist specifically for diagnosis-driven assessments that only apply to a subset of visits (glaucoma tracking, binocular vision therapy, etc.); pupils don't fit that shape, so this round added ten new nullable columns to `EyeExam` (migration `021_pupil_exam_fields`, same `_add_column_if_missing` ALTER TABLE pattern as migration 015's refractive-assessment columns) rather than a new table: `pupil_size_light_od/os`, `pupil_size_dark_od/os`, `pupil_size_near_od/os` (all `FLOAT`, mm), `pupil_reactivity_od/os` (`VARCHAR`: Brisk / Sluggish / Non-reactive), `pupil_apd_finding` (`VARCHAR`: Negative / Positive OD / Positive OS — one field, not a per-eye pair, since APD is inherently a relative finding between the two eyes from the swinging-flashlight test), and `pupil_notes` (`TEXT`).
+
+### 40.3 Routes and templates
+
+`ehr/routes/exams.py`'s `create_exam` reads and stores all ten fields unconditionally, the same as the other core exam fields (Slit Lamp, Fundus) it sits beside — no "any subset, all optional" conditional-row logic is needed since these are plain nullable columns, not a child table. `exams/form.html` gained a new "Pupils" section (a two-row OD/OS table plus an APD dropdown and a notes field) positioned after Visual Acuity/Refraction and before IOP & Cover Test, matching the source document's own exam ordering. `exams/detail.html` gained a conditional "Pupils" card (shown only when at least one pupil field was actually filled in) alongside the existing Slit Lamp/Fundus cards.
+
+### 40.4 Verified
+
+`python3 -m py_compile` on every touched Python file. Local SQLite instance: migration `021_pupil_exam_fields` adds all ten columns cleanly to a fresh database and is idempotent on re-run; `sqlalchemy.inspect` confirms the columns. End-to-end via `curl` against a running instance: an exam saved with pupil data displays it correctly on the detail page; an exam saved with none of the ten fields filled in shows no Pupils card at all (confirmed absent, not just empty). Full Playwright suite passes (18 tests), including a new `test_pupil_exam_fields_save_and_display` covering both the populated and empty-state cases through a real browser.
+
+### 40.5 Explicitly not done
+
+No changes to any of the five existing Visit Focus dashboards. No motility/confrontation-visual-field structured data, structured review of systems, structured social history, or diagnostic-imaging order/result tracking — all remain tracked in `BUILD_BACKLOG.md` §12 alongside the rest of the v2.20 gap analysis's still-open items.
+
+**Version 2.21 change log (relative to v2.20) — adds structured pupil exam fields, the next item from the v2.20 visit-summary gap analysis:**
+
+| Area | Change |
+| --- | --- |
+| New capability | Ten new nullable columns on `EyeExam` (migration `021_pupil_exam_fields`): pupil size at light/dark/near and reactivity per eye, plus a single APD (afferent pupillary defect) finding field. Modeled as flat columns, not a new Visit Focus dashboard, since pupils are core exam data like Visual Acuity/Slit Lamp/Fundus rather than a diagnosis-driven specialty assessment. See new §40. |
+| Updated | `exams/form.html` gained a new "Pupils" section; `exams/detail.html` gained a conditional Pupils card. `BUILD_BACKLOG.md` §12 updated to mark this item done. |
+| Explicitly not done | No changes to the five existing Visit Focus dashboards. No motility/confrontation-visual-field, review-of-systems, social-history, or diagnostic-imaging-order work — all remain tracked in `BUILD_BACKLOG.md` §12. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |

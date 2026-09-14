@@ -3,7 +3,8 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
-from ehr.models.database import get_db, EyeExam, Refraction, AnteriorSegmentAssessment, GlaucomaTracking, BinocularVisionAssessment, SurgeryComanagementTracking, Patient, Provider
+from ehr.models.database import (get_db, EyeExam, Refraction, AnteriorSegmentAssessment, GlaucomaTracking,
+    BinocularVisionAssessment, SurgeryComanagementTracking, Patient, Provider, Problem, ProblemAddendum)
 from ehr.env_info import EHR_ENV
 from ehr.utils import patient_context
 from ehr.auth.permissions import require_role, EXAM_VIEW, EXAM_EDIT, ROLE_LABELS
@@ -28,10 +29,17 @@ def _b(v):
 @router.get("/new", response_class=HTMLResponse, dependencies=[Depends(require_role(*EXAM_EDIT))])
 def new_exam_form(request: Request, patient_id: int = None, db: Session = Depends(get_db)):
     ctx_patient = patient_context(db.query(Patient).filter(Patient.id == patient_id).first()) if patient_id else None
+    # Active problems for the "Problems Addressed" checklist -- only meaningful
+    # once a patient is already known (reached via the patient workspace's
+    # "New Exam" link, matching how context_patient/selected_patient_id
+    # already work elsewhere in this form).
+    active_problems = (db.query(Problem).filter(Problem.patient_id == patient_id, Problem.status == "Active")
+                        .order_by(Problem.diagnosis_name).all()) if patient_id else []
     return templates.TemplateResponse(request, "exams/form.html", {
         "patients": db.query(Patient).order_by(Patient.last_name).all(),
         "providers": db.query(Provider).all(),
-        "selected_patient_id": patient_id, "today": str(date.today()), "context_patient": ctx_patient})
+        "selected_patient_id": patient_id, "today": str(date.today()), "context_patient": ctx_patient,
+        "active_problems": active_problems})
 
 @router.post("/new", dependencies=[Depends(require_role(*EXAM_EDIT))])
 async def create_exam(request: Request, db: Session = Depends(get_db)):
@@ -43,6 +51,11 @@ async def create_exam(request: Request, db: Session = Depends(get_db)):
         patient_id=int(g("patient_id")), provider_id=int(g("provider_id")),
         exam_date=g("exam_date"), chief_complaint=g("chief_complaint"),
         od_sc=g("od_sc"), os_sc=g("os_sc"), od_cc=g("od_cc"), os_cc=g("os_cc"),
+        pupil_size_light_od=_f(g("pupil_size_light_od")), pupil_size_light_os=_f(g("pupil_size_light_os")),
+        pupil_size_dark_od=_f(g("pupil_size_dark_od")), pupil_size_dark_os=_f(g("pupil_size_dark_os")),
+        pupil_size_near_od=_f(g("pupil_size_near_od")), pupil_size_near_os=_f(g("pupil_size_near_os")),
+        pupil_reactivity_od=g("pupil_reactivity_od"), pupil_reactivity_os=g("pupil_reactivity_os"),
+        pupil_apd_finding=g("pupil_apd_finding"), pupil_notes=g("pupil_notes"),
         iop_od=_f(g("iop_od")), iop_os=_f(g("iop_os")), iop_method=g("iop_method"),
         cover_test=g("cover_test"),
         sl_lids_od=g("sl_lids_od"), sl_lids_os=g("sl_lids_os"),
@@ -130,6 +143,17 @@ async def create_exam(request: Request, db: Session = Depends(get_db)):
         follow_up_interval=g("sx_follow_up_interval"), clinical_notes=g("sx_clinical_notes"))
     if any(v not in (None, "") for v in sx_fields.values()):
         db.add(SurgeryComanagementTracking(exam_id=exam.id, **sx_fields))
+    # Problems Addressed (Problem List, first slice) -- checking one of the
+    # patient's active problems and creating this exam appends a
+    # ProblemAddendum linked to it, matching how a real visit-summary
+    # document accumulates dated follow-up notes on a chronic diagnosis
+    # across many visits, without re-entering the whole diagnosis each time.
+    for problem_id in form.getlist("problems_addressed"):
+        note = (g(f"problem_note_{problem_id}") or "").strip() or "Addressed at this visit."
+        problem = db.query(Problem).filter(Problem.id == int(problem_id), Problem.patient_id == exam.patient_id).first()
+        if problem:
+            db.add(ProblemAddendum(problem_id=problem.id, exam_id=exam.id,
+                author_user_id=request.state.user.id, note=note))
     db.commit()
     return RedirectResponse(f"/exams/{exam.id}", status_code=303)
 
@@ -137,5 +161,6 @@ async def create_exam(request: Request, db: Session = Depends(get_db)):
 def exam_detail(request: Request, exam_id: int, db: Session = Depends(get_db)):
     e = db.query(EyeExam).filter(EyeExam.id == exam_id).first()
     if not e: return HTMLResponse("Not found", status_code=404)
+    problem_addenda = db.query(ProblemAddendum).filter(ProblemAddendum.exam_id == exam_id).all()
     return templates.TemplateResponse(request, "exams/detail.html",
-        {"exam": e, "context_patient": patient_context(e.patient)})
+        {"exam": e, "context_patient": patient_context(e.patient), "problem_addenda": problem_addenda})

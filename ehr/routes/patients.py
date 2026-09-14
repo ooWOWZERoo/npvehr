@@ -5,13 +5,15 @@ from fastapi import APIRouter, Depends, Request, Form, UploadFile, File, Respons
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
-from ehr.models.database import get_db, Patient, Appointment, EyeExam, Prescription, AppointmentStatus
+from ehr.models.database import (get_db, Patient, Appointment, EyeExam, Prescription, AppointmentStatus,
+    PatientDocument, Problem, ProblemAddendum)
 from ehr.env_info import EHR_ENV
 from ehr.utils import patient_context, compute_age, display_name
 from ehr.auth.permissions import require_role, PATIENT_EDIT, ROLE_LABELS
 from ehr.auth import csrf
 from ehr.services.media import (save_patient_photo as _save_photo, delete_patient_photo as _delete_photo_file,
-    get_photo_bytes as _get_photo_bytes)
+    get_photo_bytes as _get_photo_bytes, save_patient_document as _save_document,
+    get_document_bytes as _get_document_bytes, delete_patient_document as _delete_document_file)
 
 router = APIRouter(prefix="/patients", tags=["patients"])
 templates = Jinja2Templates(directory="ehr/templates")
@@ -508,6 +510,65 @@ def patient_surgery_timeline(request: Request, patient_id: int, db: Session = De
     return templates.TemplateResponse(request, "patients/surgery_timeline_tab.html", ctx)
 
 
+@router.get("/{patient_id}/problems", response_class=HTMLResponse)
+def patient_problem_list(request: Request, patient_id: int, db: Session = Depends(get_db)):
+    """Problem List (built v2.20, a first slice -- see BUILD_BACKLOG.md): a
+    persistent, longitudinal diagnosis list distinct from the five exam-
+    scoped clinical dashboards. Active problems first, each with its
+    ProblemAddendum history (oldest to newest, matching real visit-summary
+    documents' own dated-note convention)."""
+    p = _get_patient_or_404(db, patient_id)
+    if not p: return HTMLResponse("Not found", status_code=404)
+    ctx = _workspace_ctx(db, p, "problems")
+    problems = (db.query(Problem).filter(Problem.patient_id == patient_id)
+                .order_by(Problem.status, Problem.created_at.desc()).all())
+    ctx["problems"] = problems
+    return templates.TemplateResponse(request, "patients/problem_list_tab.html", ctx)
+
+
+@router.post("/{patient_id}/problems/new", dependencies=[Depends(require_role(*PATIENT_EDIT))])
+async def create_problem(request: Request, patient_id: int, db: Session = Depends(get_db)):
+    p = _get_patient_or_404(db, patient_id)
+    if not p: return HTMLResponse("Not found", status_code=404)
+    form = await request.form()
+    csrf.verify_or_403(request.state.csrf_token, form.get("csrf_token"))
+    diagnosis_name = (form.get("diagnosis_name") or "").strip()
+    if not diagnosis_name:
+        return RedirectResponse(f"/patients/{patient_id}/problems", status_code=303)
+    db.add(Problem(patient_id=patient_id, diagnosis_name=diagnosis_name,
+        icd10_code=form.get("icd10_code") or None, laterality=form.get("laterality") or None,
+        severity_or_stage=form.get("severity_or_stage") or None,
+        counseling_eye_care=form.get("counseling_eye_care") or None,
+        counseling_expectations=form.get("counseling_expectations") or None,
+        counseling_contact_office_if=form.get("counseling_contact_office_if") or None,
+        date_first_diagnosed=form.get("date_first_diagnosed") or None))
+    db.commit()
+    return RedirectResponse(f"/patients/{patient_id}/problems", status_code=303)
+
+
+@router.post("/{patient_id}/problems/{problem_id}/addendum", dependencies=[Depends(require_role(*PATIENT_EDIT))])
+async def add_problem_addendum(request: Request, patient_id: int, problem_id: int, db: Session = Depends(get_db)):
+    form = await request.form()
+    csrf.verify_or_403(request.state.csrf_token, form.get("csrf_token"))
+    problem = db.query(Problem).filter(Problem.id == problem_id, Problem.patient_id == patient_id).first()
+    note = (form.get("note") or "").strip()
+    if problem and note:
+        db.add(ProblemAddendum(problem_id=problem.id, author_user_id=request.state.user.id, note=note))
+        db.commit()
+    return RedirectResponse(f"/patients/{patient_id}/problems", status_code=303)
+
+
+@router.post("/{patient_id}/problems/{problem_id}/resolve", dependencies=[Depends(require_role(*PATIENT_EDIT))])
+async def resolve_problem(request: Request, patient_id: int, problem_id: int, db: Session = Depends(get_db)):
+    form = await request.form()
+    csrf.verify_or_403(request.state.csrf_token, form.get("csrf_token"))
+    problem = db.query(Problem).filter(Problem.id == problem_id, Problem.patient_id == patient_id).first()
+    if problem:
+        problem.status = "Resolved"
+        db.commit()
+    return RedirectResponse(f"/patients/{patient_id}/problems", status_code=303)
+
+
 @router.get("/{patient_id}/orders/eyeglass", response_class=HTMLResponse)
 def patient_orders_eyeglass(request: Request, patient_id: int, db: Session = Depends(get_db)):
     return _placeholder_tab(request, db, patient_id, "orders-eyeglass", "Eyeglass Order", "&#128083;",
@@ -537,16 +598,80 @@ def patient_correspondence(request: Request, patient_id: int, db: Session = Depe
          "See Documents, an external records vault, and Notes below for specific planned areas."])
 
 
+DOCUMENT_CATEGORIES = ["Outside Records", "Consent Form", "Correspondence", "Visit Summary", "Other"]
+
+
 @router.get("/{patient_id}/correspondence/documents", response_class=HTMLResponse)
 def patient_correspondence_documents(request: Request, patient_id: int, db: Session = Depends(get_db)):
-    return _placeholder_tab(request, db, patient_id, "correspondence-documents", "Documents", "&#128196;",
-        "Documents will support general document upload/storage for this patient -- signed forms, "
-        "outside records, referral letters, and the like. This is explicitly distinct from the "
-        "single profile photo this app already supports: today a patient record can hold exactly "
-        "one photo and nothing else; there is no general document storage yet.",
-        ["Upload and store multiple documents of any type per patient.",
-         "Categorize documents (consent forms, outside records, correspondence, etc.).",
-         "View/download stored documents from the patient record."])
+    p = _get_patient_or_404(db, patient_id)
+    if not p: return HTMLResponse("Not found", status_code=404)
+    ctx = _workspace_ctx(db, p, "correspondence-documents")
+    ctx["documents"] = (db.query(PatientDocument).filter(PatientDocument.patient_id == patient_id)
+                         .order_by(PatientDocument.uploaded_at.desc()).all())
+    ctx["categories"] = DOCUMENT_CATEGORIES
+    return templates.TemplateResponse(request, "patients/correspondence_documents_tab.html", ctx)
+
+
+@router.post("/{patient_id}/correspondence/documents", dependencies=[Depends(require_role(*PATIENT_EDIT))])
+async def upload_patient_document(request: Request, patient_id: int, db: Session = Depends(get_db)):
+    p = _get_patient_or_404(db, patient_id)
+    if not p: return HTMLResponse("Not found", status_code=404)
+    form = await request.form()
+    csrf.verify_or_403(request.state.csrf_token, form.get("csrf_token"))
+    upload = form.get("document")
+    category = form.get("category") or "Other"
+    description = form.get("description") or None
+    if not upload or not getattr(upload, "filename", None):
+        return RedirectResponse(f"/patients/{patient_id}/correspondence/documents", status_code=303)
+    marker = _save_document(upload)
+    if not marker:
+        return RedirectResponse(f"/patients/{patient_id}/correspondence/documents", status_code=303)
+    # File size: read once during save, but UploadFile doesn't expose it directly
+    # after the underlying file object has been consumed -- re-derive it from
+    # the temp file handle's own position instead of re-reading the upload.
+    try:
+        upload.file.seek(0, 2)
+        size = upload.file.tell()
+    except Exception:
+        size = None
+    db.add(PatientDocument(patient_id=patient_id, uploaded_by_user_id=request.state.user.id,
+        category=category, original_filename=upload.filename, content_type=upload.content_type,
+        file_size_bytes=size, storage_marker=marker, description=description))
+    db.commit()
+    return RedirectResponse(f"/patients/{patient_id}/correspondence/documents", status_code=303)
+
+
+@router.get("/{patient_id}/correspondence/documents/{doc_id}")
+def download_patient_document(patient_id: int, doc_id: int, db: Session = Depends(get_db)):
+    """Secure download/view proxy -- same session-auth-gated-proxy pattern as
+    GET /patients/{id}/photo, but with an explicit ownership check the photo
+    route doesn't need: a document is only ever served if its own patient_id
+    matches the patient_id in THIS url. A valid doc_id for another patient's
+    document returns 404 here, not that document -- the cross-patient
+    contamination guard the document-storage feature exists to provide."""
+    doc = db.query(PatientDocument).filter(PatientDocument.id == doc_id).first()
+    if not doc or doc.patient_id != patient_id:
+        return HTMLResponse(status_code=404, content="")
+    result = _get_document_bytes(doc.storage_marker)
+    if result is None:
+        return HTMLResponse(status_code=404, content="")
+    data, content_type = result
+    return Response(content=data, media_type=doc.content_type or content_type,
+                     headers={"Cache-Control": "private, max-age=300",
+                              "Content-Disposition": f'inline; filename="{doc.original_filename}"'})
+
+
+@router.post("/{patient_id}/correspondence/documents/{doc_id}/delete", dependencies=[Depends(require_role(*PATIENT_EDIT))])
+async def delete_patient_document_route(request: Request, patient_id: int, doc_id: int, db: Session = Depends(get_db)):
+    form = await request.form()
+    csrf.verify_or_403(request.state.csrf_token, form.get("csrf_token"))
+    doc = db.query(PatientDocument).filter(PatientDocument.id == doc_id).first()
+    if doc and doc.patient_id == patient_id:
+        marker = doc.storage_marker
+        db.delete(doc)
+        db.commit()
+        _delete_document_file(marker)
+    return RedirectResponse(f"/patients/{patient_id}/correspondence/documents", status_code=303)
 
 
 @router.get("/{patient_id}/correspondence/notes", response_class=HTMLResponse)

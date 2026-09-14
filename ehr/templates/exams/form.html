@@ -45,6 +45,27 @@
     </table>
     </div>
     {% endfor %}
+    <div class="section-title">Pupils</div>
+    <div class="table-responsive">
+    <table class="exam-table">
+      <tr><th></th><th>Size, Light (mm)</th><th>Size, Dark (mm)</th><th>Size, Near (mm)</th><th>Reactivity</th></tr>
+      {% for eye in ['od', 'os'] %}
+      <tr>
+        <td>{{ eye|upper }}</td>
+        <td><input name="pupil_size_light_{{ eye }}" type="number" step="0.5" min="0"></td>
+        <td><input name="pupil_size_dark_{{ eye }}" type="number" step="0.5" min="0"></td>
+        <td><input name="pupil_size_near_{{ eye }}" type="number" step="0.5" min="0"></td>
+        <td><select name="pupil_reactivity_{{ eye }}"><option value="">&mdash;</option><option>Brisk</option><option>Sluggish</option><option>Non-reactive</option></select></td>
+      </tr>
+      {% endfor %}
+    </table>
+    </div>
+    <div class="form-row cols-2">
+      <div class="form-group"><label>APD (Swinging Flashlight Test)</label>
+        <select name="pupil_apd_finding"><option value="">&mdash;</option><option>Negative</option><option>Positive OD</option><option>Positive OS</option></select>
+      </div>
+      <div class="form-group"><label>Pupil Notes</label><input name="pupil_notes"></div>
+    </div>
     <div class="section-title">IOP &amp; Cover Test</div>
     <div class="form-row cols-3">
       <div class="form-group"><label>IOP OD (mmHg)</label><input name="iop_od" type="number" step="0.5"></div>
@@ -268,6 +289,17 @@
       <div class="form-group"><label>Clinical Notes</label><input name="sx_clinical_notes"></div>
     </div>
     </div>
+    {% if active_problems %}
+    <div class="section-title">Problems Addressed <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; check any chronic problem touched at this visit to append a dated follow-up note to its Problem List entry</span></div>
+    {% for problem in active_problems %}
+    <div class="form-row cols-2" style="align-items:end">
+      <div class="form-group">
+        <label class="test-chip"><input type="checkbox" name="problems_addressed" value="{{ problem.id }}"> {{ problem.diagnosis_name }}{% if problem.laterality %} {{ problem.laterality }}{% endif %}{% if problem.icd10_code %} <span class="mono-data" style="color:#64748b">({{ problem.icd10_code }})</span>{% endif %}</label>
+      </div>
+      <div class="form-group"><label>Follow-up Note</label><input name="problem_note_{{ problem.id }}" placeholder="Addressed at this visit."></div>
+    </div>
+    {% endfor %}
+    {% endif %}
     <div class="section-title">Assessment &amp; Plan <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; auto-filled from the structured fields above as you fill them in; edit freely</span></div>
     <div class="form-row cols-2">
       <div class="form-group"><label>Assessment</label><textarea name="assessment" id="assessment"></textarea></div>

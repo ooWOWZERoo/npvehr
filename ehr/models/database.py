@@ -71,6 +71,85 @@ class Patient(Base):
     appointments = relationship("Appointment", back_populates="patient", cascade="all, delete-orphan")
     eye_exams = relationship("EyeExam", back_populates="patient", cascade="all, delete-orphan")
     prescriptions = relationship("Prescription", back_populates="patient", cascade="all, delete-orphan")
+    documents = relationship("PatientDocument", back_populates="patient", cascade="all, delete-orphan")
+    problems = relationship("Problem", back_populates="patient", cascade="all, delete-orphan")
+
+class PatientDocument(Base):
+    """Generic per-patient document storage (BUILD_BACKLOG.md's Documents tab,
+    built in v2.20) -- distinct from the single Patient.photo_path above.
+    Reuses that exact security posture (opaque storage_marker, dual local-
+    disk/Cloudinary-authenticated backend, see ehr/services/media.py) so no
+    marker ever resolves to a public URL without the app's own signing.
+
+    The cross-patient-contamination guard lives in the route
+    (GET /patients/{patient_id}/correspondence/documents/{doc_id}), not here:
+    that route verifies document.patient_id matches the patient_id in the
+    URL before serving any bytes, so a valid doc_id alone is never enough to
+    reach another patient's document."""
+    __tablename__ = "patient_documents"
+    id = Column(Integer, primary_key=True, index=True)
+    patient_id = Column(Integer, ForeignKey("patients.id"), nullable=False)
+    uploaded_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    exam_id = Column(Integer, ForeignKey("eye_exams.id"))  # nullable -- most documents aren't tied to one visit
+    category = Column(String)  # Outside Records / Consent Form / Correspondence / Visit Summary / Other
+    original_filename = Column(String, nullable=False)
+    content_type = Column(String)
+    file_size_bytes = Column(Integer)
+    storage_marker = Column(String, nullable=False)  # opaque; never a browser-facing URL
+    description = Column(String)
+    uploaded_at = Column(DateTime, default=datetime.utcnow)
+    patient = relationship("Patient", back_populates="documents")
+    uploaded_by = relationship("User", foreign_keys=[uploaded_by_user_id])
+    exam = relationship("EyeExam")
+
+class Problem(Base):
+    """A persistent, longitudinal diagnosis on a patient's problem list (built
+    in v2.20, a first slice -- see BUILD_BACKLOG.md). Deliberately
+    patient-scoped, not exam-scoped like the five clinical dashboards: a
+    chronic diagnosis (e.g. glaucoma) outlives any single visit, gets
+    addressed across many exams over time, and shouldn't need to be
+    re-entered at each one. Real ICD-10 code-set integration stays deferred
+    (VISION_EHR_DATA_STANDARDS_RESEARCH.md 4.4) -- icd10_code here is the
+    same free-text treatment used everywhere else in this app. The
+    counseling_* fields mirror the templated "Eye care / Expectations /
+    Contact office if" plan structure real visit-summary documents use per
+    diagnosis; a one-off, same-visit-only diagnosis can still just use the
+    existing free-text EyeExam.assessment/diagnosis_codes fields instead."""
+    __tablename__ = "problems"
+    id = Column(Integer, primary_key=True, index=True)
+    patient_id = Column(Integer, ForeignKey("patients.id"), nullable=False)
+    exam_id_first_noted = Column(Integer, ForeignKey("eye_exams.id"))  # nullable -- may predate any exam in this app
+    diagnosis_name = Column(String, nullable=False)  # e.g. 'Primary Open Angle Glaucoma'
+    icd10_code = Column(String)  # free-text, e.g. 'H40.1132'
+    laterality = Column(String)  # OD / OS / OU
+    severity_or_stage = Column(String)  # free-text, e.g. 'moderate stage OD and moderate stage OS'
+    status = Column(String, default="Active")  # Active / Resolved
+    counseling_eye_care = Column(Text)
+    counseling_expectations = Column(Text)
+    counseling_contact_office_if = Column(Text)
+    date_first_diagnosed = Column(String)  # date, e.g. '2026-07-09'
+    created_at = Column(DateTime, default=datetime.utcnow)
+    patient = relationship("Patient", back_populates="problems")
+    exam_first_noted = relationship("EyeExam", foreign_keys=[exam_id_first_noted])
+    addenda = relationship("ProblemAddendum", back_populates="problem", cascade="all, delete-orphan",
+                            order_by="ProblemAddendum.created_at")
+
+class ProblemAddendum(Base):
+    """An append-only dated note on a Problem (built in v2.20) -- matches
+    real visit-summary documents' own "***<date> - <note>" pattern of
+    accumulating follow-up notes on a chronic diagnosis over many visits.
+    Same append-only, never-edited convention already used for
+    AppointmentAuditEvent/AppointmentTypeAuditEvent elsewhere in this app."""
+    __tablename__ = "problem_addenda"
+    id = Column(Integer, primary_key=True, index=True)
+    problem_id = Column(Integer, ForeignKey("problems.id"), nullable=False)
+    exam_id = Column(Integer, ForeignKey("eye_exams.id"))  # nullable -- an addendum can be added outside an exam
+    author_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    note = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    problem = relationship("Problem", back_populates="addenda")
+    exam = relationship("EyeExam")
+    author = relationship("User", foreign_keys=[author_user_id])
 
 class Provider(Base):
     __tablename__ = "providers"
@@ -434,6 +513,21 @@ class EyeExam(Base):
     chief_complaint = Column(Text)
     od_sc = Column(String); os_sc = Column(String)
     od_cc = Column(String); os_cc = Column(String)
+    # Pupil exam (v2.21, from the v2.20 visit-summary gap analysis, research
+    # doc 8) -- flat columns on EyeExam like Slit Lamp/Fundus below, not an
+    # exam_id-FK child table like the five specialty dashboards: pupils are a
+    # core, always-relevant exam element (present on nearly every visit),
+    # not a diagnosis-driven Visit Focus area. Light/dark/near sizes are
+    # separate numeric measurements per the source document; APD (afferent
+    # pupillary defect, swinging-flashlight test) is inherently relative
+    # between the two eyes, so it's one field naming which eye (if any) is
+    # positive rather than a pair of per-eye columns.
+    pupil_size_light_od = Column(Float); pupil_size_light_os = Column(Float)  # mm
+    pupil_size_dark_od = Column(Float); pupil_size_dark_os = Column(Float)  # mm
+    pupil_size_near_od = Column(Float); pupil_size_near_os = Column(Float)  # mm
+    pupil_reactivity_od = Column(String); pupil_reactivity_os = Column(String)  # Brisk / Sluggish / Non-reactive
+    pupil_apd_finding = Column(String)  # Negative / Positive OD / Positive OS
+    pupil_notes = Column(Text)
     iop_od = Column(Float); iop_os = Column(Float); iop_method = Column(String)
     cover_test = Column(String)
     sl_lids_od = Column(String); sl_lids_os = Column(String)

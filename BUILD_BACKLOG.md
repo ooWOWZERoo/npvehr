@@ -1,6 +1,6 @@
 # New Path Vision EHR — Master Build Backlog
 
-**Status:** Living tracking document. **Baseline as of:** spec v2.19 / research doc v2.18 (2026-09-11).
+**Status:** Living tracking document. **Baseline as of:** spec v2.21 / research doc v2.21 (2026-09-14).
 
 ## Purpose and how to use this document
 
@@ -22,7 +22,9 @@ This consolidates every outstanding build item, investigation, and test scattere
 - [x] **Posterior Segment & Glaucoma Tracking dashboard, with trend view** — third of five clinical dashboards. **Done, v2.16** — see baseline spec §12.5e, research doc §5.3.
 - [x] **Binocular Vision & Pediatrics (Vision Therapy) dashboard** — fourth of five clinical dashboards. **Done, v2.17** — see baseline spec §12.5f, research doc §5.4.
 - [x] **Pre-/Post-Operative Co-Management dashboard, with timeline view** — fifth and last clinical dashboard. **Done, v2.18** — see baseline spec §12.5g, research doc §5.5. §1 (Clinical Dashboards) is now fully closed out.
-- [x] **CSRF protection** — a long-tracked security gap (§7). **Done, v2.19** — see baseline spec §37.7. Pick the next item from the sections below.
+- [x] **CSRF protection** — a long-tracked security gap (§7). **Done, v2.19** — see baseline spec §37.7.
+- [x] **Per-patient document storage + Problem List, first slice** — prompted by a gap analysis against a real visit-summary document export. **Done, v2.20** — see baseline spec §39, research doc §8.
+- [x] **Pupil exam fields** — next item picked from §12's visit-summary gaps. **Done, v2.21** — see baseline spec §40, research doc §8.1. Pick the next item from the sections below, or from §12's remaining visit-summary gaps.
 
 ---
 
@@ -148,6 +150,22 @@ Tracked here for visibility; the authoritative detail lives in the spec's go-liv
 
 - [ ] Expand the Playwright suite beyond smoke-level coverage (currently: login/logout/auth-redirects, main-nav-destinations-render, plus the Visit Focus toggle and composer behaviors added this session) toward the workflow-level regression coverage described in spec §20's manual checklist — most of that checklist is still not automated (§36.5 item 5's own note)
 - [ ] No automated migration test suite — migrations are verified manually/via synthetic-database checks each round, not as a standing automated test (§18.3 item 7's note)
+
+---
+
+## 12. Remaining Visit-Summary Gaps (research doc §8, v2.20)
+
+A real visit-summary document export prompted a full component-by-component gap analysis this round; per-patient document storage and a Problem List first slice were picked from it and built (§0 above, spec §39). Everything else that document needs remains here, unscoped:
+
+- [x] **Pupil exam — size/reactivity/APD per eye, light/dark/near measurements. Done, v2.21** — see baseline spec §40, research doc §8.1. Ten new nullable columns on `EyeExam` (flat columns like Visual Acuity/Slit Lamp/Fundus, not a new Visit Focus dashboard).
+- [ ] Motility and confrontation visual fields as structured OD/OS data — today only a single free-text `cover_test` field exists
+- [ ] Conjunctiva / anterior chamber / iris as discrete slit-lamp structures (only lids/cornea/lens exist today)
+- [ ] Vitreous as a discrete fundus structure, and a numeric CD ratio on the general exam (today it only exists on `GlaucomaTracking`)
+- [ ] Structured review of systems (the source document's large systemic-symptom checklist)
+- [ ] Structured social history (alcohol/tobacco screening) — no fields exist on `Patient` at all
+- [ ] Diagnostic-imaging order + structured result tracking (fundus photos, OCT) — no order/result model exists; Order Management remains a placeholder (§3 above)
+- [ ] E-signature / sign-lock-amend workflow, and "staff present at this visit" attribution beyond the single `Provider` on an exam — both already tracked (§6 above, spec §18.2 item 4/§37.6)
+- [ ] Actual PDF rendering — this app has zero PDF-generation library; `prescriptions/print.html` relies entirely on the browser's native print dialog
 
 ---
 

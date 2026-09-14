@@ -58,6 +58,37 @@ def test_new_exam_form_loads(logged_in_page, live_server):
     assert "/login" not in page.url
 
 
+def test_pupil_exam_fields_save_and_display(logged_in_page, live_server):
+    """Pupil exam (ehr/models/database.py EyeExam.pupil_*, v2.21) -- flat
+    columns on EyeExam, not a Visit Focus dashboard, since pupils are core
+    exam data present on nearly every visit. Verifies the fields save and
+    show on the exam detail page, and that the Pupils card doesn't render
+    at all for an exam where none of them were filled in."""
+    page = logged_in_page
+    page.goto(live_server + "/exams/new")
+    page.fill('input[name="pupil_size_light_od"]', "3.5")
+    page.fill('input[name="pupil_size_light_os"]', "3.5")
+    page.fill('input[name="pupil_size_dark_od"]', "6")
+    page.fill('input[name="pupil_size_dark_os"]', "6")
+    page.locator('select[name="pupil_reactivity_od"]').select_option("Brisk")
+    page.locator('select[name="pupil_reactivity_os"]').select_option("Brisk")
+    page.locator('select[name="pupil_apd_finding"]').select_option("Negative")
+    page.fill('input[name="pupil_notes"]', "PERRLA")
+    page.locator('button[type="submit"]', has_text="Save Exam").click()
+
+    page.wait_for_url(re.compile(r"/exams/\d+"))
+    assert page.locator("h3", has_text="Pupils").is_visible()
+    assert page.locator("text=Brisk").first.is_visible()
+    assert page.locator("text=PERRLA").is_visible()
+
+    # An exam with no pupil data at all shows no Pupils card.
+    page.goto(live_server + "/exams/new")
+    page.locator('select[name="provider_id"]').select_option(index=1)
+    page.locator('button[type="submit"]', has_text="Save Exam").click()
+    page.wait_for_url(re.compile(r"/exams/\d+"))
+    assert page.locator("h3", has_text="Pupils").count() == 0
+
+
 def test_visit_focus_toggle_shows_hides_assessment_sections(logged_in_page, live_server):
     """The Visit Focus checkboxes (ehr/templates/exams/form.html) are the one
     behavior curl-based route checks can't confirm -- this is real client-side
@@ -251,6 +282,84 @@ def test_new_prescription_form_loads(logged_in_page, live_server):
     page = logged_in_page
     page.goto(live_server + "/prescriptions/new")
     assert "/login" not in page.url
+
+
+def test_patient_document_upload_download_and_cross_patient_guard(logged_in_page, live_server):
+    """Per-patient document storage (ehr/routes/patients.py, v2.20) -- upload a
+    document on the Documents tab, confirm it lists and downloads for its own
+    patient, then confirm the explicit cross-patient-contamination guard: the
+    same doc_id 404s when requested through a *different* patient's URL,
+    rather than a bad-`doc_id`-only obscurity check."""
+    page = logged_in_page
+    page.goto(live_server + "/patients/")
+    page.locator("a", has_text="Johnson").first.click()
+    page.locator('a[href$="/correspondence/documents"]').click()
+
+    page.locator('input[type="file"][name="document"]').set_input_files(
+        files=[{"name": "outside-record.txt", "mimeType": "text/plain",
+                "buffer": b"outside record contents"}])
+    page.locator('select[name="category"]').select_option("Outside Records")
+    page.fill('input[name="description"]', "Referral note")
+    page.locator('button[type="submit"]', has_text="Upload").click()
+
+    row = page.locator("table tbody tr", has_text="outside-record.txt")
+    assert row.is_visible()
+    doc_href = row.locator("a").get_attribute("href")
+    assert doc_href is not None
+
+    # Own patient: downloads fine.
+    resp = page.request.get(live_server + doc_href)
+    assert resp.status == 200
+    assert resp.body() == b"outside record contents"
+
+    # A different patient's URL with the same doc_id must 404, not serve it.
+    other_patient_url = doc_href.replace("/patients/1/", "/patients/2/", 1)
+    if other_patient_url != doc_href:
+        resp = page.request.get(live_server + other_patient_url)
+        assert resp.status == 404
+
+    # Delete cleans it back up.
+    page.on("dialog", lambda d: d.accept())
+    page.locator("form button", has_text="Delete").first.click()
+    page.wait_for_timeout(200)
+
+
+def test_problem_list_create_addendum_via_exam_and_resolve(logged_in_page, live_server):
+    """Structured problem list (ehr/models/database.py Problem/ProblemAddendum,
+    v2.20) -- add a chronic diagnosis on the Problem List tab, confirm it
+    appears as a checkbox on the New Exam form, confirm checking it while
+    creating an exam appends a dated addendum visible both on the exam detail
+    page and back on the Problem List tab, then mark it resolved."""
+    page = logged_in_page
+    page.goto(live_server + "/patients/")
+    page.locator("a", has_text="Smith").first.click()
+    page.locator('a[href$="/problems"]').click()
+
+    page.fill('input[name="diagnosis_name"]', "Primary Open Angle Glaucoma")
+    page.fill('input[name="icd10_code"]', "H40.1132")
+    page.locator('select[name="laterality"]').select_option("OU")
+    page.locator('button[type="submit"]', has_text="Add Problem").click()
+    assert page.locator("h3", has_text="Primary Open Angle Glaucoma").is_visible()
+
+    patient_url = page.url
+    patient_id = patient_url.rstrip("/").split("/")[-2]
+
+    page.goto(live_server + f"/exams/new?patient_id={patient_id}")
+    checkbox = page.locator('input[name="problems_addressed"]')
+    assert checkbox.is_visible()
+    checkbox.check()
+    page.fill('input[name^="problem_note_"]', "New RX for Latanoprost OU QHS sent.")
+    page.locator('select[name="provider_id"]').select_option(index=1)
+    page.locator('button[type="submit"]', has_text="Save Exam").click()
+
+    page.wait_for_url(re.compile(r"/exams/\d+"))
+    assert page.locator("h3", has_text="Problems Addressed at This Visit").is_visible()
+    assert page.locator("text=New RX for Latanoprost OU QHS sent.").is_visible()
+
+    page.goto(live_server + f"/patients/{patient_id}/problems")
+    assert page.locator("text=New RX for Latanoprost OU QHS sent.").is_visible()
+    page.locator('button', has_text="Mark Resolved").click()
+    assert page.locator(".badge", has_text="Resolved").is_visible()
 
 
 def test_csrf_token_required_on_post(logged_in_page, live_server):
