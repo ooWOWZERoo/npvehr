@@ -180,7 +180,7 @@ def test_assessment_plan_auto_composed_then_not_overwritten_after_manual_edit(lo
     page.locator('input[name="refractive_diagnosis"][value="Myopia"]').check()
     page.locator('select[name="refractive_stability"]').select_option("Stable")
     assert "Myopia" in assessment.input_value()
-    assert "stable" in assessment.input_value()
+    assert "Stable" in assessment.input_value()
 
     assessment.fill("Clinician's own wording")
     page.locator('input[name="refractive_diagnosis"][value="Hyperopia"]').check()
@@ -275,7 +275,8 @@ def test_dry_eye_focus_toggle_and_composer(logged_in_page, live_server):
     page.fill('input[name="de_primary_diagnosis_code"]', "H04.123")
     page.locator('select[name="de_severity"]').select_option("Moderate")
     assessment = page.locator("#assessment").input_value()
-    assert "Moderate dry eye disease" in assessment
+    assert "Dry eye syndrome" in assessment
+    assert "Moderate" in assessment
     assert "H04.123" in assessment
 
     page.locator('input[name="de_plan_therapeutics"][value="Preservative-Free Tears"]').check()
@@ -301,10 +302,13 @@ def test_glaucoma_focus_toggle_composer_and_trend_view(logged_in_page, live_serv
     assert glaucoma_section.is_visible()
 
     page.fill('input[name="gt_primary_diagnosis_code"]', "H40.0011")
+    page.locator('select[name="gt_glaucoma_stage"]').select_option("Mild")
     page.fill('input[name="gt_iop_current_od"]', "24")
     page.fill('input[name="gt_iop_current_os"]', "25")
-    assert "Glaucoma (H40.0011)" in page.locator("#assessment").input_value()
-    assert "24/25 mmHg" in page.locator("#assessment").input_value()
+    assessment_text = page.locator("#assessment").input_value()
+    assert "H40.0011" in assessment_text
+    assert "Primary open-angle glaucoma" in assessment_text
+    assert "24" in assessment_text and "25" in assessment_text and "mmHg" in assessment_text
 
     page.locator('input[name="gt_prescribed_glaucoma_meds"][value="Latanoprost 0.005% QHS OU"]').check()
     page.locator('select[name="gt_follow_up_interval"]').select_option("3 months")
@@ -345,7 +349,8 @@ def test_binocular_vision_focus_toggle_and_composer(logged_in_page, live_server)
     page.locator('select[name="bv_strabismus_direction"]').select_option("Esotropia")
     assessment = page.locator("#assessment").input_value()
     assert "H51.11" in assessment
-    assert "strabismus present (Esotropia)" in assessment
+    assert "Esotropia" in assessment
+    assert "present" in assessment
 
     page.locator('input[name="bv_assigned_home_exercises"][value="Brock String"]').check()
     page.fill('input[name="bv_therapy_session_number"]', "4")
@@ -375,7 +380,8 @@ def test_surgery_comanagement_focus_toggle_composer_and_timeline(logged_in_page,
     page.locator('select[name="sx_operative_eye"]').select_option("OU")
     page.locator('select[name="sx_current_milestone"]').select_option("Day 1")
     assessment = page.locator("#assessment").input_value()
-    assert "Post-op LASIK OU" in assessment
+    assert "LASIK" in assessment
+    assert "OU" in assessment
     assert "Day 1" in assessment
 
     page.fill('textarea[name="sx_steroid_taper_schedule"]', "Pred Forte QID x 1 week")

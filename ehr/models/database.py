@@ -671,6 +671,7 @@ class GlaucomaTracking(Base):
     id = Column(Integer, primary_key=True, index=True)
     exam_id = Column(Integer, ForeignKey("eye_exams.id"), nullable=False)
     primary_diagnosis_code = Column(String)  # free-text, e.g. 'H40.1132'
+    glaucoma_stage = Column(String)  # Mild/Moderate/Severe/Indeterminate/Unspecified -- drives the A&P composer's required ICD-10 7th-character staging (v2.26)
     target_iop_od = Column(Integer); target_iop_os = Column(Integer)  # mmHg
     iop_current_od = Column(Integer); iop_current_os = Column(Integer)  # mmHg
     iop_time_measured = Column(String)  # 'HH:MM' -- IOP varies by time of day

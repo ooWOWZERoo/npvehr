@@ -128,7 +128,7 @@ async def create_exam(request: Request, db: Session = Depends(get_db)):
         db.add(AnteriorSegmentAssessment(exam_id=exam.id, **ant_fields))
     # Posterior Segment / Glaucoma tracking (5.3) -- same all-optional rule.
     gt_fields = dict(
-        primary_diagnosis_code=g("gt_primary_diagnosis_code"),
+        primary_diagnosis_code=g("gt_primary_diagnosis_code"), glaucoma_stage=g("gt_glaucoma_stage"),
         target_iop_od=_i(g("gt_target_iop_od")), target_iop_os=_i(g("gt_target_iop_os")),
         iop_current_od=_i(g("gt_iop_current_od")), iop_current_os=_i(g("gt_iop_current_os")),
         iop_time_measured=g("gt_iop_time_measured"), iop_method=g("gt_iop_method"),
