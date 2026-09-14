@@ -15,14 +15,16 @@
       <div class="form-group"><label>Exam Date*</label><input name="exam_date" type="date" value="{{ today }}" required></div>
     </div>
     <div class="form-group"><label>Chief Complaint</label><textarea name="chief_complaint"></textarea></div>
-    <div class="section-title">Visit Focus <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; choose which assessment area(s) apply to this visit; more than one can apply</span></div>
+    <div class="vf-sticky">
+    <div class="section-title" style="margin-top:0">Visit Focus <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; choose which assessment area(s) apply to this visit; more than one can apply</span></div>
     <div class="test-chip-list">
-      <label class="test-chip"><input type="checkbox" class="focus-toggle" data-target="focus-refractive" checked> Comprehensive / Refractive</label>
-      <label class="test-chip"><input type="checkbox" class="focus-toggle" data-target="focus-anterior"> Anterior Segment</label>
-      <label class="test-chip"><input type="checkbox" class="focus-toggle" data-target="focus-dryeye"> Dry Eye / Ocular Surface Disease</label>
-      <label class="test-chip"><input type="checkbox" class="focus-toggle" data-target="focus-glaucoma"> Posterior Segment / Glaucoma</label>
-      <label class="test-chip"><input type="checkbox" class="focus-toggle" data-target="focus-binocular"> Binocular Vision / Pediatrics</label>
-      <label class="test-chip"><input type="checkbox" class="focus-toggle" data-target="focus-surgery"> Pre-/Post-Op Co-Management</label>
+      <label class="test-chip" data-chip-wrap="focus-refractive"><input type="checkbox" class="focus-toggle" data-target="focus-refractive" checked> Comprehensive / Refractive <span class="vf-dot" data-dot-chip="focus-refractive"></span></label>
+      <label class="test-chip" data-chip-wrap="focus-anterior"><input type="checkbox" class="focus-toggle" data-target="focus-anterior"> Anterior Segment <span class="vf-dot" data-dot-chip="focus-anterior"></span></label>
+      <label class="test-chip" data-chip-wrap="focus-dryeye"><input type="checkbox" class="focus-toggle" data-target="focus-dryeye"> Dry Eye / Ocular Surface Disease <span class="vf-dot" data-dot-chip="focus-dryeye"></span></label>
+      <label class="test-chip" data-chip-wrap="focus-glaucoma"><input type="checkbox" class="focus-toggle" data-target="focus-glaucoma"> Posterior Segment / Glaucoma <span class="vf-dot" data-dot-chip="focus-glaucoma"></span></label>
+      <label class="test-chip" data-chip-wrap="focus-binocular"><input type="checkbox" class="focus-toggle" data-target="focus-binocular"> Binocular Vision / Pediatrics <span class="vf-dot" data-dot-chip="focus-binocular"></span></label>
+      <label class="test-chip" data-chip-wrap="focus-surgery"><input type="checkbox" class="focus-toggle" data-target="focus-surgery"> Pre-/Post-Op Co-Management <span class="vf-dot" data-dot-chip="focus-surgery"></span></label>
+    </div>
     </div>
     <div class="section-title">Visual Acuity</div>
     <div class="table-responsive">
@@ -103,8 +105,15 @@
       <tr><td>OS</td><td><input name="fundus_disc_os"></td><td><input name="fundus_macula_os"></td><td><input name="fundus_vessels_os"></td><td><input name="fundus_periphery_os"></td></tr>
     </table>
     </div>
-    <div id="focus-refractive">
-    <div class="section-title">Refractive Assessment <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; structured diagnosis fields (VISION_EHR_DATA_STANDARDS_RESEARCH.md 5.1)</span></div>
+    <div class="vf-card vf-on" data-vf-card="focus-refractive">
+      <button type="button" class="vf-head" data-vf-head="focus-refractive">
+        <span class="vf-dot vf-dot-head" data-dot-head="focus-refractive"></span>
+        <span class="vf-title">Refractive Assessment</span>
+        <span class="vf-desc">Diagnosis, laterality, stability, secondary findings</span>
+        <span class="vf-summary" data-vf-summary="focus-refractive"></span>
+        <span class="vf-chevron">&#9662;</span>
+      </button>
+      <div class="vf-body" id="focus-refractive">
     <div class="test-chip-list">
       {% for dx in ['Myopia', 'Hyperopia', 'Astigmatism', 'Presbyopia', 'Anisometropia', 'Emmetropia'] %}
       <label class="test-chip"><input type="checkbox" name="refractive_diagnosis" value="{{ dx }}"> {{ dx }}</label>
@@ -124,9 +133,17 @@
       <label class="test-chip"><input type="checkbox" name="refractive_secondary_findings" value="{{ finding }}"> {{ finding }}</label>
       {% endfor %}
     </div>
+      </div>
     </div>
-    <div id="focus-anterior">
-    <div class="section-title">Anterior Segment Assessment <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; structural exam of conjunctiva/cornea/anterior chamber/iris/lens</span></div>
+    <div class="vf-card" data-vf-card="focus-anterior">
+      <button type="button" class="vf-head" data-vf-head="focus-anterior">
+        <span class="vf-dot vf-dot-head" data-dot-head="focus-anterior"></span>
+        <span class="vf-title">Anterior Segment Assessment</span>
+        <span class="vf-desc">Conjunctiva, cornea, anterior chamber, iris, lens</span>
+        <span class="vf-summary" data-vf-summary="focus-anterior"></span>
+        <span class="vf-chevron">&#9662;</span>
+      </button>
+      <div class="vf-body" id="focus-anterior">
     <div class="form-row cols-2">
       <div class="form-group"><label>Primary Diagnosis Code</label><input name="ant_primary_diagnosis_code" placeholder="H11.031"></div>
       <div class="form-group"><label>Severity</label>
@@ -212,9 +229,17 @@
       </div>
       <div class="form-group"><label>Clinical Notes</label><input name="ant_clinical_notes"></div>
     </div>
+      </div>
     </div>
-    <div id="focus-dryeye">
-    <div class="section-title">Dry Eye / Ocular Surface Disease Assessment <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; structured diagnosis fields (VISION_EHR_DATA_STANDARDS_RESEARCH.md 5.2)</span></div>
+    <div class="vf-card" data-vf-card="focus-dryeye">
+      <button type="button" class="vf-head" data-vf-head="focus-dryeye">
+        <span class="vf-dot vf-dot-head" data-dot-head="focus-dryeye"></span>
+        <span class="vf-title">Dry Eye / Ocular Surface Disease Assessment</span>
+        <span class="vf-desc">MGD, TBUT, Schirmer, staining</span>
+        <span class="vf-summary" data-vf-summary="focus-dryeye"></span>
+        <span class="vf-chevron">&#9662;</span>
+      </button>
+      <div class="vf-body" id="focus-dryeye">
     <div class="form-row cols-2">
       <div class="form-group"><label>Primary Diagnosis Code</label><input name="de_primary_diagnosis_code" placeholder="H04.123"></div>
       <div class="form-group"><label>Severity</label>
@@ -247,9 +272,17 @@
       </div>
       <div class="form-group"><label>Clinical Notes</label><input name="de_clinical_notes"></div>
     </div>
+      </div>
     </div>
-    <div id="focus-glaucoma">
-    <div class="section-title">Posterior Segment / Glaucoma Assessment <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; structured diagnosis fields (VISION_EHR_DATA_STANDARDS_RESEARCH.md 5.3)</span></div>
+    <div class="vf-card" data-vf-card="focus-glaucoma">
+      <button type="button" class="vf-head" data-vf-head="focus-glaucoma">
+        <span class="vf-dot vf-dot-head" data-dot-head="focus-glaucoma"></span>
+        <span class="vf-title">Posterior Segment / Glaucoma Assessment</span>
+        <span class="vf-desc">IOP, cup-disc ratio, OCT, visual field</span>
+        <span class="vf-summary" data-vf-summary="focus-glaucoma"></span>
+        <span class="vf-chevron">&#9662;</span>
+      </button>
+      <div class="vf-body" id="focus-glaucoma">
     <div class="form-row cols-3">
       <div class="form-group"><label>Primary Diagnosis Code</label><input name="gt_primary_diagnosis_code" placeholder="H40.1132"></div>
       <div class="form-group"><label>IOP Time Measured</label><input name="gt_iop_time_measured" type="time"></div>
@@ -300,9 +333,17 @@
       </div>
       <div class="form-group"><label>Clinical Notes</label><input name="gt_clinical_notes"></div>
     </div>
+      </div>
     </div>
-    <div id="focus-binocular">
-    <div class="section-title">Binocular Vision / Pediatrics Assessment <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; structured diagnosis fields (VISION_EHR_DATA_STANDARDS_RESEARCH.md 5.4)</span></div>
+    <div class="vf-card" data-vf-card="focus-binocular">
+      <button type="button" class="vf-head" data-vf-head="focus-binocular">
+        <span class="vf-dot vf-dot-head" data-dot-head="focus-binocular"></span>
+        <span class="vf-title">Binocular Vision / Pediatrics Assessment</span>
+        <span class="vf-desc">Strabismus, phoria, home exercises</span>
+        <span class="vf-summary" data-vf-summary="focus-binocular"></span>
+        <span class="vf-chevron">&#9662;</span>
+      </button>
+      <div class="vf-body" id="focus-binocular">
     <div class="form-row cols-3">
       <div class="form-group"><label>Primary Diagnosis Code</label><input name="bv_primary_diagnosis_code" placeholder="H51.11"></div>
       <div class="form-group"><label>Strabismus Present?</label>
@@ -344,9 +385,17 @@
       </div>
     </div>
     <div class="form-group"><label>Clinical Notes</label><input name="bv_clinical_notes"></div>
+      </div>
     </div>
-    <div id="focus-surgery">
-    <div class="section-title">Pre-/Post-Op Co-Management <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; structured diagnosis fields (VISION_EHR_DATA_STANDARDS_RESEARCH.md 5.5)</span></div>
+    <div class="vf-card" data-vf-card="focus-surgery">
+      <button type="button" class="vf-head" data-vf-head="focus-surgery">
+        <span class="vf-dot vf-dot-head" data-dot-head="focus-surgery"></span>
+        <span class="vf-title">Pre-/Post-Op Co-Management</span>
+        <span class="vf-desc">Milestone, taper schedule, wound status</span>
+        <span class="vf-summary" data-vf-summary="focus-surgery"></span>
+        <span class="vf-chevron">&#9662;</span>
+      </button>
+      <div class="vf-body" id="focus-surgery">
     <div class="form-row cols-3">
       <div class="form-group"><label>Surgical Procedure</label>
         <select name="sx_surgical_procedure"><option value="">&mdash;</option><option>Cataract Extraction with IOL</option><option>LASIK</option><option>PRK</option><option>SMILE</option><option>YAG Capsulotomy</option><option>Selective Laser Trabeculoplasty</option></select>
@@ -390,6 +439,7 @@
       </div>
       <div class="form-group"><label>Clinical Notes</label><input name="sx_clinical_notes"></div>
     </div>
+      </div>
     </div>
     {% if active_problems %}
     <div class="section-title">Problems Addressed <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; check any chronic problem touched at this visit to append a dated follow-up note to its Problem List entry</span></div>
@@ -415,18 +465,87 @@
   </form>
 </div>
 <script>
-// Visit Focus: checking a chip reveals its dashboard's Assessment & Plan
-// section; unchecking hides it. Purely client-side (nothing is stored) --
-// what actually renders on the saved exam's detail page is driven by which
-// fields were filled in, not which chips were checked here. Extends to
-// future dashboards by adding one more .focus-toggle checkbox + wrapped div;
-// no changes needed here.
+// Visit Focus: checking a chip reveals its dashboard's card; unchecking
+// hides it. Purely client-side (nothing is stored) -- what actually renders
+// on the saved exam's detail page is driven by which fields were filled in,
+// not which chips were checked here. Extends to future dashboards by adding
+// one more .focus-toggle checkbox + .vf-card/.vf-body pair; no changes
+// needed here.
+//
+// Layered on top of that same active/inactive mechanism (v2.24): a status
+// dot on the chip and the card header (hollow until the section has a
+// value, solid once it does), and a real accordion -- the header's own
+// click collapses/expands independently of the chip, so a finished section
+// tucks away to a one-line summary instead of disappearing or staying
+// sprawled open. Collapsing never touches `hidden` (that stays solely
+// active/inactive, exactly as before); it only toggles .vf-collapsed.
 document.querySelectorAll('.focus-toggle').forEach(function (cb) {
   var target = document.getElementById(cb.dataset.target);
-  function sync() { target.hidden = !cb.checked; }
+  var card = document.querySelector('[data-vf-card="' + cb.dataset.target + '"]');
+  var chipWrap = document.querySelector('[data-chip-wrap="' + cb.dataset.target + '"]');
+  function sync() {
+    target.hidden = !cb.checked;
+    if (chipWrap) chipWrap.classList.toggle('vf-chip-on', cb.checked);
+    if (card) {
+      card.classList.toggle('vf-on', cb.checked);
+      // Turning a section on always opens it -- a clinician who just
+      // activated an area wants to see it, not hunt for the collapse arrow.
+      if (cb.checked) card.classList.remove('vf-collapsed');
+      updateVfStatus(cb.dataset.target);
+    }
+  }
   cb.addEventListener('change', sync);
   sync();
 });
+
+document.querySelectorAll('[data-vf-head]').forEach(function (head) {
+  var id = head.dataset.vfHead;
+  var card = document.querySelector('[data-vf-card="' + id + '"]');
+  head.addEventListener('click', function () {
+    if (!card.classList.contains('vf-on')) return; // inactive sections have no collapse affordance
+    card.classList.toggle('vf-collapsed');
+  });
+});
+
+// Status dot + one-line summary: generic over any section's fields (no
+// per-dashboard knowledge needed), so a future dashboard gets both for free
+// just by following the existing data-vf-card/data-vf-head/vf-body shape.
+function updateVfStatus(id) {
+  var body = document.getElementById(id);
+  if (!body) return;
+  var filled = false;
+  var bits = [];
+  body.querySelectorAll('input, select, textarea').forEach(function (f) {
+    if (f.type === 'checkbox') {
+      if (f.checked) { filled = true; bits.push(f.dataset.val || f.value); }
+    } else if ((f.value || '').trim() !== '') {
+      filled = true;
+      if (f.tagName !== 'TEXTAREA') bits.push(f.value);
+    }
+  });
+  document.querySelectorAll('[data-dot-chip="' + id + '"], [data-dot-head="' + id + '"]').forEach(function (dot) {
+    dot.classList.toggle('vf-filled', filled);
+  });
+  var summary = document.querySelector('[data-vf-summary="' + id + '"]');
+  if (summary) summary.textContent = bits.slice(0, 3).join(' · ');
+}
+document.querySelectorAll('.vf-body').forEach(function (body) {
+  var refresh = function () { updateVfStatus(body.id); };
+  body.addEventListener('input', refresh);
+  body.addEventListener('change', refresh);
+  refresh();
+});
+
+// Visit Focus stays reachable while scrolled deep into a long exam (v2.24):
+// a subtle separator/shadow appears on the sticky bar once the page has
+// actually scrolled past it, so it doesn't look like a floating bar at rest.
+(function () {
+  var sticky = document.querySelector('.vf-sticky');
+  if (!sticky) return;
+  window.addEventListener('scroll', function () {
+    sticky.classList.toggle('vf-stuck', sticky.getBoundingClientRect().top <= 0);
+  }, { passive: true });
+})();
 
 // Assessment & Plan composer: drafts a narrative from the structured fields
 // above (the source requirements document's "Auto-Generated Clinical Note

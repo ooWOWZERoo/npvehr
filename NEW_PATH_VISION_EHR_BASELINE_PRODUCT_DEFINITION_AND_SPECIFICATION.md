@@ -1,7 +1,7 @@
 # New Path Vision EHR
 ## Baseline Product Definition and Current-State Functional Specification
 
-**Document version:** 2.23 (supersedes v2.22; splits the v2.11 "Anterior Segment / Dry Eye" dashboard, which was entirely dry-eye content, into two correctly-scoped Visit Focus dashboards — `DryEyeAssessment` (renamed, same data) and a real, new structural `AnteriorSegmentAssessment`; see new §42, supersedes §12.5b; none of this bears on the four go-live prerequisites, which are unchanged from v2.6)
+**Document version:** 2.24 (supersedes v2.23; redesigns the New Exam form's Visit Focus activation into a status-dot-plus-accordion pattern with a sticky chip row, layered on top of the existing chip/hidden-attribute mechanism rather than replacing it; see new §43; none of this bears on the four go-live prerequisites, which are unchanged from v2.6)
 **Baseline date:** September 9, 2026
 **Application-reported version:** 1.0.0
 **Baseline source:** `setup_ehr.py` self-contained scaffold script (locally generated `visioncare_ehr/` project directory; see §2.2)
@@ -3048,3 +3048,37 @@ No change to the pre-existing Slit Lamp core-exam fields (`sl_cornea_od/os`, `sl
 | New capability | A real, new `AnteriorSegmentAssessment` structural dashboard: conjunctiva, cornea, anterior chamber, iris, and lens/cataract grading per eye, via migration `024_create_anterior_segment_assessments`. New "Anterior Segment" Visit Focus chip, form section, composer clause, and detail-page card. See new §42.3. |
 | Updated | `exams/form.html`'s Visit Focus chip list and section order; `exams/detail.html` gained the new card; `ehr/db/seed.py` updated to the new model name and gained a third demo exam for the new dashboard. `VISION_EHR_DATA_STANDARDS_RESEARCH.md` §5.2 and §8 annotated; `BUILD_BACKLOG.md` §12 item marked done. |
 | Explicitly not done | No change to Slit Lamp's core cornea/lens fields. No vitreous fields. No real ICD-10 code-set integration. No stored `visit_focus` field. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |
+
+## 43. Visit Focus Activation Redesign (v2.24)
+
+### 43.1 Origin
+
+With six Visit Focus dashboards now on one form (§12.5b introduced two; §12.5e–g and §42 brought the total to six), the plain checkbox-chip-reveals-a-buried-div mechanism from v2.11 had two real gaps: nothing showed which dashboards had actually been filled in once a section scrolled out of view, and the whole dashboard's field set rendered flat with no way to tuck a finished section out of the way without losing it. The user asked for prototype redesigns to compare, specifically calling out a fast-paced, high-volume practice (48 patients/day) as the design target; several interactive options were built and reviewed as a standalone prototype before this round ported the chosen direction into the real form.
+
+### 43.2 What changed
+
+**Status dots** — a small dot on every Visit Focus chip and every card header: a hollow ring while the section is active but empty, filling solid (`--primary`) the instant any field in it has a value. Computed generically (`updateVfStatus()` in `exams/form.html`'s script) by walking every `input`/`select`/`textarea` inside the section's existing `#focus-*` div — no per-dashboard field list to maintain, so a future seventh dashboard gets this for free by following the same markup shape.
+
+**Real accordions** — each dashboard is now a `.vf-card` with a `.vf-head` button (title, dot, a muted one-line description when inactive, a live one-line summary when collapsed-but-filled, and a chevron) wrapping the existing `.vf-body` (the same `id="focus-*"` div the original chip/hidden-attribute mechanism already targets — collapsing is a new, orthogonal `.vf-collapsed` class, never touching `hidden`, so nothing about the existing active/inactive semantics changed). Turning a chip on always opens its card; the header's own click toggles collapsed state independently, and only has an effect on an active card.
+
+**Sticky Visit Focus row** — the section-title-plus-chip-row block (`.vf-sticky`) sticks to the top of the viewport as the page scrolls (plain `position: sticky; top: 0`, no JS beyond a class toggle that adds a border/shadow once actually stuck), so turning on another assessment area mid-exam never means scrolling back to the top of a long visit.
+
+None of this touches how an exam is saved: `create_exam` still reads exactly the same field names, `isFocusOn()` in the composer script still reads the checkbox's own `.checked` state directly (unaffected by collapse), and the six existing `#focus-*` ids are unchanged, so every pre-existing selector (composer script, Playwright tests) continues to work without modification.
+
+### 43.3 Verified
+
+`python3 -m py_compile` on the one touched Python file that imports nothing new (routes were untouched — this is a template/CSS/JS-only round). Local instance via a real browser: default state (Refractive on and open, the other five off); checking a chip opens its card and fills its chip/head dots on end-to-end data entry; collapsing a card via its header hides the fields (confirmed the underlying value is retained, not cleared) and shows a live summary; re-expanding restores the visible, still-populated fields; unchecking a chip still hides its `#focus-*` div exactly as before. Confirmed no JavaScript errors during any of the above. Full Playwright suite passes (22 tests, including a new `test_visit_focus_status_dots_and_collapse`); every pre-existing Visit Focus/composer test passed unmodified, confirming the layered-on-top approach didn't disturb the existing mechanism.
+
+### 43.4 Explicitly not done
+
+No change to which fields exist on any dashboard, or to the composer's narrative-generation logic. No stored `visit_focus` field (the mechanism remains client-side-only, per §12.5b's original design note — still true here). No fix to a pre-existing, app-wide 400px-width horizontal-overflow issue found incidentally while testing this round (reproduces identically on the dashboard page, which has no exam-table content at all, confirming it predates and is unrelated to this work) — worth its own investigation, tracked as a new `BUILD_BACKLOG.md` §10 item rather than fixed as a drive-by here.
+
+**Version 2.24 change log (relative to v2.23) — redesigns Visit Focus activation (status dots, real accordions, a sticky chip row), layered on top of the existing mechanism rather than replacing it:**
+
+| Area | Change |
+| --- | --- |
+| New capability | A status dot on every Visit Focus chip and card header (hollow while active-and-empty, solid once the section has a value), computed generically from any `input`/`select`/`textarea` inside the section — no per-dashboard list to maintain. See new §43.2. |
+| New capability | Each dashboard is now a real accordion: collapsing (the card header) is independent of deactivating (the chip) and never clears entered data; a collapsed, filled card shows a live one-line summary. See §43.2. |
+| New capability | The Visit Focus chip row is sticky within the page as it scrolls, so adding another assessment area mid-exam never means scrolling back to the top of a long visit. See §43.2. |
+| Updated | `ehr/templates/exams/form.html` (Visit Focus markup + script) and `ehr/static/css/app.css` (new `.vf-*` rules). No Python route changes. `tests/test_smoke.py` gained `test_visit_focus_status_dots_and_collapse`; every pre-existing Visit Focus/composer test passed unmodified. |
+| Explicitly not done | No new or changed dashboard fields. No stored `visit_focus` field. A pre-existing, unrelated mobile-width overflow issue was found but not fixed (now tracked, `BUILD_BACKLOG.md` §10). None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |

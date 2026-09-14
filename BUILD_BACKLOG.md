@@ -1,6 +1,6 @@
 # New Path Vision EHR — Master Build Backlog
 
-**Status:** Living tracking document. **Baseline as of:** spec v2.23 / research doc v2.23 (2026-09-14).
+**Status:** Living tracking document. **Baseline as of:** spec v2.24 / research doc v2.23 (2026-09-14).
 
 ## Purpose and how to use this document
 
@@ -26,7 +26,8 @@ This consolidates every outstanding build item, investigation, and test scattere
 - [x] **Per-patient document storage + Problem List, first slice** — prompted by a gap analysis against a real visit-summary document export. **Done, v2.20** — see baseline spec §39, research doc §8.
 - [x] **Pupil exam fields** — next item picked from §12's visit-summary gaps. **Done, v2.21** — see baseline spec §40, research doc §8.1.
 - [x] **Motility and confrontation visual field fields** — next item picked from §12's visit-summary gaps. **Done, v2.22** — see baseline spec §41, research doc §8.2.
-- [x] **Anterior Segment / Dry Eye split** — user request: separate the two, fully scoped. **Done, v2.23** — see baseline spec §42, research doc §8.3. `AnteriorSegmentAssessment` renamed to `DryEyeAssessment` (no data change); a real, new structural Anterior Segment dashboard built alongside it. Also resolves §12's "conjunctiva/anterior-chamber/iris as discrete slit-lamp structures" item. Pick the next item from the sections below, or from §12's remaining visit-summary gaps.
+- [x] **Anterior Segment / Dry Eye split** — user request: separate the two, fully scoped. **Done, v2.23** — see baseline spec §42, research doc §8.3. `AnteriorSegmentAssessment` renamed to `DryEyeAssessment` (no data change); a real, new structural Anterior Segment dashboard built alongside it. Also resolves §12's "conjunctiva/anterior-chamber/iris as discrete slit-lamp structures" item.
+- [x] **Visit Focus activation redesign** — user request: status dots, real accordions, a sticky chip row, prototyped first then built into the real form. **Done, v2.24** — see baseline spec §43. Layered on top of the existing chip/hidden-attribute mechanism; no route or dashboard-field changes. Pick the next item from the sections below, or from §12's remaining visit-summary gaps.
 
 ---
 
@@ -145,6 +146,7 @@ Tracked here for visibility; the authoritative detail lives in the spec's go-liv
 - [ ] No pagination, advanced search, filters, or large-data handling on any list screen (patients, appointments, admin lists) — spec §36.5 item 13 also names this
 - [ ] Dependencies specify minimum versions only (`>=`), no upper bounds or lock file — reduces build reproducibility
 - [ ] Client's final logo asset still not supplied; navigation/print header show a placeholder mark
+- [ ] App-wide horizontal overflow at ~400px width — `document.documentElement.scrollWidth` exceeds `clientWidth` on every page tested (dashboard, exam detail, exam form), including pages with no wide tables at all, so it's in the base layout/sidebar chrome, not any one page's content. Found incidentally during the v2.24 Visit Focus round (spec §43.3); not investigated or fixed there since it predates and is unrelated to that work.
 
 ---
 

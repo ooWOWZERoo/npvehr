@@ -135,6 +135,37 @@ def test_visit_focus_toggle_shows_hides_assessment_sections(logged_in_page, live
     assert not refractive_section.is_visible()
 
 
+def test_visit_focus_status_dots_and_collapse(logged_in_page, live_server):
+    """Visit Focus status dots + collapsible cards (ehr/templates/exams/form.html,
+    ehr/static/css/app.css, v2.24) -- each chip and card header carries a dot
+    that's hollow until its section has a value, then fills solid; each active
+    section is a real accordion, so collapsing (a click on the card header)
+    is a distinct action from deactivating (unchecking the chip) -- collapsing
+    must not clear anything entered, and a collapsed-but-filled card shows a
+    one-line summary instead of looking empty."""
+    page = logged_in_page
+    page.goto(live_server + "/exams/new")
+
+    page.locator('[data-chip-wrap="focus-anterior"]').click()
+    dot_chip = page.locator('[data-dot-chip="focus-anterior"]')
+    dot_head = page.locator('[data-dot-head="focus-anterior"]')
+    assert "vf-filled" not in (dot_chip.get_attribute("class") or "")
+
+    page.fill('input[name="ant_primary_diagnosis_code"]', "H11.031")
+    assert "vf-filled" in dot_chip.get_attribute("class")
+    assert "vf-filled" in dot_head.get_attribute("class")
+
+    # Collapsing (the header, not the chip) hides the fields but keeps them --
+    # the value must still be there on re-expand, and a summary appears meanwhile.
+    page.locator('[data-vf-head="focus-anterior"]').click()
+    assert not page.locator("#focus-anterior").is_visible()
+    assert "H11.031" in page.locator('[data-vf-summary="focus-anterior"]').inner_text()
+
+    page.locator('[data-vf-head="focus-anterior"]').click()
+    assert page.locator("#focus-anterior").is_visible()
+    assert page.input_value('input[name="ant_primary_diagnosis_code"]') == "H11.031"
+
+
 def test_assessment_plan_auto_composed_then_not_overwritten_after_manual_edit(logged_in_page, live_server):
     """The Assessment & Plan composer (ehr/templates/exams/form.html) drafts a
     narrative from the structured chips/dropdowns -- verifies it actually
