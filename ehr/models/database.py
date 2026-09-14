@@ -563,6 +563,7 @@ class EyeExam(Base):
     provider = relationship("Provider", back_populates="eye_exams")
     refractions = relationship("Refraction", back_populates="exam", cascade="all, delete-orphan")
     prescriptions = relationship("Prescription", back_populates="exam")
+    dry_eye_assessments = relationship("DryEyeAssessment", back_populates="exam", cascade="all, delete-orphan")
     anterior_segment_assessments = relationship("AnteriorSegmentAssessment", back_populates="exam", cascade="all, delete-orphan")
     glaucoma_trackings = relationship("GlaucomaTracking", back_populates="exam", cascade="all, delete-orphan")
     binocular_vision_assessments = relationship("BinocularVisionAssessment", back_populates="exam", cascade="all, delete-orphan")
@@ -584,15 +585,22 @@ class Refraction(Base):
     os_add = Column(Float); os_va = Column(String)
     exam = relationship("EyeExam", back_populates="refractions")
 
-class AnteriorSegmentAssessment(Base):
-    """Anterior Segment / Ocular Surface Disease (Dry Eye) structured Assessment
-    & Plan (VISION_EHR_DATA_STANDARDS_RESEARCH.md 5.2), the second of five
-    clinical dashboards reviewed in v2.9 -- built in v2.11. Unlike Refraction's
-    three types, one exam is expected to have at most one row here; modeled as
-    a child table (rather than columns on EyeExam) since this is a distinct
+class DryEyeAssessment(Base):
+    """Dry Eye / Ocular Surface Disease structured Assessment & Plan
+    (VISION_EHR_DATA_STANDARDS_RESEARCH.md 5.2), the second of five clinical
+    dashboards reviewed in v2.9 -- built in v2.11 under the name
+    `AnteriorSegmentAssessment` / table `anterior_segment_assessments`, then
+    renamed here in v2.23: every field in this table (conjunctival injection,
+    corneal staining, MGD expression, TBUT, Schirmer) is dry-eye/OSD content,
+    not a structural anterior segment exam, so the old name was misleading --
+    see the new, separate AnteriorSegmentAssessment below for the real thing.
+    Table renamed via migration 023 (ALTER TABLE ... RENAME TO); no column
+    changes, so existing rows carry over unchanged. Unlike Refraction's three
+    types, one exam is expected to have at most one row here; modeled as a
+    child table (rather than columns on EyeExam) since this is a distinct
     encounter-scoped assessment, matching Refraction's existing exam_id-FK
     child-row shape."""
-    __tablename__ = "anterior_segment_assessments"
+    __tablename__ = "dry_eye_assessments"
     id = Column(Integer, primary_key=True, index=True)
     exam_id = Column(Integer, ForeignKey("eye_exams.id"), nullable=False)
     primary_diagnosis_code = Column(String)  # free-text, e.g. 'H04.123' -- same treatment as EyeExam.diagnosis_codes
@@ -604,6 +612,48 @@ class AnteriorSegmentAssessment(Base):
     tbut_seconds_od = Column(Integer); tbut_seconds_os = Column(Integer)  # Tear Break-Up Time
     schirmer_mm_od = Column(Integer); schirmer_mm_os = Column(Integer)
     plan_therapeutics = Column(String)  # comma-delimited: Preservative-Free Tears, Warm Compresses, Topical Steroid, Restasis/Xiidra
+    follow_up_interval = Column(String)
+    clinical_notes = Column(Text)
+    exam = relationship("EyeExam", back_populates="dry_eye_assessments")
+
+class AnteriorSegmentAssessment(Base):
+    """Anterior Segment structured Assessment & Plan (v2.23) -- a real
+    structural exam of conjunctiva/cornea/anterior chamber/iris/lens, built
+    to replace the old `AnteriorSegmentAssessment` (v2.11), which despite its
+    name was entirely dry-eye/OSD content (renamed to DryEyeAssessment above,
+    keeping that data intact under its correct name). This table starts fresh
+    -- there is no prior "real" anterior segment data to migrate forward.
+    Same exam_id-FK child-row shape as every other dashboard; grading scales
+    reuse this app's existing '0'/'1+'/'2+'/'3+'/'4+' convention wherever a
+    finding is conventionally graded rather than binary/descriptive."""
+    __tablename__ = "anterior_segment_assessments"
+    id = Column(Integer, primary_key=True, index=True)
+    exam_id = Column(Integer, ForeignKey("eye_exams.id"), nullable=False)
+    primary_diagnosis_code = Column(String)  # free-text, e.g. 'H10.9', 'H18.9'
+    severity = Column(String)  # Mild / Moderate / Severe
+    # Conjunctiva
+    conjunctival_injection_od = Column(String); conjunctival_injection_os = Column(String)  # grading scale
+    conjunctival_discharge_od = Column(String); conjunctival_discharge_os = Column(String)  # None / Serous / Mucoid / Purulent
+    conjunctival_follicles_papillae_od = Column(String); conjunctival_follicles_papillae_os = Column(String)  # None / Follicles / Papillae / Both
+    conjunctival_chemosis_od = Column(String); conjunctival_chemosis_os = Column(String)  # grading scale
+    # Cornea (structural pathology -- distinct from Slit Lamp's plain clarity field and from DryEyeAssessment's staining)
+    corneal_epithelial_defect_od = Column(String); corneal_epithelial_defect_os = Column(String)  # Yes / No
+    corneal_edema_od = Column(String); corneal_edema_os = Column(String)  # grading scale
+    corneal_infiltrate_od = Column(String); corneal_infiltrate_os = Column(String)  # None / Present
+    corneal_arcus_od = Column(String); corneal_arcus_os = Column(String)  # Yes / No (arcus senilis)
+    corneal_guttata_od = Column(String); corneal_guttata_os = Column(String)  # grading scale (e.g. Fuchs' dystrophy)
+    pterygium_pinguecula_od = Column(String); pterygium_pinguecula_os = Column(String)  # None / Pterygium / Pinguecula / Both
+    # Anterior Chamber
+    van_herick_grade_od = Column(String); van_herick_grade_os = Column(String)  # Grade 1-4 (peripheral AC depth estimate)
+    ac_cells_flare_od = Column(String); ac_cells_flare_os = Column(String)  # grading scale
+    # Iris
+    iris_pattern_od = Column(String); iris_pattern_os = Column(String)  # free-text, e.g. 'Normal', 'Atrophic patches'
+    iris_nvi_present_od = Column(String); iris_nvi_present_os = Column(String)  # Yes / No (neovascularization of the iris)
+    iris_pi_status_od = Column(String); iris_pi_status_os = Column(String)  # None / Patent / Non-patent (peripheral iridotomy)
+    # Lens
+    lens_cataract_type_od = Column(String); lens_cataract_type_os = Column(String)  # None / Nuclear Sclerosis / Cortical / Posterior Subcapsular / Combined
+    lens_cataract_grade_od = Column(String); lens_cataract_grade_os = Column(String)  # grading scale
+    plan_therapeutics = Column(String)  # comma-delimited: Topical Steroid, Antibiotic Drops, Cycloplegic Agent, Referral to Cornea Specialist, Cataract Surgery Referral, Pterygium Excision Referral
     follow_up_interval = Column(String)
     clinical_notes = Column(Text)
     exam = relationship("EyeExam", back_populates="anterior_segment_assessments")

@@ -2,8 +2,8 @@ import secrets
 from datetime import datetime, timedelta
 from ehr.models.database import (init_db, engine, SessionLocal, Provider, Patient, Appointment, EyeExam,
     Refraction, Prescription, AppointmentStatus, AppointmentType, AppointmentTypeVersion, User,
-    ProviderAvailabilityTemplate, AnteriorSegmentAssessment, GlaucomaTracking, BinocularVisionAssessment,
-    SurgeryComanagementTracking)
+    ProviderAvailabilityTemplate, DryEyeAssessment, AnteriorSegmentAssessment, GlaucomaTracking,
+    BinocularVisionAssessment, SurgeryComanagementTracking)
 from ehr.db.migrations import run_column_migrations, run_post_create_all_migrations
 from ehr.auth.security import hash_password
 from ehr.auth.permissions import SYSTEM_ADMINISTRATOR, OPTOMETRIST_PROVIDER, FRONT_DESK, ROLE_LABELS
@@ -166,9 +166,9 @@ def seed_demo_data(db):
         lens_treatments="Anti-Reflective Coating, Blue Light Filter",
         recall_interval="1 Year", patient_education_tags="20-20-20 Rule, UV Protection"))
 
-    # Second demo exam -- Anterior Segment / Dry Eye visit focus, distinct
-    # from the comprehensive/refractive exam above, demonstrating the
-    # Visit Focus navigation model with a different assessment type.
+    # Second demo exam -- Dry Eye / Ocular Surface Disease visit focus,
+    # distinct from the comprehensive/refractive exam above, demonstrating
+    # the Visit Focus navigation model with a different assessment type.
     dry_eye_exam = EyeExam(
         patient_id=pts[1].id, provider_id=p2.id, exam_date="2026-09-05",
         chief_complaint="Gritty, burning eyes for several weeks",
@@ -181,7 +181,7 @@ def seed_demo_data(db):
         diagnosis_codes="H04.123", follow_up_weeks=2,
     )
     db.add(dry_eye_exam); db.flush()
-    db.add(AnteriorSegmentAssessment(exam_id=dry_eye_exam.id,
+    db.add(DryEyeAssessment(exam_id=dry_eye_exam.id,
         primary_diagnosis_code="H04.123", severity="Moderate",
         conjunctival_injection_od="1+", conjunctival_injection_os="1+",
         corneal_staining_od="2+", corneal_staining_os="2+",
@@ -189,6 +189,35 @@ def seed_demo_data(db):
         tbut_seconds_od=6, tbut_seconds_os=5, schirmer_mm_od=8, schirmer_mm_os=7,
         plan_therapeutics="Preservative-Free Tears, Warm Compresses",
         follow_up_interval="2 weeks"))
+
+    # Third demo exam -- Anterior Segment visit focus (v2.23), a real
+    # structural exam distinct from the Dry Eye dashboard above -- same
+    # patient (Bob Smith), a follow-up visit where a nasal pterygium and
+    # early cataract were also noted on slit lamp.
+    anterior_segment_exam = EyeExam(
+        patient_id=pts[1].id, provider_id=p2.id, exam_date="2026-09-12",
+        chief_complaint="Follow-up for dry eye; new complaint of a 'growth' on the right eye",
+        od_sc="20/25", os_sc="20/25", od_cc="20/20", os_cc="20/20",
+        sl_lids_od="Mild MGD capping", sl_lids_os="Mild MGD capping",
+        sl_cornea_od="Clear centrally", sl_cornea_os="Clear",
+        sl_lens_od="Trace NS", sl_lens_os="Clear",
+        assessment="Nasal pterygium OD, not yet visually significant. Trace nuclear sclerotic cataract OD.",
+        plan="Monitor pterygium for growth/induced astigmatism. Continue dry eye regimen. RTC 6 months.",
+        diagnosis_codes="H11.031, H25.011", follow_up_weeks=26,
+    )
+    db.add(anterior_segment_exam); db.flush()
+    db.add(AnteriorSegmentAssessment(exam_id=anterior_segment_exam.id,
+        primary_diagnosis_code="H11.031", severity="Mild",
+        conjunctival_injection_od="1+", conjunctival_injection_os="0",
+        pterygium_pinguecula_od="Pterygium", pterygium_pinguecula_os="None",
+        van_herick_grade_od="Grade 4", van_herick_grade_os="Grade 4",
+        ac_cells_flare_od="0", ac_cells_flare_os="0",
+        iris_pattern_od="Normal", iris_pattern_os="Normal",
+        lens_cataract_type_od="Nuclear Sclerosis", lens_cataract_type_os="None",
+        lens_cataract_grade_od="Trace", lens_cataract_grade_os="0",
+        plan_therapeutics="Preservative-Free Tears",
+        follow_up_interval="6 months",
+        clinical_notes="Pterygium not yet encroaching on visual axis; photographed for interval comparison."))
 
     # Two glaucoma-tracking exams for the same demo patient, months apart --
     # demonstrates the trend view (VISION_EHR_DATA_STANDARDS_RESEARCH.md 5.3)

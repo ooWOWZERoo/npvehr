@@ -3,8 +3,8 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
-from ehr.models.database import (get_db, EyeExam, Refraction, AnteriorSegmentAssessment, GlaucomaTracking,
-    BinocularVisionAssessment, SurgeryComanagementTracking, Patient, Provider, Problem, ProblemAddendum)
+from ehr.models.database import (get_db, EyeExam, Refraction, DryEyeAssessment, AnteriorSegmentAssessment,
+    GlaucomaTracking, BinocularVisionAssessment, SurgeryComanagementTracking, Patient, Provider, Problem, ProblemAddendum)
 from ehr.env_info import EHR_ENV
 from ehr.utils import patient_context
 from ehr.auth.permissions import require_role, EXAM_VIEW, EXAM_EDIT, ROLE_LABELS
@@ -85,20 +85,47 @@ async def create_exam(request: Request, db: Session = Depends(get_db)):
             od_axis=_i(g(f"{prefix}_od_axis")), od_add=_f(g(f"{prefix}_od_add")), od_va=g(f"{prefix}_od_va"),
             os_sphere=os_sphere, os_cylinder=_f(g(f"{prefix}_os_cylinder")),
             os_axis=_i(g(f"{prefix}_os_axis")), os_add=_f(g(f"{prefix}_os_add")), os_va=g(f"{prefix}_os_va")))
-    # Anterior Segment / Dry Eye assessment (5.2) -- only created if at least
-    # one of its fields was actually filled in, same "any subset, all
-    # optional" rule as the refraction rows above.
-    asa_fields = dict(
-        primary_diagnosis_code=g("asa_primary_diagnosis_code"), severity=g("asa_severity"),
-        conjunctival_injection_od=g("asa_conjunctival_injection_od"), conjunctival_injection_os=g("asa_conjunctival_injection_os"),
-        corneal_staining_od=g("asa_corneal_staining_od"), corneal_staining_os=g("asa_corneal_staining_os"),
-        mgd_expression_od=g("asa_mgd_expression_od"), mgd_expression_os=g("asa_mgd_expression_os"),
-        tbut_seconds_od=_i(g("asa_tbut_seconds_od")), tbut_seconds_os=_i(g("asa_tbut_seconds_os")),
-        schirmer_mm_od=_i(g("asa_schirmer_mm_od")), schirmer_mm_os=_i(g("asa_schirmer_mm_os")),
-        plan_therapeutics=gl("asa_plan_therapeutics"), follow_up_interval=g("asa_follow_up_interval"),
-        clinical_notes=g("asa_clinical_notes"))
-    if any(v not in (None, "") for v in asa_fields.values()):
-        db.add(AnteriorSegmentAssessment(exam_id=exam.id, **asa_fields))
+    # Dry Eye / Ocular Surface Disease assessment (5.2, renamed from
+    # "Anterior Segment" in v2.23 -- see DryEyeAssessment's docstring) --
+    # only created if at least one of its fields was actually filled in,
+    # same "any subset, all optional" rule as the refraction rows above.
+    de_fields = dict(
+        primary_diagnosis_code=g("de_primary_diagnosis_code"), severity=g("de_severity"),
+        conjunctival_injection_od=g("de_conjunctival_injection_od"), conjunctival_injection_os=g("de_conjunctival_injection_os"),
+        corneal_staining_od=g("de_corneal_staining_od"), corneal_staining_os=g("de_corneal_staining_os"),
+        mgd_expression_od=g("de_mgd_expression_od"), mgd_expression_os=g("de_mgd_expression_os"),
+        tbut_seconds_od=_i(g("de_tbut_seconds_od")), tbut_seconds_os=_i(g("de_tbut_seconds_os")),
+        schirmer_mm_od=_i(g("de_schirmer_mm_od")), schirmer_mm_os=_i(g("de_schirmer_mm_os")),
+        plan_therapeutics=gl("de_plan_therapeutics"), follow_up_interval=g("de_follow_up_interval"),
+        clinical_notes=g("de_clinical_notes"))
+    if any(v not in (None, "") for v in de_fields.values()):
+        db.add(DryEyeAssessment(exam_id=exam.id, **de_fields))
+    # Anterior Segment assessment (v2.23) -- a real structural exam of
+    # conjunctiva/cornea/anterior chamber/iris/lens, separate from the dry-eye
+    # dashboard above. Same all-optional rule.
+    ant_fields = dict(
+        primary_diagnosis_code=g("ant_primary_diagnosis_code"), severity=g("ant_severity"),
+        conjunctival_injection_od=g("ant_conjunctival_injection_od"), conjunctival_injection_os=g("ant_conjunctival_injection_os"),
+        conjunctival_discharge_od=g("ant_conjunctival_discharge_od"), conjunctival_discharge_os=g("ant_conjunctival_discharge_os"),
+        conjunctival_follicles_papillae_od=g("ant_conjunctival_follicles_papillae_od"), conjunctival_follicles_papillae_os=g("ant_conjunctival_follicles_papillae_os"),
+        conjunctival_chemosis_od=g("ant_conjunctival_chemosis_od"), conjunctival_chemosis_os=g("ant_conjunctival_chemosis_os"),
+        corneal_epithelial_defect_od=g("ant_corneal_epithelial_defect_od"), corneal_epithelial_defect_os=g("ant_corneal_epithelial_defect_os"),
+        corneal_edema_od=g("ant_corneal_edema_od"), corneal_edema_os=g("ant_corneal_edema_os"),
+        corneal_infiltrate_od=g("ant_corneal_infiltrate_od"), corneal_infiltrate_os=g("ant_corneal_infiltrate_os"),
+        corneal_arcus_od=g("ant_corneal_arcus_od"), corneal_arcus_os=g("ant_corneal_arcus_os"),
+        corneal_guttata_od=g("ant_corneal_guttata_od"), corneal_guttata_os=g("ant_corneal_guttata_os"),
+        pterygium_pinguecula_od=g("ant_pterygium_pinguecula_od"), pterygium_pinguecula_os=g("ant_pterygium_pinguecula_os"),
+        van_herick_grade_od=g("ant_van_herick_grade_od"), van_herick_grade_os=g("ant_van_herick_grade_os"),
+        ac_cells_flare_od=g("ant_ac_cells_flare_od"), ac_cells_flare_os=g("ant_ac_cells_flare_os"),
+        iris_pattern_od=g("ant_iris_pattern_od"), iris_pattern_os=g("ant_iris_pattern_os"),
+        iris_nvi_present_od=g("ant_iris_nvi_present_od"), iris_nvi_present_os=g("ant_iris_nvi_present_os"),
+        iris_pi_status_od=g("ant_iris_pi_status_od"), iris_pi_status_os=g("ant_iris_pi_status_os"),
+        lens_cataract_type_od=g("ant_lens_cataract_type_od"), lens_cataract_type_os=g("ant_lens_cataract_type_os"),
+        lens_cataract_grade_od=g("ant_lens_cataract_grade_od"), lens_cataract_grade_os=g("ant_lens_cataract_grade_os"),
+        plan_therapeutics=gl("ant_plan_therapeutics"), follow_up_interval=g("ant_follow_up_interval"),
+        clinical_notes=g("ant_clinical_notes"))
+    if any(v not in (None, "") for v in ant_fields.values()):
+        db.add(AnteriorSegmentAssessment(exam_id=exam.id, **ant_fields))
     # Posterior Segment / Glaucoma tracking (5.3) -- same all-optional rule.
     gt_fields = dict(
         primary_diagnosis_code=g("gt_primary_diagnosis_code"),

@@ -18,7 +18,8 @@
     <div class="section-title">Visit Focus <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; choose which assessment area(s) apply to this visit; more than one can apply</span></div>
     <div class="test-chip-list">
       <label class="test-chip"><input type="checkbox" class="focus-toggle" data-target="focus-refractive" checked> Comprehensive / Refractive</label>
-      <label class="test-chip"><input type="checkbox" class="focus-toggle" data-target="focus-anterior"> Anterior Segment / Dry Eye</label>
+      <label class="test-chip"><input type="checkbox" class="focus-toggle" data-target="focus-anterior"> Anterior Segment</label>
+      <label class="test-chip"><input type="checkbox" class="focus-toggle" data-target="focus-dryeye"> Dry Eye / Ocular Surface Disease</label>
       <label class="test-chip"><input type="checkbox" class="focus-toggle" data-target="focus-glaucoma"> Posterior Segment / Glaucoma</label>
       <label class="test-chip"><input type="checkbox" class="focus-toggle" data-target="focus-binocular"> Binocular Vision / Pediatrics</label>
       <label class="test-chip"><input type="checkbox" class="focus-toggle" data-target="focus-surgery"> Pre-/Post-Op Co-Management</label>
@@ -125,11 +126,99 @@
     </div>
     </div>
     <div id="focus-anterior">
-    <div class="section-title">Anterior Segment / Dry Eye Assessment <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; structured diagnosis fields (VISION_EHR_DATA_STANDARDS_RESEARCH.md 5.2)</span></div>
+    <div class="section-title">Anterior Segment Assessment <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; structural exam of conjunctiva/cornea/anterior chamber/iris/lens</span></div>
     <div class="form-row cols-2">
-      <div class="form-group"><label>Primary Diagnosis Code</label><input name="asa_primary_diagnosis_code" placeholder="H04.123"></div>
+      <div class="form-group"><label>Primary Diagnosis Code</label><input name="ant_primary_diagnosis_code" placeholder="H11.031"></div>
       <div class="form-group"><label>Severity</label>
-        <select name="asa_severity"><option value="">&mdash;</option><option>Mild</option><option>Moderate</option><option>Severe</option></select>
+        <select name="ant_severity"><option value="">&mdash;</option><option>Mild</option><option>Moderate</option><option>Severe</option></select>
+      </div>
+    </div>
+    <div class="form-group"><label style="font-weight:600;font-size:0.85rem">Conjunctiva</label></div>
+    <div class="table-responsive">
+    <table class="exam-table">
+      <tr><th></th><th>Injection</th><th>Discharge</th><th>Follicles / Papillae</th><th>Chemosis</th></tr>
+      {% for eye in ['od', 'os'] %}
+      <tr><td>{{ eye|upper }}</td>
+        <td><select name="ant_conjunctival_injection_{{ eye }}"><option value="">&mdash;</option>{% for g in ['0','1+','2+','3+','4+'] %}<option>{{ g }}</option>{% endfor %}</select></td>
+        <td><select name="ant_conjunctival_discharge_{{ eye }}"><option value="">&mdash;</option><option>None</option><option>Serous</option><option>Mucoid</option><option>Purulent</option></select></td>
+        <td><select name="ant_conjunctival_follicles_papillae_{{ eye }}"><option value="">&mdash;</option><option>None</option><option>Follicles</option><option>Papillae</option><option>Both</option></select></td>
+        <td><select name="ant_conjunctival_chemosis_{{ eye }}"><option value="">&mdash;</option>{% for g in ['0','1+','2+','3+','4+'] %}<option>{{ g }}</option>{% endfor %}</select></td>
+      </tr>
+      {% endfor %}
+    </table>
+    </div>
+    <div class="form-group"><label style="font-weight:600;font-size:0.85rem">Cornea</label></div>
+    <div class="table-responsive">
+    <table class="exam-table">
+      <tr><th></th><th>Epithelial Defect</th><th>Edema</th><th>Infiltrate</th><th>Arcus</th><th>Guttata</th><th>Pterygium / Pinguecula</th></tr>
+      {% for eye in ['od', 'os'] %}
+      <tr><td>{{ eye|upper }}</td>
+        <td><select name="ant_corneal_epithelial_defect_{{ eye }}"><option value="">&mdash;</option><option>Yes</option><option>No</option></select></td>
+        <td><select name="ant_corneal_edema_{{ eye }}"><option value="">&mdash;</option>{% for g in ['0','1+','2+','3+','4+'] %}<option>{{ g }}</option>{% endfor %}</select></td>
+        <td><select name="ant_corneal_infiltrate_{{ eye }}"><option value="">&mdash;</option><option>None</option><option>Present</option></select></td>
+        <td><select name="ant_corneal_arcus_{{ eye }}"><option value="">&mdash;</option><option>Yes</option><option>No</option></select></td>
+        <td><select name="ant_corneal_guttata_{{ eye }}"><option value="">&mdash;</option>{% for g in ['0','1+','2+','3+','4+'] %}<option>{{ g }}</option>{% endfor %}</select></td>
+        <td><select name="ant_pterygium_pinguecula_{{ eye }}"><option value="">&mdash;</option><option>None</option><option>Pterygium</option><option>Pinguecula</option><option>Both</option></select></td>
+      </tr>
+      {% endfor %}
+    </table>
+    </div>
+    <div class="form-group"><label style="font-weight:600;font-size:0.85rem">Anterior Chamber</label></div>
+    <div class="table-responsive">
+    <table class="exam-table">
+      <tr><th></th><th>Van Herick Grade</th><th>Cells/Flare</th></tr>
+      {% for eye in ['od', 'os'] %}
+      <tr><td>{{ eye|upper }}</td>
+        <td><select name="ant_van_herick_grade_{{ eye }}"><option value="">&mdash;</option><option>Grade 1</option><option>Grade 2</option><option>Grade 3</option><option>Grade 4</option></select></td>
+        <td><select name="ant_ac_cells_flare_{{ eye }}"><option value="">&mdash;</option>{% for g in ['0','1+','2+','3+','4+'] %}<option>{{ g }}</option>{% endfor %}</select></td>
+      </tr>
+      {% endfor %}
+    </table>
+    </div>
+    <div class="form-group"><label style="font-weight:600;font-size:0.85rem">Iris</label></div>
+    <div class="table-responsive">
+    <table class="exam-table">
+      <tr><th></th><th>Pattern</th><th>NVI Present?</th><th>PI Status</th></tr>
+      {% for eye in ['od', 'os'] %}
+      <tr><td>{{ eye|upper }}</td>
+        <td><input name="ant_iris_pattern_{{ eye }}" placeholder="Normal"></td>
+        <td><select name="ant_iris_nvi_present_{{ eye }}"><option value="">&mdash;</option><option>Yes</option><option>No</option></select></td>
+        <td><select name="ant_iris_pi_status_{{ eye }}"><option value="">&mdash;</option><option>None</option><option>Patent</option><option>Non-patent</option></select></td>
+      </tr>
+      {% endfor %}
+    </table>
+    </div>
+    <div class="form-group"><label style="font-weight:600;font-size:0.85rem">Lens</label></div>
+    <div class="table-responsive">
+    <table class="exam-table">
+      <tr><th></th><th>Cataract Type</th><th>Cataract Grade</th></tr>
+      {% for eye in ['od', 'os'] %}
+      <tr><td>{{ eye|upper }}</td>
+        <td><select name="ant_lens_cataract_type_{{ eye }}"><option value="">&mdash;</option><option>None</option><option>Nuclear Sclerosis</option><option>Cortical</option><option>Posterior Subcapsular</option><option>Combined</option></select></td>
+        <td><select name="ant_lens_cataract_grade_{{ eye }}"><option value="">&mdash;</option><option>Trace</option>{% for g in ['1+','2+','3+','4+'] %}<option>{{ g }}</option>{% endfor %}</select></td>
+      </tr>
+      {% endfor %}
+    </table>
+    </div>
+    <div class="form-group"><label>Plan Therapeutics</label></div>
+    <div class="test-chip-list">
+      {% for t in ['Topical Steroid', 'Antibiotic Drops', 'Cycloplegic Agent', 'Referral to Cornea Specialist', 'Cataract Surgery Referral', 'Pterygium Excision Referral'] %}
+      <label class="test-chip"><input type="checkbox" name="ant_plan_therapeutics" value="{{ t }}"> {{ t }}</label>
+      {% endfor %}
+    </div>
+    <div class="form-row cols-2">
+      <div class="form-group"><label>Follow-up Interval</label>
+        <select name="ant_follow_up_interval"><option value="">&mdash;</option><option>24 hours</option><option>1 week</option><option>2 weeks</option><option>1 month</option><option>3 months</option><option>6 months</option></select>
+      </div>
+      <div class="form-group"><label>Clinical Notes</label><input name="ant_clinical_notes"></div>
+    </div>
+    </div>
+    <div id="focus-dryeye">
+    <div class="section-title">Dry Eye / Ocular Surface Disease Assessment <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; structured diagnosis fields (VISION_EHR_DATA_STANDARDS_RESEARCH.md 5.2)</span></div>
+    <div class="form-row cols-2">
+      <div class="form-group"><label>Primary Diagnosis Code</label><input name="de_primary_diagnosis_code" placeholder="H04.123"></div>
+      <div class="form-group"><label>Severity</label>
+        <select name="de_severity"><option value="">&mdash;</option><option>Mild</option><option>Moderate</option><option>Severe</option></select>
       </div>
     </div>
     <div class="table-responsive">
@@ -137,11 +226,11 @@
       <tr><th></th><th>Conj. Injection</th><th>Corneal Staining</th><th>MGD Expression</th><th>TBUT (sec)</th><th>Schirmer (mm)</th></tr>
       {% for eye in ['od', 'os'] %}
       <tr><td>{{ eye|upper }}</td>
-        <td><select name="asa_conjunctival_injection_{{ eye }}"><option value="">&mdash;</option>{% for g in ['0','1+','2+','3+','4+'] %}<option>{{ g }}</option>{% endfor %}</select></td>
-        <td><select name="asa_corneal_staining_{{ eye }}"><option value="">&mdash;</option>{% for g in ['0','1+','2+','3+','4+'] %}<option>{{ g }}</option>{% endfor %}</select></td>
-        <td><select name="asa_mgd_expression_{{ eye }}"><option value="">&mdash;</option>{% for g in ['0','1+','2+','3+','4+'] %}<option>{{ g }}</option>{% endfor %}</select></td>
-        <td><input name="asa_tbut_seconds_{{ eye }}" type="number" min="0"></td>
-        <td><input name="asa_schirmer_mm_{{ eye }}" type="number" min="0"></td>
+        <td><select name="de_conjunctival_injection_{{ eye }}"><option value="">&mdash;</option>{% for g in ['0','1+','2+','3+','4+'] %}<option>{{ g }}</option>{% endfor %}</select></td>
+        <td><select name="de_corneal_staining_{{ eye }}"><option value="">&mdash;</option>{% for g in ['0','1+','2+','3+','4+'] %}<option>{{ g }}</option>{% endfor %}</select></td>
+        <td><select name="de_mgd_expression_{{ eye }}"><option value="">&mdash;</option>{% for g in ['0','1+','2+','3+','4+'] %}<option>{{ g }}</option>{% endfor %}</select></td>
+        <td><input name="de_tbut_seconds_{{ eye }}" type="number" min="0"></td>
+        <td><input name="de_schirmer_mm_{{ eye }}" type="number" min="0"></td>
       </tr>
       {% endfor %}
     </table>
@@ -149,14 +238,14 @@
     <div class="form-group"><label>Plan Therapeutics</label></div>
     <div class="test-chip-list">
       {% for t in ['Preservative-Free Tears', 'Warm Compresses', 'Topical Steroid', 'Restasis/Xiidra'] %}
-      <label class="test-chip"><input type="checkbox" name="asa_plan_therapeutics" value="{{ t }}"> {{ t }}</label>
+      <label class="test-chip"><input type="checkbox" name="de_plan_therapeutics" value="{{ t }}"> {{ t }}</label>
       {% endfor %}
     </div>
     <div class="form-row cols-2">
       <div class="form-group"><label>Follow-up Interval</label>
-        <select name="asa_follow_up_interval"><option value="">&mdash;</option><option>24 hours</option><option>1 week</option><option>2 weeks</option><option>1 month</option><option>3 months</option></select>
+        <select name="de_follow_up_interval"><option value="">&mdash;</option><option>24 hours</option><option>1 week</option><option>2 weeks</option><option>1 month</option><option>3 months</option></select>
       </div>
-      <div class="form-group"><label>Clinical Notes</label><input name="asa_clinical_notes"></div>
+      <div class="form-group"><label>Clinical Notes</label><input name="de_clinical_notes"></div>
     </div>
     </div>
     <div id="focus-glaucoma">
@@ -400,7 +489,25 @@ var ICD10_BY_DX = {
       }
     }
     if (isFocusOn('focus-anterior')) {
-      var sev = fieldValue('asa_severity'), code = fieldValue('asa_primary_diagnosis_code');
+      var antSev = fieldValue('ant_severity'), antCode = fieldValue('ant_primary_diagnosis_code'),
+          ptOd = fieldValue('ant_pterygium_pinguecula_od'), ptOs = fieldValue('ant_pterygium_pinguecula_os'),
+          catOd = fieldValue('ant_lens_cataract_type_od'), catOs = fieldValue('ant_lens_cataract_type_os');
+      if (antSev || antCode || (ptOd && ptOd !== 'None') || (ptOs && ptOs !== 'None') ||
+          (catOd && catOd !== 'None') || (catOs && catOs !== 'None')) {
+        var s2b = (antSev ? antSev + ' ' : '') + 'anterior segment findings';
+        if (antCode) s2b += ' (' + antCode + ')';
+        s2b += '.';
+        var findings = [];
+        if (ptOd && ptOd !== 'None') findings.push(ptOd + ' OD');
+        if (ptOs && ptOs !== 'None') findings.push(ptOs + ' OS');
+        if (catOd && catOd !== 'None') findings.push(catOd + ' cataract OD');
+        if (catOs && catOs !== 'None') findings.push(catOs + ' cataract OS');
+        if (findings.length) s2b += ' ' + findings.join(', ') + '.';
+        parts.push(s2b);
+      }
+    }
+    if (isFocusOn('focus-dryeye')) {
+      var sev = fieldValue('de_severity'), code = fieldValue('de_primary_diagnosis_code');
       if (sev || code) {
         var s2 = (sev ? sev + ' ' : '') + 'dry eye disease';
         if (code) s2 += ' (' + code + ')';
@@ -465,7 +572,12 @@ var ICD10_BY_DX = {
   function composePlan() {
     var parts = [];
     if (isFocusOn('focus-anterior')) {
-      var tx = checkedValues('asa_plan_therapeutics'), fu = fieldValue('asa_follow_up_interval');
+      var antTx = checkedValues('ant_plan_therapeutics'), antFu = fieldValue('ant_follow_up_interval');
+      if (antTx.length) parts.push(antTx.join(', ') + '.');
+      if (antFu) parts.push('Follow up in ' + antFu + '.');
+    }
+    if (isFocusOn('focus-dryeye')) {
+      var tx = checkedValues('de_plan_therapeutics'), fu = fieldValue('de_follow_up_interval');
       if (tx.length) parts.push(tx.join(', ') + '.');
       if (fu) parts.push('Follow up in ' + fu + '.');
     }
@@ -509,13 +621,14 @@ var ICD10_BY_DX = {
 
   document.querySelectorAll(
     '#focus-refractive input, #focus-refractive select, #focus-anterior input, #focus-anterior select, ' +
+    '#focus-dryeye input, #focus-dryeye select, ' +
     '#focus-glaucoma input, #focus-glaucoma select, ' +
     '#focus-binocular input, #focus-binocular select, ' +
     '#focus-surgery input, #focus-surgery select, #focus-surgery textarea, ' +
     '.focus-toggle, [name="follow_up_weeks"]'
   ).forEach(function (el) {
     // 'change' covers selects/checkboxes immediately; 'input' is also needed
-    // for text/number fields (asa_primary_diagnosis_code, follow_up_weeks,
+    // for text/number fields (ant_primary_diagnosis_code, follow_up_weeks,
     // etc.), since 'change' on those only fires after the field loses focus.
     el.addEventListener('change', refresh);
     el.addEventListener('input', refresh);

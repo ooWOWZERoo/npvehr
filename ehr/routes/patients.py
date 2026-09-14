@@ -476,7 +476,7 @@ def patient_glaucoma_trend(request: Request, patient_id: int, db: Session = Depe
     (VISION_EHR_DATA_STANDARDS_RESEARCH.md 5.3) -- the one dashboard of the
     five that wants trending across visits, unlike the single-visit-snapshot
     shape used elsewhere. GlaucomaTracking stays exam-scoped (same as
-    Refraction/AnteriorSegmentAssessment); this route just walks a patient's
+    Refraction/DryEyeAssessment/AnteriorSegmentAssessment); this route just walks a patient's
     exam history collecting each exam's tracking row, rather than the table
     itself carrying a redundant patient_id."""
     p = _get_patient_or_404(db, patient_id)

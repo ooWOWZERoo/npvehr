@@ -190,6 +190,70 @@ def test_icd10_suggestion_and_diagnosis_driven_recall_interval(logged_in_page, l
     assert weeks.input_value() == "99"
 
 
+def test_anterior_segment_focus_toggle_and_composer(logged_in_page, live_server):
+    """Anterior Segment (ehr/templates/exams/form.html, v2.23) -- a real
+    structural exam (conjunctiva/cornea/anterior chamber/iris/lens), split
+    out from the old combined "Anterior Segment / Dry Eye" dashboard (which
+    was entirely dry-eye content -- see test_dry_eye_focus_toggle_and_composer
+    below for that one). Verifies the second Visit Focus chip shows/hides its
+    own section independently of Dry Eye's, and the composer's anterior-
+    segment clauses populate Assessment & Plan from the pterygium/cataract
+    findings."""
+    page = logged_in_page
+    page.goto(live_server + "/exams/new")
+    anterior_section = page.locator("#focus-anterior")
+    dryeye_section = page.locator("#focus-dryeye")
+    assert not anterior_section.is_visible()
+    assert not dryeye_section.is_visible()
+    page.locator('.focus-toggle[data-target="focus-anterior"]').check()
+    assert anterior_section.is_visible()
+    assert not dryeye_section.is_visible()
+
+    page.fill('input[name="ant_primary_diagnosis_code"]', "H11.031")
+    page.locator('select[name="ant_severity"]').select_option("Mild")
+    page.locator('select[name="ant_pterygium_pinguecula_od"]').select_option("Pterygium")
+    assessment = page.locator("#assessment").input_value()
+    assert "H11.031" in assessment
+    assert "Pterygium OD" in assessment
+
+    page.locator('select[name="ant_lens_cataract_type_od"]').select_option("Nuclear Sclerosis")
+    assert "Nuclear Sclerosis cataract OD" in page.locator("#assessment").input_value()
+
+    page.locator('input[name="ant_plan_therapeutics"][value="Cataract Surgery Referral"]').check()
+    page.locator('select[name="ant_follow_up_interval"]').select_option("6 months")
+    plan = page.locator("#plan").input_value()
+    assert "Cataract Surgery Referral" in plan
+    assert "6 months" in plan
+
+
+def test_dry_eye_focus_toggle_and_composer(logged_in_page, live_server):
+    """Dry Eye / Ocular Surface Disease (ehr/templates/exams/form.html,
+    v2.23) -- the dashboard built in v2.11 under the misleading name
+    "Anterior Segment / Dry Eye" (it was entirely dry-eye/OSD content:
+    conjunctival injection, corneal staining, MGD, TBUT, Schirmer), renamed
+    and given its own dedicated Visit Focus chip separate from the real,
+    new Anterior Segment structural exam above. Verifies the toggle and
+    composer behave exactly as the old combined dashboard did."""
+    page = logged_in_page
+    page.goto(live_server + "/exams/new")
+    dryeye_section = page.locator("#focus-dryeye")
+    assert not dryeye_section.is_visible()
+    page.locator('.focus-toggle[data-target="focus-dryeye"]').check()
+    assert dryeye_section.is_visible()
+
+    page.fill('input[name="de_primary_diagnosis_code"]', "H04.123")
+    page.locator('select[name="de_severity"]').select_option("Moderate")
+    assessment = page.locator("#assessment").input_value()
+    assert "Moderate dry eye disease" in assessment
+    assert "H04.123" in assessment
+
+    page.locator('input[name="de_plan_therapeutics"][value="Preservative-Free Tears"]').check()
+    page.locator('select[name="de_follow_up_interval"]').select_option("2 weeks")
+    plan = page.locator("#plan").input_value()
+    assert "Preservative-Free Tears" in plan
+    assert "2 weeks" in plan
+
+
 def test_glaucoma_focus_toggle_composer_and_trend_view(logged_in_page, live_server):
     """Posterior Segment / Glaucoma (ehr/templates/exams/form.html,
     ehr/templates/patients/glaucoma_trend_tab.html) -- verifies the third

@@ -1,6 +1,6 @@
 # New Path Vision EHR — Master Build Backlog
 
-**Status:** Living tracking document. **Baseline as of:** spec v2.22 / research doc v2.22 (2026-09-14).
+**Status:** Living tracking document. **Baseline as of:** spec v2.23 / research doc v2.23 (2026-09-14).
 
 ## Purpose and how to use this document
 
@@ -25,7 +25,8 @@ This consolidates every outstanding build item, investigation, and test scattere
 - [x] **CSRF protection** — a long-tracked security gap (§7). **Done, v2.19** — see baseline spec §37.7.
 - [x] **Per-patient document storage + Problem List, first slice** — prompted by a gap analysis against a real visit-summary document export. **Done, v2.20** — see baseline spec §39, research doc §8.
 - [x] **Pupil exam fields** — next item picked from §12's visit-summary gaps. **Done, v2.21** — see baseline spec §40, research doc §8.1.
-- [x] **Motility and confrontation visual field fields** — next item picked from §12's visit-summary gaps. **Done, v2.22** — see baseline spec §41, research doc §8.2. Pick the next item from the sections below, or from §12's remaining visit-summary gaps.
+- [x] **Motility and confrontation visual field fields** — next item picked from §12's visit-summary gaps. **Done, v2.22** — see baseline spec §41, research doc §8.2.
+- [x] **Anterior Segment / Dry Eye split** — user request: separate the two, fully scoped. **Done, v2.23** — see baseline spec §42, research doc §8.3. `AnteriorSegmentAssessment` renamed to `DryEyeAssessment` (no data change); a real, new structural Anterior Segment dashboard built alongside it. Also resolves §12's "conjunctiva/anterior-chamber/iris as discrete slit-lamp structures" item. Pick the next item from the sections below, or from §12's remaining visit-summary gaps.
 
 ---
 
@@ -160,7 +161,7 @@ A real visit-summary document export prompted a full component-by-component gap 
 
 - [x] **Pupil exam — size/reactivity/APD per eye, light/dark/near measurements. Done, v2.21** — see baseline spec §40, research doc §8.1. Ten new nullable columns on `EyeExam` (flat columns like Visual Acuity/Slit Lamp/Fundus, not a new Visit Focus dashboard).
 - [x] **Motility and confrontation visual fields as structured OD/OS data. Done, v2.22** — see baseline spec §41, research doc §8.2. Four new nullable columns on `EyeExam` (flat columns, same treatment as pupil exam fields), distinct from the pre-existing `cover_test` field (ocular alignment, a different clinical concept).
-- [ ] Conjunctiva / anterior chamber / iris as discrete slit-lamp structures (only lids/cornea/lens exist today)
+- [x] **Conjunctiva / anterior chamber / iris as discrete slit-lamp structures. Done, v2.23** — see baseline spec §42, research doc §8.3. Built as part of a full structural Anterior Segment dashboard (also covering cornea pathology and lens/cataract grading), split out from the old "Anterior Segment / Dry Eye" dashboard which was entirely dry-eye content.
 - [ ] Vitreous as a discrete fundus structure, and a numeric CD ratio on the general exam (today it only exists on `GlaucomaTracking`)
 - [ ] Structured review of systems (the source document's large systemic-symptom checklist)
 - [ ] Structured social history (alcohol/tobacco screening) — no fields exist on `Patient` at all

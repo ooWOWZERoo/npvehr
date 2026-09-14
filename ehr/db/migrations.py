@@ -807,6 +807,64 @@ def migration_022_motility_and_confrontation_vf(conn):
         _add_column_if_missing(conn, "eye_exams", "confrontation_vf_od", "VARCHAR")
         _add_column_if_missing(conn, "eye_exams", "confrontation_vf_os", "VARCHAR")
 
+# ---------------------------------------------------------------------------
+# Migration: 023 -- rename `anterior_segment_assessments` to
+# `dry_eye_assessments` (v2.23). The table built in v2.11 under the
+# "Anterior Segment" name is, and always was, entirely dry-eye/OSD content
+# (conjunctival injection, corneal staining, MGD, TBUT, Schirmer) -- this
+# corrects the name without touching any column or row. Guarded so it only
+# fires once, on an install that actually has the old name and not yet the
+# new one; a fresh install skips it (this migration runs before
+# create_all(), so on a brand-new database neither table exists yet --
+# create_all() then creates both `dry_eye_assessments` and the new, separate
+# `anterior_segment_assessments` fresh, straight from the current models).
+# ---------------------------------------------------------------------------
+def migration_023_rename_anterior_segment_to_dry_eye(conn):
+    if _table_exists(conn, "anterior_segment_assessments") and not _table_exists(conn, "dry_eye_assessments"):
+        conn.execute(text("ALTER TABLE anterior_segment_assessments RENAME TO dry_eye_assessments"))
+
+# ---------------------------------------------------------------------------
+# Migration: 024 -- create the new, real `anterior_segment_assessments`
+# (v2.23) -- a structural exam of conjunctiva/cornea/anterior chamber/iris/
+# lens, distinct from `dry_eye_assessments` above. Runs after migration 023
+# has (if needed) already renamed the old table away, so this name is free.
+# Brand-new table, plain CREATE TABLE IF NOT EXISTS, same pattern as every
+# other dashboard table.
+# ---------------------------------------------------------------------------
+def migration_024_create_anterior_segment_assessments(conn):
+    conn.execute(text(f"""
+        CREATE TABLE IF NOT EXISTS anterior_segment_assessments (
+            id {_pk_ddl(conn)},
+            exam_id INTEGER NOT NULL,
+            primary_diagnosis_code VARCHAR,
+            severity VARCHAR,
+            conjunctival_injection_od VARCHAR, conjunctival_injection_os VARCHAR,
+            conjunctival_discharge_od VARCHAR, conjunctival_discharge_os VARCHAR,
+            conjunctival_follicles_papillae_od VARCHAR, conjunctival_follicles_papillae_os VARCHAR,
+            conjunctival_chemosis_od VARCHAR, conjunctival_chemosis_os VARCHAR,
+            corneal_epithelial_defect_od VARCHAR, corneal_epithelial_defect_os VARCHAR,
+            corneal_edema_od VARCHAR, corneal_edema_os VARCHAR,
+            corneal_infiltrate_od VARCHAR, corneal_infiltrate_os VARCHAR,
+            corneal_arcus_od VARCHAR, corneal_arcus_os VARCHAR,
+            corneal_guttata_od VARCHAR, corneal_guttata_os VARCHAR,
+            pterygium_pinguecula_od VARCHAR, pterygium_pinguecula_os VARCHAR,
+            van_herick_grade_od VARCHAR, van_herick_grade_os VARCHAR,
+            ac_cells_flare_od VARCHAR, ac_cells_flare_os VARCHAR,
+            iris_pattern_od VARCHAR, iris_pattern_os VARCHAR,
+            iris_nvi_present_od VARCHAR, iris_nvi_present_os VARCHAR,
+            iris_pi_status_od VARCHAR, iris_pi_status_os VARCHAR,
+            lens_cataract_type_od VARCHAR, lens_cataract_type_os VARCHAR,
+            lens_cataract_grade_od VARCHAR, lens_cataract_grade_os VARCHAR,
+            plan_therapeutics VARCHAR,
+            follow_up_interval VARCHAR,
+            clinical_notes TEXT
+        )
+    """))
+    conn.execute(text(
+        "CREATE INDEX IF NOT EXISTS ix_anterior_segment_assessments_exam "
+        "ON anterior_segment_assessments (exam_id)"
+    ))
+
 # Ordered list of (id, function). Adding new migrations: append, never edit past entries.
 COLUMN_MIGRATIONS = [
     ("001_appointment_columns", migration_001_appointment_columns),
@@ -826,6 +884,8 @@ COLUMN_MIGRATIONS = [
     ("020_create_documents_and_problems", migration_020_create_documents_and_problems),
     ("021_pupil_exam_fields", migration_021_pupil_exam_fields),
     ("022_motility_and_confrontation_vf", migration_022_motility_and_confrontation_vf),
+    ("023_rename_anterior_segment_to_dry_eye", migration_023_rename_anterior_segment_to_dry_eye),
+    ("024_create_anterior_segment_assessments", migration_024_create_anterior_segment_assessments),
 ]
 POST_CREATE_ALL_MIGRATIONS = [
     ("002_seed_appointment_types", migration_002_seed_appointment_types),
