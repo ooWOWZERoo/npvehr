@@ -777,6 +777,23 @@ def migration_020_create_documents_and_problems(conn):
         "ON problem_addenda (problem_id)"
     ))
 
+# ---------------------------------------------------------------------------
+# Migration: 021 -- pupil exam fields on `eye_exams` (v2.21, from the v2.20
+# visit-summary gap analysis, research doc 8). Flat ALTER TABLE columns, same
+# pattern as migration 015 -- pupils are core exam data like Slit Lamp/Fundus,
+# not a specialty dashboard behind a Visit Focus chip.
+# ---------------------------------------------------------------------------
+def migration_021_pupil_exam_fields(conn):
+    if _table_exists(conn, "eye_exams"):
+        for col in ("pupil_size_light_od", "pupil_size_light_os",
+                    "pupil_size_dark_od", "pupil_size_dark_os",
+                    "pupil_size_near_od", "pupil_size_near_os"):
+            _add_column_if_missing(conn, "eye_exams", col, "FLOAT")
+        _add_column_if_missing(conn, "eye_exams", "pupil_reactivity_od", "VARCHAR")
+        _add_column_if_missing(conn, "eye_exams", "pupil_reactivity_os", "VARCHAR")
+        _add_column_if_missing(conn, "eye_exams", "pupil_apd_finding", "VARCHAR")
+        _add_column_if_missing(conn, "eye_exams", "pupil_notes", "TEXT")
+
 # Ordered list of (id, function). Adding new migrations: append, never edit past entries.
 COLUMN_MIGRATIONS = [
     ("001_appointment_columns", migration_001_appointment_columns),
@@ -794,6 +811,7 @@ COLUMN_MIGRATIONS = [
     ("018_create_binocular_vision_assessments", migration_018_create_binocular_vision_assessments),
     ("019_create_surgery_comanagement_trackings", migration_019_create_surgery_comanagement_trackings),
     ("020_create_documents_and_problems", migration_020_create_documents_and_problems),
+    ("021_pupil_exam_fields", migration_021_pupil_exam_fields),
 ]
 POST_CREATE_ALL_MIGRATIONS = [
     ("002_seed_appointment_types", migration_002_seed_appointment_types),

@@ -55,6 +55,21 @@
   </div>
 </div>
 <div class="detail-grid" style="margin-top:1rem">
+  {% if exam.pupil_size_light_od or exam.pupil_size_light_os or exam.pupil_size_dark_od or exam.pupil_size_dark_os or exam.pupil_size_near_od or exam.pupil_size_near_os or exam.pupil_reactivity_od or exam.pupil_reactivity_os or exam.pupil_apd_finding or exam.pupil_notes %}
+  <div class="card"><h3>Pupils</h3>
+    <div class="table-responsive">
+    <table class="exam-table">
+      <tr><th></th><th>Light</th><th>Dark</th><th>Near</th><th>Reactivity</th></tr>
+      <tr><td>OD</td><td>{{ exam.pupil_size_light_od or '—' }}</td><td>{{ exam.pupil_size_dark_od or '—' }}</td><td>{{ exam.pupil_size_near_od or '—' }}</td><td>{{ exam.pupil_reactivity_od or '—' }}</td></tr>
+      <tr><td>OS</td><td>{{ exam.pupil_size_light_os or '—' }}</td><td>{{ exam.pupil_size_dark_os or '—' }}</td><td>{{ exam.pupil_size_near_os or '—' }}</td><td>{{ exam.pupil_reactivity_os or '—' }}</td></tr>
+    </table>
+    </div>
+    <dl class="dl-grid" style="margin-top:0.75rem">
+      <dt>APD</dt><dd>{{ exam.pupil_apd_finding or '—' }}</dd>
+      {% if exam.pupil_notes %}<dt>Notes</dt><dd>{{ exam.pupil_notes }}</dd>{% endif %}
+    </dl>
+  </div>
+  {% endif %}
   <div class="card"><h3>Slit Lamp</h3>
     <div class="table-responsive">
     <table class="exam-table">

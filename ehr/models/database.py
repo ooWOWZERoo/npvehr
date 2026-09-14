@@ -513,6 +513,21 @@ class EyeExam(Base):
     chief_complaint = Column(Text)
     od_sc = Column(String); os_sc = Column(String)
     od_cc = Column(String); os_cc = Column(String)
+    # Pupil exam (v2.21, from the v2.20 visit-summary gap analysis, research
+    # doc 8) -- flat columns on EyeExam like Slit Lamp/Fundus below, not an
+    # exam_id-FK child table like the five specialty dashboards: pupils are a
+    # core, always-relevant exam element (present on nearly every visit),
+    # not a diagnosis-driven Visit Focus area. Light/dark/near sizes are
+    # separate numeric measurements per the source document; APD (afferent
+    # pupillary defect, swinging-flashlight test) is inherently relative
+    # between the two eyes, so it's one field naming which eye (if any) is
+    # positive rather than a pair of per-eye columns.
+    pupil_size_light_od = Column(Float); pupil_size_light_os = Column(Float)  # mm
+    pupil_size_dark_od = Column(Float); pupil_size_dark_os = Column(Float)  # mm
+    pupil_size_near_od = Column(Float); pupil_size_near_os = Column(Float)  # mm
+    pupil_reactivity_od = Column(String); pupil_reactivity_os = Column(String)  # Brisk / Sluggish / Non-reactive
+    pupil_apd_finding = Column(String)  # Negative / Positive OD / Positive OS
+    pupil_notes = Column(Text)
     iop_od = Column(Float); iop_os = Column(Float); iop_method = Column(String)
     cover_test = Column(String)
     sl_lids_od = Column(String); sl_lids_os = Column(String)

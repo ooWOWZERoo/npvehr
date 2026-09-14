@@ -45,6 +45,27 @@
     </table>
     </div>
     {% endfor %}
+    <div class="section-title">Pupils</div>
+    <div class="table-responsive">
+    <table class="exam-table">
+      <tr><th></th><th>Size, Light (mm)</th><th>Size, Dark (mm)</th><th>Size, Near (mm)</th><th>Reactivity</th></tr>
+      {% for eye in ['od', 'os'] %}
+      <tr>
+        <td>{{ eye|upper }}</td>
+        <td><input name="pupil_size_light_{{ eye }}" type="number" step="0.5" min="0"></td>
+        <td><input name="pupil_size_dark_{{ eye }}" type="number" step="0.5" min="0"></td>
+        <td><input name="pupil_size_near_{{ eye }}" type="number" step="0.5" min="0"></td>
+        <td><select name="pupil_reactivity_{{ eye }}"><option value="">&mdash;</option><option>Brisk</option><option>Sluggish</option><option>Non-reactive</option></select></td>
+      </tr>
+      {% endfor %}
+    </table>
+    </div>
+    <div class="form-row cols-2">
+      <div class="form-group"><label>APD (Swinging Flashlight Test)</label>
+        <select name="pupil_apd_finding"><option value="">&mdash;</option><option>Negative</option><option>Positive OD</option><option>Positive OS</option></select>
+      </div>
+      <div class="form-group"><label>Pupil Notes</label><input name="pupil_notes"></div>
+    </div>
     <div class="section-title">IOP &amp; Cover Test</div>
     <div class="form-row cols-3">
       <div class="form-group"><label>IOP OD (mmHg)</label><input name="iop_od" type="number" step="0.5"></div>

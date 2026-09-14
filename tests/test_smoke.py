@@ -58,6 +58,37 @@ def test_new_exam_form_loads(logged_in_page, live_server):
     assert "/login" not in page.url
 
 
+def test_pupil_exam_fields_save_and_display(logged_in_page, live_server):
+    """Pupil exam (ehr/models/database.py EyeExam.pupil_*, v2.21) -- flat
+    columns on EyeExam, not a Visit Focus dashboard, since pupils are core
+    exam data present on nearly every visit. Verifies the fields save and
+    show on the exam detail page, and that the Pupils card doesn't render
+    at all for an exam where none of them were filled in."""
+    page = logged_in_page
+    page.goto(live_server + "/exams/new")
+    page.fill('input[name="pupil_size_light_od"]', "3.5")
+    page.fill('input[name="pupil_size_light_os"]', "3.5")
+    page.fill('input[name="pupil_size_dark_od"]', "6")
+    page.fill('input[name="pupil_size_dark_os"]', "6")
+    page.locator('select[name="pupil_reactivity_od"]').select_option("Brisk")
+    page.locator('select[name="pupil_reactivity_os"]').select_option("Brisk")
+    page.locator('select[name="pupil_apd_finding"]').select_option("Negative")
+    page.fill('input[name="pupil_notes"]', "PERRLA")
+    page.locator('button[type="submit"]', has_text="Save Exam").click()
+
+    page.wait_for_url(re.compile(r"/exams/\d+"))
+    assert page.locator("h3", has_text="Pupils").is_visible()
+    assert page.locator("text=Brisk").first.is_visible()
+    assert page.locator("text=PERRLA").is_visible()
+
+    # An exam with no pupil data at all shows no Pupils card.
+    page.goto(live_server + "/exams/new")
+    page.locator('select[name="provider_id"]').select_option(index=1)
+    page.locator('button[type="submit"]', has_text="Save Exam").click()
+    page.wait_for_url(re.compile(r"/exams/\d+"))
+    assert page.locator("h3", has_text="Pupils").count() == 0
+
+
 def test_visit_focus_toggle_shows_hides_assessment_sections(logged_in_page, live_server):
     """The Visit Focus checkboxes (ehr/templates/exams/form.html) are the one
     behavior curl-based route checks can't confirm -- this is real client-side

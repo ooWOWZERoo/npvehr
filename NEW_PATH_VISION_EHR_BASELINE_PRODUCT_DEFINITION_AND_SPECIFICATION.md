@@ -1,7 +1,7 @@
 # New Path Vision EHR
 ## Baseline Product Definition and Current-State Functional Specification
 
-**Document version:** 2.20 (supersedes v2.19; adds generic per-patient document storage with an explicit cross-patient-contamination guard, and a first slice of a structured, longitudinal Problem List with exam-linked addenda; see new §39; prompted by a gap analysis against a real visit-summary document export; none of this bears on the four go-live prerequisites, which are unchanged from v2.6)
+**Document version:** 2.21 (supersedes v2.20; adds structured pupil exam fields to `EyeExam` — size at light/dark/near and reactivity per eye, plus an APD finding — the next item picked from the v2.20 visit-summary gap analysis; see new §40; none of this bears on the four go-live prerequisites, which are unchanged from v2.6)
 **Baseline date:** September 9, 2026
 **Application-reported version:** 1.0.0
 **Baseline source:** `setup_ehr.py` self-contained scaffold script (locally generated `visioncare_ehr/` project directory; see §2.2)
@@ -2938,3 +2938,33 @@ No PDF rendering of any kind (this app still has zero PDF-generation capability;
 | New capability | Problem List, first slice: new `Problem`/`ProblemAddendum` tables, patient-scoped (not exam-scoped, unlike the five clinical dashboards) so a chronic diagnosis can accumulate dated notes across many visits. New Problem List tab; new-exam-form integration lets checking an active problem while saving an exam append a linked, dated addendum. See new §39.3. |
 | Updated | `VISION_EHR_DATA_STANDARDS_RESEARCH.md` and `BUILD_BACKLOG.md` updated to record what this round built and to track the remaining visit-summary gaps (pupil exam, structured ROS/social history, diagnostic-imaging order/result tracking, e-signature/lock, PDF rendering) as a new backlog section. |
 | Explicitly not done | No PDF rendering. No pupil exam, review-of-systems, social-history, or diagnostic-imaging-order data model work. No e-signature/lock workflow. No record-level authorization beyond the existing session-auth-for-any-staff model. No change to the existing free-text `EyeExam.assessment`/`diagnosis_codes` fields. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |
+
+## 40. Pupil Exam Fields (v2.21)
+
+### 40.1 Origin
+
+The next item picked from the v2.20 visit-summary gap analysis (§39.1, research doc §8): pupil exam data (size at light/dark/near, reactivity, and an afferent pupillary defect finding) had no fields anywhere in the schema, despite being a routine, near-universal part of a comprehensive eye exam — unlike the five clinical dashboards (§12.5c–g), which are diagnosis-driven and only apply when a Visit Focus chip is checked.
+
+### 40.2 Modeling decision: flat `EyeExam` columns, not a Visit Focus dashboard
+
+Pupils are core exam data, present on nearly every visit, the same category as Visual Acuity, Slit Lamp, and Fundus — all of which are already flat columns directly on `EyeExam`, not exam_id-FK child tables behind a Visit Focus toggle. The five specialty dashboards (§12.5c–g) exist specifically for diagnosis-driven assessments that only apply to a subset of visits (glaucoma tracking, binocular vision therapy, etc.); pupils don't fit that shape, so this round added ten new nullable columns to `EyeExam` (migration `021_pupil_exam_fields`, same `_add_column_if_missing` ALTER TABLE pattern as migration 015's refractive-assessment columns) rather than a new table: `pupil_size_light_od/os`, `pupil_size_dark_od/os`, `pupil_size_near_od/os` (all `FLOAT`, mm), `pupil_reactivity_od/os` (`VARCHAR`: Brisk / Sluggish / Non-reactive), `pupil_apd_finding` (`VARCHAR`: Negative / Positive OD / Positive OS — one field, not a per-eye pair, since APD is inherently a relative finding between the two eyes from the swinging-flashlight test), and `pupil_notes` (`TEXT`).
+
+### 40.3 Routes and templates
+
+`ehr/routes/exams.py`'s `create_exam` reads and stores all ten fields unconditionally, the same as the other core exam fields (Slit Lamp, Fundus) it sits beside — no "any subset, all optional" conditional-row logic is needed since these are plain nullable columns, not a child table. `exams/form.html` gained a new "Pupils" section (a two-row OD/OS table plus an APD dropdown and a notes field) positioned after Visual Acuity/Refraction and before IOP & Cover Test, matching the source document's own exam ordering. `exams/detail.html` gained a conditional "Pupils" card (shown only when at least one pupil field was actually filled in) alongside the existing Slit Lamp/Fundus cards.
+
+### 40.4 Verified
+
+`python3 -m py_compile` on every touched Python file. Local SQLite instance: migration `021_pupil_exam_fields` adds all ten columns cleanly to a fresh database and is idempotent on re-run; `sqlalchemy.inspect` confirms the columns. End-to-end via `curl` against a running instance: an exam saved with pupil data displays it correctly on the detail page; an exam saved with none of the ten fields filled in shows no Pupils card at all (confirmed absent, not just empty). Full Playwright suite passes (18 tests), including a new `test_pupil_exam_fields_save_and_display` covering both the populated and empty-state cases through a real browser.
+
+### 40.5 Explicitly not done
+
+No changes to any of the five existing Visit Focus dashboards. No motility/confrontation-visual-field structured data, structured review of systems, structured social history, or diagnostic-imaging order/result tracking — all remain tracked in `BUILD_BACKLOG.md` §12 alongside the rest of the v2.20 gap analysis's still-open items.
+
+**Version 2.21 change log (relative to v2.20) — adds structured pupil exam fields, the next item from the v2.20 visit-summary gap analysis:**
+
+| Area | Change |
+| --- | --- |
+| New capability | Ten new nullable columns on `EyeExam` (migration `021_pupil_exam_fields`): pupil size at light/dark/near and reactivity per eye, plus a single APD (afferent pupillary defect) finding field. Modeled as flat columns, not a new Visit Focus dashboard, since pupils are core exam data like Visual Acuity/Slit Lamp/Fundus rather than a diagnosis-driven specialty assessment. See new §40. |
+| Updated | `exams/form.html` gained a new "Pupils" section; `exams/detail.html` gained a conditional Pupils card. `BUILD_BACKLOG.md` §12 updated to mark this item done. |
+| Explicitly not done | No changes to the five existing Visit Focus dashboards. No motility/confrontation-visual-field, review-of-systems, social-history, or diagnostic-imaging-order work — all remain tracked in `BUILD_BACKLOG.md` §12. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |

@@ -1,6 +1,6 @@
 # New Path Vision EHR — Master Build Backlog
 
-**Status:** Living tracking document. **Baseline as of:** spec v2.20 / research doc v2.20 (2026-09-13).
+**Status:** Living tracking document. **Baseline as of:** spec v2.21 / research doc v2.21 (2026-09-14).
 
 ## Purpose and how to use this document
 
@@ -23,7 +23,8 @@ This consolidates every outstanding build item, investigation, and test scattere
 - [x] **Binocular Vision & Pediatrics (Vision Therapy) dashboard** — fourth of five clinical dashboards. **Done, v2.17** — see baseline spec §12.5f, research doc §5.4.
 - [x] **Pre-/Post-Operative Co-Management dashboard, with timeline view** — fifth and last clinical dashboard. **Done, v2.18** — see baseline spec §12.5g, research doc §5.5. §1 (Clinical Dashboards) is now fully closed out.
 - [x] **CSRF protection** — a long-tracked security gap (§7). **Done, v2.19** — see baseline spec §37.7.
-- [x] **Per-patient document storage + Problem List, first slice** — prompted by a gap analysis against a real visit-summary document export. **Done, v2.20** — see baseline spec §39, research doc §8. Pick the next item from the sections below, or from new §12's remaining visit-summary gaps.
+- [x] **Per-patient document storage + Problem List, first slice** — prompted by a gap analysis against a real visit-summary document export. **Done, v2.20** — see baseline spec §39, research doc §8.
+- [x] **Pupil exam fields** — next item picked from §12's visit-summary gaps. **Done, v2.21** — see baseline spec §40, research doc §8.1. Pick the next item from the sections below, or from §12's remaining visit-summary gaps.
 
 ---
 
@@ -156,7 +157,7 @@ Tracked here for visibility; the authoritative detail lives in the spec's go-liv
 
 A real visit-summary document export prompted a full component-by-component gap analysis this round; per-patient document storage and a Problem List first slice were picked from it and built (§0 above, spec §39). Everything else that document needs remains here, unscoped:
 
-- [ ] Pupil exam — size/reactivity/APD per eye, light/dark/near measurements; no fields exist anywhere today
+- [x] **Pupil exam — size/reactivity/APD per eye, light/dark/near measurements. Done, v2.21** — see baseline spec §40, research doc §8.1. Ten new nullable columns on `EyeExam` (flat columns like Visual Acuity/Slit Lamp/Fundus, not a new Visit Focus dashboard).
 - [ ] Motility and confrontation visual fields as structured OD/OS data — today only a single free-text `cover_test` field exists
 - [ ] Conjunctiva / anterior chamber / iris as discrete slit-lamp structures (only lids/cornea/lens exist today)
 - [ ] Vitreous as a discrete fundus structure, and a numeric CD ratio on the general exam (today it only exists on `GlaucomaTracking`)
