@@ -56,6 +56,8 @@ async def create_exam(request: Request, db: Session = Depends(get_db)):
         pupil_size_near_od=_f(g("pupil_size_near_od")), pupil_size_near_os=_f(g("pupil_size_near_os")),
         pupil_reactivity_od=g("pupil_reactivity_od"), pupil_reactivity_os=g("pupil_reactivity_os"),
         pupil_apd_finding=g("pupil_apd_finding"), pupil_notes=g("pupil_notes"),
+        motility_od=g("motility_od"), motility_os=g("motility_os"),
+        confrontation_vf_od=g("confrontation_vf_od"), confrontation_vf_os=g("confrontation_vf_os"),
         iop_od=_f(g("iop_od")), iop_os=_f(g("iop_os")), iop_method=g("iop_method"),
         cover_test=g("cover_test"),
         sl_lids_od=g("sl_lids_od"), sl_lids_os=g("sl_lids_os"),

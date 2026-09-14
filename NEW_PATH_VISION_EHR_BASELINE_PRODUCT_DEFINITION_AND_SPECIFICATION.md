@@ -1,7 +1,7 @@
 # New Path Vision EHR
 ## Baseline Product Definition and Current-State Functional Specification
 
-**Document version:** 2.21 (supersedes v2.20; adds structured pupil exam fields to `EyeExam` — size at light/dark/near and reactivity per eye, plus an APD finding — the next item picked from the v2.20 visit-summary gap analysis; see new §40; none of this bears on the four go-live prerequisites, which are unchanged from v2.6)
+**Document version:** 2.22 (supersedes v2.21; adds structured motility and confrontation visual field data to `EyeExam`, the next item picked from the v2.20 visit-summary gap analysis; see new §41; none of this bears on the four go-live prerequisites, which are unchanged from v2.6)
 **Baseline date:** September 9, 2026
 **Application-reported version:** 1.0.0
 **Baseline source:** `setup_ehr.py` self-contained scaffold script (locally generated `visioncare_ehr/` project directory; see §2.2)
@@ -2968,3 +2968,33 @@ No changes to any of the five existing Visit Focus dashboards. No motility/confr
 | New capability | Ten new nullable columns on `EyeExam` (migration `021_pupil_exam_fields`): pupil size at light/dark/near and reactivity per eye, plus a single APD (afferent pupillary defect) finding field. Modeled as flat columns, not a new Visit Focus dashboard, since pupils are core exam data like Visual Acuity/Slit Lamp/Fundus rather than a diagnosis-driven specialty assessment. See new §40. |
 | Updated | `exams/form.html` gained a new "Pupils" section; `exams/detail.html` gained a conditional Pupils card. `BUILD_BACKLOG.md` §12 updated to mark this item done. |
 | Explicitly not done | No changes to the five existing Visit Focus dashboards. No motility/confrontation-visual-field, review-of-systems, social-history, or diagnostic-imaging-order work — all remain tracked in `BUILD_BACKLOG.md` §12. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |
+
+## 41. Motility and Confrontation Visual Field Fields (v2.22)
+
+### 41.1 Origin
+
+The next item picked from the v2.20 visit-summary gap analysis (§39.1, research doc §8), following the same pattern as pupil exam fields (§40): motility (extraocular muscle movement through the cardinal gaze positions) and confrontation visual fields (peripheral vision screened by hand-motion/finger-counting per eye) had no structured fields — only the pre-existing `cover_test` free-text field, which covers ocular *alignment* (phoria/tropia), a distinct clinical concept from muscle *movement* or *peripheral field* testing.
+
+### 41.2 Modeling decision: flat `EyeExam` columns, same treatment as pupils
+
+Like pupils (§40.2), motility and confrontation VF are routine, per-eye exam elements checked on nearly every comprehensive visit — not a diagnosis-driven Visit Focus area. This round added four new nullable `VARCHAR` columns to `EyeExam` (migration `022_motility_and_confrontation_vf`, same `_add_column_if_missing` pattern as migration 021): `motility_od`/`motility_os` (e.g. "Full", or a description of any restriction) and `confrontation_vf_od`/`confrontation_vf_os` (e.g. "Full to finger counting", or a description of any field defect).
+
+### 41.3 Routes and templates
+
+`ehr/routes/exams.py`'s `create_exam` reads and stores all four fields unconditionally, the same as the other core exam fields it sits beside. `exams/form.html` gained a new "Motility & Confrontation Visual Fields" section (an OD/OS table) positioned after Pupils and before IOP & Cover Test. `exams/detail.html` gained a conditional "Motility & Confrontation VF" card (shown only when at least one of the four fields was filled in), alongside the existing Pupils/Slit Lamp/Fundus cards.
+
+### 41.4 Verified
+
+`python3 -m py_compile` on every touched Python file. Local SQLite instance: migration `022_motility_and_confrontation_vf` adds all four columns cleanly to a fresh database and is idempotent on re-run; `sqlalchemy.inspect` confirms the columns. End-to-end via `curl` against a running instance: an exam saved with motility/confrontation-VF data displays it correctly on the detail page; an exam saved with none of the four fields filled in shows no card at all. Full Playwright suite passes (19 tests), including a new `test_motility_and_confrontation_vf_save_and_display` covering both the populated and empty-state cases through a real browser.
+
+### 41.5 Explicitly not done
+
+No changes to any of the five existing Visit Focus dashboards or to the pre-existing `cover_test` field. No conjunctiva/anterior-chamber/iris/vitreous discrete structures, structured review of systems, structured social history, or diagnostic-imaging order/result tracking — all remain tracked in `BUILD_BACKLOG.md` §12.
+
+**Version 2.22 change log (relative to v2.21) — adds structured motility and confrontation visual field data, the next item from the v2.20 visit-summary gap analysis:**
+
+| Area | Change |
+| --- | --- |
+| New capability | Four new nullable `VARCHAR` columns on `EyeExam` (migration `022_motility_and_confrontation_vf`): motility and confrontation visual field per eye. Modeled as flat columns, same treatment as pupil exam fields (§40), since these are core exam data rather than a diagnosis-driven specialty assessment. See new §41. |
+| Updated | `exams/form.html` gained a new "Motility & Confrontation Visual Fields" section; `exams/detail.html` gained a conditional card. `BUILD_BACKLOG.md` §12 updated to mark this item done. |
+| Explicitly not done | No changes to the five existing Visit Focus dashboards or the pre-existing `cover_test` field. No discrete conjunctiva/AC/iris/vitreous structures, review-of-systems, social-history, or diagnostic-imaging-order work — all remain tracked in `BUILD_BACKLOG.md` §12. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |

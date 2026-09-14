@@ -528,6 +528,16 @@ class EyeExam(Base):
     pupil_reactivity_od = Column(String); pupil_reactivity_os = Column(String)  # Brisk / Sluggish / Non-reactive
     pupil_apd_finding = Column(String)  # Negative / Positive OD / Positive OS
     pupil_notes = Column(Text)
+    # Motility and confrontation visual fields (v2.22, from the v2.20
+    # visit-summary gap analysis, research doc 8/BUILD_BACKLOG.md 12) --
+    # same flat-column treatment as pupils above, not a new dashboard: both
+    # are routine, per-eye exam elements checked on nearly every comprehensive
+    # visit. Distinct from cover_test (ocular alignment/phoria-tropia), which
+    # already existed -- motility is extraocular muscle *movement* through
+    # the cardinal gaze positions, confrontation VF is peripheral vision
+    # screened by hand-motion/finger-counting per eye.
+    motility_od = Column(String); motility_os = Column(String)  # e.g. 'Full', 'Restricted -- describe'
+    confrontation_vf_od = Column(String); confrontation_vf_os = Column(String)  # e.g. 'Full to finger counting'
     iop_od = Column(Float); iop_os = Column(Float); iop_method = Column(String)
     cover_test = Column(String)
     sl_lids_od = Column(String); sl_lids_os = Column(String)

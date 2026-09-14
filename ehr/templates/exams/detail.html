@@ -70,6 +70,17 @@
     </dl>
   </div>
   {% endif %}
+  {% if exam.motility_od or exam.motility_os or exam.confrontation_vf_od or exam.confrontation_vf_os %}
+  <div class="card"><h3>Motility &amp; Confrontation VF</h3>
+    <div class="table-responsive">
+    <table class="exam-table">
+      <tr><th></th><th>Motility</th><th>Confrontation VF</th></tr>
+      <tr><td>OD</td><td>{{ exam.motility_od or '—' }}</td><td>{{ exam.confrontation_vf_od or '—' }}</td></tr>
+      <tr><td>OS</td><td>{{ exam.motility_os or '—' }}</td><td>{{ exam.confrontation_vf_os or '—' }}</td></tr>
+    </table>
+    </div>
+  </div>
+  {% endif %}
   <div class="card"><h3>Slit Lamp</h3>
     <div class="table-responsive">
     <table class="exam-table">

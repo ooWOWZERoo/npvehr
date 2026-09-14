@@ -794,6 +794,19 @@ def migration_021_pupil_exam_fields(conn):
         _add_column_if_missing(conn, "eye_exams", "pupil_apd_finding", "VARCHAR")
         _add_column_if_missing(conn, "eye_exams", "pupil_notes", "TEXT")
 
+# ---------------------------------------------------------------------------
+# Migration: 022 -- motility and confrontation visual field columns on
+# `eye_exams` (v2.22, from the v2.20 visit-summary gap analysis, research doc
+# 8). Same flat-column pattern as migration 021 -- these are routine per-eye
+# exam elements, not a specialty dashboard behind a Visit Focus chip.
+# ---------------------------------------------------------------------------
+def migration_022_motility_and_confrontation_vf(conn):
+    if _table_exists(conn, "eye_exams"):
+        _add_column_if_missing(conn, "eye_exams", "motility_od", "VARCHAR")
+        _add_column_if_missing(conn, "eye_exams", "motility_os", "VARCHAR")
+        _add_column_if_missing(conn, "eye_exams", "confrontation_vf_od", "VARCHAR")
+        _add_column_if_missing(conn, "eye_exams", "confrontation_vf_os", "VARCHAR")
+
 # Ordered list of (id, function). Adding new migrations: append, never edit past entries.
 COLUMN_MIGRATIONS = [
     ("001_appointment_columns", migration_001_appointment_columns),
@@ -812,6 +825,7 @@ COLUMN_MIGRATIONS = [
     ("019_create_surgery_comanagement_trackings", migration_019_create_surgery_comanagement_trackings),
     ("020_create_documents_and_problems", migration_020_create_documents_and_problems),
     ("021_pupil_exam_fields", migration_021_pupil_exam_fields),
+    ("022_motility_and_confrontation_vf", migration_022_motility_and_confrontation_vf),
 ]
 POST_CREATE_ALL_MIGRATIONS = [
     ("002_seed_appointment_types", migration_002_seed_appointment_types),

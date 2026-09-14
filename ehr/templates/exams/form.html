@@ -66,6 +66,19 @@
       </div>
       <div class="form-group"><label>Pupil Notes</label><input name="pupil_notes"></div>
     </div>
+    <div class="section-title">Motility &amp; Confrontation Visual Fields</div>
+    <div class="table-responsive">
+    <table class="exam-table">
+      <tr><th></th><th>Motility</th><th>Confrontation VF</th></tr>
+      {% for eye in ['od', 'os'] %}
+      <tr>
+        <td>{{ eye|upper }}</td>
+        <td><input name="motility_{{ eye }}" placeholder="Full"></td>
+        <td><input name="confrontation_vf_{{ eye }}" placeholder="Full to finger counting"></td>
+      </tr>
+      {% endfor %}
+    </table>
+    </div>
     <div class="section-title">IOP &amp; Cover Test</div>
     <div class="form-row cols-3">
       <div class="form-group"><label>IOP OD (mmHg)</label><input name="iop_od" type="number" step="0.5"></div>

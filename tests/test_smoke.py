@@ -89,6 +89,32 @@ def test_pupil_exam_fields_save_and_display(logged_in_page, live_server):
     assert page.locator("h3", has_text="Pupils").count() == 0
 
 
+def test_motility_and_confrontation_vf_save_and_display(logged_in_page, live_server):
+    """Motility & confrontation visual fields (ehr/models/database.py
+    EyeExam.motility_*/confrontation_vf_*, v2.22) -- flat columns on EyeExam,
+    same treatment as pupils (v2.21), not a Visit Focus dashboard. Verifies
+    the fields save and show on the exam detail page, and that the card
+    doesn't render at all for an exam where none of them were filled in."""
+    page = logged_in_page
+    page.goto(live_server + "/exams/new")
+    page.fill('input[name="motility_od"]', "Full")
+    page.fill('input[name="motility_os"]', "Full")
+    page.fill('input[name="confrontation_vf_od"]', "Full to finger counting")
+    page.fill('input[name="confrontation_vf_os"]', "Full to finger counting")
+    page.locator('button[type="submit"]', has_text="Save Exam").click()
+
+    page.wait_for_url(re.compile(r"/exams/\d+"))
+    assert page.locator("h3", has_text="Motility & Confrontation VF").is_visible()
+    assert page.locator("text=Full to finger counting").first.is_visible()
+
+    # An exam with no motility/CVF data at all shows no card for this section.
+    page.goto(live_server + "/exams/new")
+    page.locator('select[name="provider_id"]').select_option(index=1)
+    page.locator('button[type="submit"]', has_text="Save Exam").click()
+    page.wait_for_url(re.compile(r"/exams/\d+"))
+    assert page.locator("h3", has_text="Motility & Confrontation VF").count() == 0
+
+
 def test_visit_focus_toggle_shows_hides_assessment_sections(logged_in_page, live_server):
     """The Visit Focus checkboxes (ehr/templates/exams/form.html) are the one
     behavior curl-based route checks can't confirm -- this is real client-side
