@@ -556,11 +556,13 @@ document.querySelectorAll('.vf-body').forEach(function (body) {
 // tracked via each textarea's own native `input` event, which only fires on
 // a real keystroke, never on this script's own `.value =` assignment.
 // ICD-10 auto-suggestion lookup (VISION_EHR_DATA_STANDARDS_RESEARCH.md 7.2) --
-// a small hardcoded lookup for exactly the six diagnoses offered as chips
-// above, not a substitute for real ICD-10 code-set integration (4.4,
-// still deferred). Emmetropia is intentionally omitted -- normal refractive
-// status, not a billable diagnosis. Presbyopia/Anisometropia have no
-// laterality split in ICD-10 itself.
+// a small hardcoded lookup, not a substitute for real ICD-10 code-set
+// integration (4.4, still deferred). Every code below was checked against
+// the current (FY2026) ICD-10-CM tabular list at implementation time; a
+// terminology-server integration remains the only way to keep this
+// automatically current going forward. Emmetropia is intentionally omitted
+// -- normal refractive status, not a billable diagnosis. Presbyopia/
+// Anisometropia have no laterality split in ICD-10 itself.
 var ICD10_BY_DX = {
   'Myopia':        {OD: 'H52.11', OS: 'H52.12', OU: 'H52.13', '': 'H52.10'},
   'Hyperopia':     {OD: 'H52.01', OS: 'H52.02', OU: 'H52.03', '': 'H52.00'},
@@ -568,17 +570,37 @@ var ICD10_BY_DX = {
   'Presbyopia':    {OD: 'H52.4', OS: 'H52.4', OU: 'H52.4', '': 'H52.4'},
   'Anisometropia': {OD: 'H52.31', OS: 'H52.31', OU: 'H52.31', '': 'H52.31'}
 };
+// Anterior Segment: pterygium/pinguecula (per-eye) and age-related cataract
+// (per-eye, by structural subtype selected in the Lens table).
+var ICD10_PTERYGIUM = {OD: 'H11.031', OS: 'H11.032', OU: 'H11.033'};
+var ICD10_PINGUECULA = {OD: 'H11.151', OS: 'H11.152', OU: 'H11.153'};
+var ICD10_CATARACT_BY_TYPE = {
+  'Nuclear Sclerosis':         {OD: 'H25.11',  OS: 'H25.12',  OU: 'H25.13'},
+  'Cortical':                  {OD: 'H25.011', OS: 'H25.012', OU: 'H25.013'},
+  'Posterior Subcapsular':     {OD: 'H25.041', OS: 'H25.042', OU: 'H25.043'},
+  'Combined':                  {OD: 'H25.811', OS: 'H25.812', OU: 'H25.813'}
+};
+// Dry Eye: keratoconjunctivitis sicca / dry eye syndrome, per lacrimal gland.
+var ICD10_DRY_EYE = {OD: 'H04.121', OS: 'H04.122', OU: 'H04.123'};
+// Pre-/Post-Op: cataract-extraction aftercare status (no bilateral code
+// exists in ICD-10-CM for Z98.4 -- OU reports both single-eye codes).
+var ICD10_CATARACT_STATUS = {OD: 'Z98.41', OS: 'Z98.42', OU: 'Z98.41, Z98.42'};
 
 (function () {
   var assessmentEl = document.getElementById('assessment');
   var planEl = document.getElementById('plan');
   var diagnosisCodesEl = document.getElementById('diagnosis_codes');
   var followUpWeeksEl = document.getElementById('follow_up_weeks');
-  var assessmentEdited = false, planEdited = false, diagnosisCodesEdited = false, followUpWeeksEdited = false;
+  var antCodeEl = document.querySelector('[name="ant_primary_diagnosis_code"]');
+  var deCodeEl = document.querySelector('[name="de_primary_diagnosis_code"]');
+  var assessmentEdited = false, planEdited = false, diagnosisCodesEdited = false, followUpWeeksEdited = false,
+      antCodeEdited = false, deCodeEdited = false;
   assessmentEl.addEventListener('input', function () { assessmentEdited = true; });
   planEl.addEventListener('input', function () { planEdited = true; });
   diagnosisCodesEl.addEventListener('input', function () { diagnosisCodesEdited = true; });
   followUpWeeksEl.addEventListener('input', function () { followUpWeeksEdited = true; });
+  antCodeEl.addEventListener('input', function () { antCodeEdited = true; });
+  deCodeEl.addEventListener('input', function () { deCodeEdited = true; });
 
   function checkedValues(name) {
     return Array.prototype.map.call(
@@ -670,13 +692,80 @@ var ICD10_BY_DX = {
     return parts.join(' ');
   }
 
+  // Anterior Segment primary code: derived from whichever structural finding
+  // is most specific (pterygium/pinguecula, then cataract subtype), per eye.
+  // A clinician's own typed code always wins once they touch the field
+  // (tracked via antCodeEdited, same convention as assessment/plan).
+  function computeAntPrimaryCode() {
+    var codes = [];
+    ['od', 'os'].forEach(function (eye) {
+      var EYE = eye.toUpperCase();
+      var pg = fieldValue('ant_pterygium_pinguecula_' + eye);
+      if (pg === 'Pterygium') codes.push(ICD10_PTERYGIUM[EYE]);
+      else if (pg === 'Pinguecula') codes.push(ICD10_PINGUECULA[EYE]);
+      var cat = fieldValue('ant_lens_cataract_type_' + eye);
+      if (cat && cat !== 'None' && ICD10_CATARACT_BY_TYPE[cat]) codes.push(ICD10_CATARACT_BY_TYPE[cat][EYE]);
+    });
+    return dedupe(codes).join(', ');
+  }
+
+  // Dry Eye primary code: laterality inferred from which eye(s) actually
+  // have exam findings entered (any of its five per-eye fields non-blank).
+  function computeDePrimaryCode() {
+    var perEye = ['de_conjunctival_injection_', 'de_corneal_staining_', 'de_mgd_expression_', 'de_tbut_seconds_', 'de_schirmer_mm_'];
+    function eyeFilled(eye) {
+      return perEye.some(function (prefix) { return fieldValue(prefix + eye).trim() !== ''; });
+    }
+    var od = eyeFilled('od'), os = eyeFilled('os');
+    if (od && os) return ICD10_DRY_EYE.OU;
+    if (od) return ICD10_DRY_EYE.OD;
+    if (os) return ICD10_DRY_EYE.OS;
+    return '';
+  }
+
+  function dedupe(arr) {
+    return arr.filter(function (v, i) { return v && arr.indexOf(v) === i; });
+  }
+
+  // Rolls up every active section's ICD-10 code(s) into one comma-separated
+  // list -- refractive stays derived purely from its chips/laterality;
+  // anterior/dry eye include whatever computeAntPrimaryCode()/
+  // computeDePrimaryCode() produced (or a clinician's own typed override);
+  // glaucoma/binocular are typed directly (too variable -- staging, subtype,
+  // strabismus direction -- to derive safely from today's fields); surgery
+  // adds the cataract-extraction aftercare status code once a post-op
+  // milestone is reached.
   function composeDiagnosisCodes() {
-    if (!isFocusOn('focus-refractive')) return '';
-    var lat = fieldValue('refractive_laterality');
-    var codes = checkedValues('refractive_diagnosis')
-      .filter(function (dx) { return ICD10_BY_DX[dx]; })
-      .map(function (dx) { return ICD10_BY_DX[dx][lat] || ICD10_BY_DX[dx][''] ; });
-    return codes.join(', ');
+    var codes = [];
+    if (isFocusOn('focus-refractive')) {
+      var lat = fieldValue('refractive_laterality');
+      checkedValues('refractive_diagnosis').forEach(function (dx) {
+        if (ICD10_BY_DX[dx]) codes.push(ICD10_BY_DX[dx][lat] || ICD10_BY_DX[dx]['']);
+      });
+    }
+    if (isFocusOn('focus-anterior')) {
+      fieldValue('ant_primary_diagnosis_code').split(',').forEach(function (c) { c = c.trim(); if (c) codes.push(c); });
+    }
+    if (isFocusOn('focus-dryeye')) {
+      var deCode = fieldValue('de_primary_diagnosis_code');
+      if (deCode) codes.push(deCode);
+    }
+    if (isFocusOn('focus-glaucoma')) {
+      var gtCode = fieldValue('gt_primary_diagnosis_code');
+      if (gtCode) codes.push(gtCode);
+    }
+    if (isFocusOn('focus-binocular')) {
+      var bvCode = fieldValue('bv_primary_diagnosis_code');
+      if (bvCode) codes.push(bvCode);
+    }
+    if (isFocusOn('focus-surgery')) {
+      var proc = fieldValue('sx_surgical_procedure'), eye = fieldValue('sx_operative_eye'),
+          milestone = fieldValue('sx_current_milestone');
+      if (proc === 'Cataract Extraction with IOL' && milestone && milestone !== 'Pre-Op Clearance' && ICD10_CATARACT_STATUS[eye]) {
+        ICD10_CATARACT_STATUS[eye].split(', ').forEach(function (c) { codes.push(c); });
+      }
+    }
+    return dedupe(codes).join(', ');
   }
 
   function composeFollowUpWeeks() {
@@ -730,6 +819,10 @@ var ICD10_BY_DX = {
 
   function refresh() {
     if (!assessmentEdited) assessmentEl.value = composeAssessment();
+    // Per-section primary diagnosis codes must be set before
+    // composeDiagnosisCodes() runs, since it reads them from the live DOM.
+    if (!antCodeEdited) antCodeEl.value = computeAntPrimaryCode();
+    if (!deCodeEdited) deCodeEl.value = computeDePrimaryCode();
     if (!diagnosisCodesEdited) diagnosisCodesEl.value = composeDiagnosisCodes();
     // follow_up_weeks must be set before composePlan() runs -- its fallback
     // reads the live DOM value, so the auto-suggested weeks flows into the

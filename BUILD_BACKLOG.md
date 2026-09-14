@@ -1,6 +1,6 @@
 # New Path Vision EHR — Master Build Backlog
 
-**Status:** Living tracking document. **Baseline as of:** spec v2.24 / research doc v2.23 (2026-09-14).
+**Status:** Living tracking document. **Baseline as of:** spec v2.25 / research doc v2.24 (2026-09-14).
 
 ## Purpose and how to use this document
 
@@ -27,7 +27,8 @@ This consolidates every outstanding build item, investigation, and test scattere
 - [x] **Pupil exam fields** — next item picked from §12's visit-summary gaps. **Done, v2.21** — see baseline spec §40, research doc §8.1.
 - [x] **Motility and confrontation visual field fields** — next item picked from §12's visit-summary gaps. **Done, v2.22** — see baseline spec §41, research doc §8.2.
 - [x] **Anterior Segment / Dry Eye split** — user request: separate the two, fully scoped. **Done, v2.23** — see baseline spec §42, research doc §8.3. `AnteriorSegmentAssessment` renamed to `DryEyeAssessment` (no data change); a real, new structural Anterior Segment dashboard built alongside it. Also resolves §12's "conjunctiva/anterior-chamber/iris as discrete slit-lamp structures" item.
-- [x] **Visit Focus activation redesign** — user request: status dots, real accordions, a sticky chip row, prototyped first then built into the real form. **Done, v2.24** — see baseline spec §43. Layered on top of the existing chip/hidden-attribute mechanism; no route or dashboard-field changes. Pick the next item from the sections below, or from §12's remaining visit-summary gaps.
+- [x] **Visit Focus activation redesign** — user request: status dots, real accordions, a sticky chip row, prototyped first then built into the real form. **Done, v2.24** — see baseline spec §43. Layered on top of the existing chip/hidden-attribute mechanism; no route or dashboard-field changes.
+- [x] **ICD-10 coverage expansion for Anterior Segment / Dry Eye / Pre-Post-Op** — user request: confirm the composer keeps auto-populating for the dashboards added since v2.15, and bring the ICD-10 lookup up to date with as complete a set of diagnosis/aftercare codes as today's structured fields support. **Done, v2.25** — see baseline spec §44, research doc §7.2. Verified codes added for pterygium, pinguecula, three age-related cataract subtypes, dry eye syndrome, and cataract-extraction aftercare status; `diagnosis_codes` now aggregates every active Visit Focus section's code(s), not just Refractive's. Pick the next item from the sections below, or from §12's remaining visit-summary gaps.
 
 ---
 

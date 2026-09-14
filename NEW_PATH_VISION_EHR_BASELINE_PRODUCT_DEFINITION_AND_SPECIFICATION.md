@@ -1,7 +1,7 @@
 # New Path Vision EHR
 ## Baseline Product Definition and Current-State Functional Specification
 
-**Document version:** 2.24 (supersedes v2.23; redesigns the New Exam form's Visit Focus activation into a status-dot-plus-accordion pattern with a sticky chip row, layered on top of the existing chip/hidden-attribute mechanism rather than replacing it; see new §43; none of this bears on the four go-live prerequisites, which are unchanged from v2.6)
+**Document version:** 2.25 (supersedes v2.24; extends the composer's Assessment/Plan/ICD-10 auto-population to the Anterior Segment and Dry Eye dashboards added in v2.23, and expands the ICD-10 lookup with verified codes for pterygium/pinguecula, age-related cataract subtypes, dry eye syndrome, and cataract-extraction aftercare status, rolled up across every active Visit Focus section into one `diagnosis_codes` list; see new §44; none of this bears on the four go-live prerequisites, which are unchanged from v2.6)
 **Baseline date:** September 9, 2026
 **Application-reported version:** 1.0.0
 **Baseline source:** `setup_ehr.py` self-contained scaffold script (locally generated `visioncare_ehr/` project directory; see §2.2)
@@ -3082,3 +3082,48 @@ No change to which fields exist on any dashboard, or to the composer's narrative
 | New capability | The Visit Focus chip row is sticky within the page as it scrolls, so adding another assessment area mid-exam never means scrolling back to the top of a long visit. See §43.2. |
 | Updated | `ehr/templates/exams/form.html` (Visit Focus markup + script) and `ehr/static/css/app.css` (new `.vf-*` rules). No Python route changes. `tests/test_smoke.py` gained `test_visit_focus_status_dots_and_collapse`; every pre-existing Visit Focus/composer test passed unmodified. |
 | Explicitly not done | No new or changed dashboard fields. No stored `visit_focus` field. A pre-existing, unrelated mobile-width overflow issue was found but not fixed (now tracked, `BUILD_BACKLOG.md` §10). None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |
+
+## 44. ICD-10 Coverage Expansion for Anterior Segment / Dry Eye / Pre-Post-Op (v2.25)
+
+### 44.1 Origin
+
+Following the v2.24 Visit Focus redesign, the user asked to confirm that Assessment & Plan auto-population continues to cover every dashboard added since (Anterior Segment, Dry Eye) and to bring the ICD-10 lookup (§7.2, still a small hardcoded set per §4.4's deferred terminology-server decision) up to date with as complete a set of diagnosis/aftercare codes as the current structured fields can support.
+
+Verification confirmed the Assessment & Plan composer clauses for Anterior Segment and Dry Eye (added in v2.23) were already wired correctly and unaffected by v2.24's restructuring — this section documents that check plus the ICD-10 work that followed it.
+
+### 44.2 ICD-10 lookup expansion
+
+Every code below was checked against the current (FY2026) ICD-10-CM tabular list before being added — this remains a curated lookup for the fields this form actually captures, not a terminology-server integration (§4.4, still deferred):
+
+| Finding | Codes (OD / OS / OU) |
+| --- | --- |
+| Pterygium | H11.031 / H11.032 / H11.033 |
+| Pinguecula | H11.151 / H11.152 / H11.153 |
+| Age-related nuclear sclerotic cataract | H25.11 / H25.12 / H25.13 |
+| Age-related cortical cataract | H25.011 / H25.012 / H25.013 |
+| Age-related posterior subcapsular cataract | H25.041 / H25.042 / H25.043 |
+| Combined forms of age-related cataract | H25.811 / H25.812 / H25.813 |
+| Dry eye syndrome (lacrimal gland) | H04.121 / H04.122 / H04.123 |
+| Cataract-extraction aftercare status | Z98.41 / Z98.42 / (no bilateral code exists — OU reports both Z98.41 and Z98.42) |
+
+**Anterior Segment** (`exams/form.html`): the Primary Diagnosis Code field now auto-suggests from the per-eye Pterygium/Pinguecula and Cataract Type findings (pterygium/pinguecula takes precedence per eye when both happen to be entered as separate findings; a cataract code is appended alongside it), joining multiple eyes'/findings' codes with a comma. **Dry Eye**: the Primary Diagnosis Code field auto-suggests laterality (OD/OS/OU) from which eye(s) actually have exam values entered across its five per-eye fields. **Pre-/Post-Op Co-Management**: no dedicated diagnosis-code field exists on that dashboard (it tracks status, not a new diagnosis), so instead the aggregate `diagnosis_codes` field gains the cataract-extraction aftercare status code once `Cataract Extraction with IOL` is selected as the procedure and the milestone has moved past `Pre-Op Clearance`. All four auto-suggestions follow the same never-overwrite-a-manual-edit convention as every other composer field (tracked via each field's own `input` event).
+
+The top-level `diagnosis_codes` field (previously populated only from the Refractive dashboard) now aggregates the resolved code(s) from every *active* Visit Focus section into one deduplicated, comma-separated list: Refractive (as before), Anterior Segment and Dry Eye (their own Primary Diagnosis Code fields, whether auto-suggested or manually typed/overridden), Glaucoma and Binocular Vision (their typed Primary Diagnosis Code fields — left as manual entry, since staging/subtype/strabismus-direction variability isn't safely derivable from today's discrete fields), and Pre-/Post-Op's aftercare code as above.
+
+### 44.3 Verified
+
+`python3 -m py_compile` — no Python touched (template/JS-only change). Local instance via a real browser: activating Anterior Segment + Dry Eye + Pre-/Post-Op together, selecting Pterygium OD and Nuclear Sclerosis cataract OS produced `ant_primary_diagnosis_code` = `H11.031, H25.12`; filling only OD's Dry Eye fields produced `de_primary_diagnosis_code` = `H04.121`; selecting Cataract Extraction with IOL / OD / Day 1 rolled `Z98.41` into the aggregate; the aggregate `diagnosis_codes` field read `H11.031, H25.12, H04.121, Z98.41` with the Assessment textarea correctly narrating all three findings — confirming both the per-section auto-suggestion and the cross-section aggregation work together. No JavaScript console errors. Full Playwright suite re-run to confirm no regression to `test_icd10_suggestion_and_diagnosis_driven_recall_interval` (asserts the Refractive-only lookup and manual-override behavior byte-for-byte) or either of the v2.23 anterior/dry-eye composer tests (both fill their Primary Diagnosis Code field manually before checking other fields, so the new auto-suggestion never overrides their expected values).
+
+### 44.4 Explicitly not done
+
+No auto-suggestion for Glaucoma's or Binocular Vision's Primary Diagnosis Code fields (staging/subtype/strabismus-direction variability makes a safe discrete mapping impractical with today's fields — both remain manual entry, still included in the aggregate). No real ICD-10 code-set/terminology-server integration (§4.4, still deferred) — this stays a curated, verified-at-implementation-time lookup, the same engineering tradeoff already documented for the original six-diagnosis refractive lookup. No change to any stored field or migration — this is entirely client-side composer logic.
+
+**Version 2.25 change log (relative to v2.24) — extends composer/ICD-10 auto-population to the v2.23 dashboards and expands the lookup:**
+
+| Area | Change |
+| --- | --- |
+| New capability | Anterior Segment and Dry Eye Primary Diagnosis Code fields now auto-suggest from structured findings (pterygium/pinguecula and cataract subtype per eye; dry-eye laterality inferred from which eye's fields are filled). See §44.2. |
+| New capability | `diagnosis_codes` now aggregates codes from every active Visit Focus section (previously Refractive-only), including a new cataract-extraction aftercare status code contributed by Pre-/Post-Op Co-Management. See §44.2. |
+| Expanded | ICD-10 lookup gained verified codes for pterygium, pinguecula, three age-related cataract subtypes, dry eye syndrome, and cataract-extraction aftercare status (table in §44.2). |
+| Updated | `ehr/templates/exams/form.html` only (composer script). No Python, model, or migration changes. Existing Playwright suite re-verified with no regressions; no new test added this round (covered by existing anterior/dry-eye/ICD-10 composer tests plus manual end-to-end verification in §44.3). |
+| Explicitly not done | No auto-suggestion for Glaucoma/Binocular Vision diagnosis codes. No real terminology-server integration. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |
