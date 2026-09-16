@@ -1,7 +1,7 @@
 # New Path Vision EHR
 ## Baseline Product Definition and Current-State Functional Specification
 
-**Document version:** 2.24 (supersedes v2.23; redesigns the New Exam form's Visit Focus activation into a status-dot-plus-accordion pattern with a sticky chip row, layered on top of the existing chip/hidden-attribute mechanism rather than replacing it; see new §43; none of this bears on the four go-live prerequisites, which are unchanged from v2.6)
+**Document version:** 2.26 (supersedes v2.25; rebuilds the Assessment & Plan composer around a dedicated, unit-tested core module (`ehr/services/ap_composer.py`) with a Narrative/Abbreviated style toggle, structured Meds/Testing/RTC plan bullets, explicit ICD-10 laterality and glaucoma 7th-character-staging validation surfaced to the clinician, and a manual-edit-preserving merge algorithm that survives appended or inserted clinician notes; the live form's JS composer mirrors this module's logic line-for-line; see new §45; none of this bears on the four go-live prerequisites, which are unchanged from v2.6)
 **Baseline date:** September 9, 2026
 **Application-reported version:** 1.0.0
 **Baseline source:** `setup_ehr.py` self-contained scaffold script (locally generated `visioncare_ehr/` project directory; see §2.2)
@@ -3082,3 +3082,93 @@ No change to which fields exist on any dashboard, or to the composer's narrative
 | New capability | The Visit Focus chip row is sticky within the page as it scrolls, so adding another assessment area mid-exam never means scrolling back to the top of a long visit. See §43.2. |
 | Updated | `ehr/templates/exams/form.html` (Visit Focus markup + script) and `ehr/static/css/app.css` (new `.vf-*` rules). No Python route changes. `tests/test_smoke.py` gained `test_visit_focus_status_dots_and_collapse`; every pre-existing Visit Focus/composer test passed unmodified. |
 | Explicitly not done | No new or changed dashboard fields. No stored `visit_focus` field. A pre-existing, unrelated mobile-width overflow issue was found but not fixed (now tracked, `BUILD_BACKLOG.md` §10). None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |
+
+## 44. ICD-10 Coverage Expansion for Anterior Segment / Dry Eye / Pre-Post-Op (v2.25)
+
+### 44.1 Origin
+
+Following the v2.24 Visit Focus redesign, the user asked to confirm that Assessment & Plan auto-population continues to cover every dashboard added since (Anterior Segment, Dry Eye) and to bring the ICD-10 lookup (§7.2, still a small hardcoded set per §4.4's deferred terminology-server decision) up to date with as complete a set of diagnosis/aftercare codes as the current structured fields can support.
+
+Verification confirmed the Assessment & Plan composer clauses for Anterior Segment and Dry Eye (added in v2.23) were already wired correctly and unaffected by v2.24's restructuring — this section documents that check plus the ICD-10 work that followed it.
+
+### 44.2 ICD-10 lookup expansion
+
+Every code below was checked against the current (FY2026) ICD-10-CM tabular list before being added — this remains a curated lookup for the fields this form actually captures, not a terminology-server integration (§4.4, still deferred):
+
+| Finding | Codes (OD / OS / OU) |
+| --- | --- |
+| Pterygium | H11.031 / H11.032 / H11.033 |
+| Pinguecula | H11.151 / H11.152 / H11.153 |
+| Age-related nuclear sclerotic cataract | H25.11 / H25.12 / H25.13 |
+| Age-related cortical cataract | H25.011 / H25.012 / H25.013 |
+| Age-related posterior subcapsular cataract | H25.041 / H25.042 / H25.043 |
+| Combined forms of age-related cataract | H25.811 / H25.812 / H25.813 |
+| Dry eye syndrome (lacrimal gland) | H04.121 / H04.122 / H04.123 |
+| Cataract-extraction aftercare status | Z98.41 / Z98.42 / (no bilateral code exists — OU reports both Z98.41 and Z98.42) |
+
+**Anterior Segment** (`exams/form.html`): the Primary Diagnosis Code field now auto-suggests from the per-eye Pterygium/Pinguecula and Cataract Type findings (pterygium/pinguecula takes precedence per eye when both happen to be entered as separate findings; a cataract code is appended alongside it), joining multiple eyes'/findings' codes with a comma. **Dry Eye**: the Primary Diagnosis Code field auto-suggests laterality (OD/OS/OU) from which eye(s) actually have exam values entered across its five per-eye fields. **Pre-/Post-Op Co-Management**: no dedicated diagnosis-code field exists on that dashboard (it tracks status, not a new diagnosis), so instead the aggregate `diagnosis_codes` field gains the cataract-extraction aftercare status code once `Cataract Extraction with IOL` is selected as the procedure and the milestone has moved past `Pre-Op Clearance`. All four auto-suggestions follow the same never-overwrite-a-manual-edit convention as every other composer field (tracked via each field's own `input` event).
+
+The top-level `diagnosis_codes` field (previously populated only from the Refractive dashboard) now aggregates the resolved code(s) from every *active* Visit Focus section into one deduplicated, comma-separated list: Refractive (as before), Anterior Segment and Dry Eye (their own Primary Diagnosis Code fields, whether auto-suggested or manually typed/overridden), Glaucoma and Binocular Vision (their typed Primary Diagnosis Code fields — left as manual entry, since staging/subtype/strabismus-direction variability isn't safely derivable from today's discrete fields), and Pre-/Post-Op's aftercare code as above.
+
+### 44.3 Verified
+
+`python3 -m py_compile` — no Python touched (template/JS-only change). Local instance via a real browser: activating Anterior Segment + Dry Eye + Pre-/Post-Op together, selecting Pterygium OD and Nuclear Sclerosis cataract OS produced `ant_primary_diagnosis_code` = `H11.031, H25.12`; filling only OD's Dry Eye fields produced `de_primary_diagnosis_code` = `H04.121`; selecting Cataract Extraction with IOL / OD / Day 1 rolled `Z98.41` into the aggregate; the aggregate `diagnosis_codes` field read `H11.031, H25.12, H04.121, Z98.41` with the Assessment textarea correctly narrating all three findings — confirming both the per-section auto-suggestion and the cross-section aggregation work together. No JavaScript console errors. Full Playwright suite re-run to confirm no regression to `test_icd10_suggestion_and_diagnosis_driven_recall_interval` (asserts the Refractive-only lookup and manual-override behavior byte-for-byte) or either of the v2.23 anterior/dry-eye composer tests (both fill their Primary Diagnosis Code field manually before checking other fields, so the new auto-suggestion never overrides their expected values).
+
+### 44.4 Explicitly not done
+
+No auto-suggestion for Glaucoma's or Binocular Vision's Primary Diagnosis Code fields (staging/subtype/strabismus-direction variability makes a safe discrete mapping impractical with today's fields — both remain manual entry, still included in the aggregate). No real ICD-10 code-set/terminology-server integration (§4.4, still deferred) — this stays a curated, verified-at-implementation-time lookup, the same engineering tradeoff already documented for the original six-diagnosis refractive lookup. No change to any stored field or migration — this is entirely client-side composer logic.
+
+**Version 2.25 change log (relative to v2.24) — extends composer/ICD-10 auto-population to the v2.23 dashboards and expands the lookup:**
+
+| Area | Change |
+| --- | --- |
+| New capability | Anterior Segment and Dry Eye Primary Diagnosis Code fields now auto-suggest from structured findings (pterygium/pinguecula and cataract subtype per eye; dry-eye laterality inferred from which eye's fields are filled). See §44.2. |
+| New capability | `diagnosis_codes` now aggregates codes from every active Visit Focus section (previously Refractive-only), including a new cataract-extraction aftercare status code contributed by Pre-/Post-Op Co-Management. See §44.2. |
+| Expanded | ICD-10 lookup gained verified codes for pterygium, pinguecula, three age-related cataract subtypes, dry eye syndrome, and cataract-extraction aftercare status (table in §44.2). |
+| Updated | `ehr/templates/exams/form.html` only (composer script). No Python, model, or migration changes. Existing Playwright suite re-verified with no regressions; no new test added this round (covered by existing anterior/dry-eye/ICD-10 composer tests plus manual end-to-end verification in §44.3). |
+| Explicitly not done | No auto-suggestion for Glaucoma/Binocular Vision diagnosis codes. No real terminology-server integration. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |
+
+## 45. Assessment & Plan Composer Rebuild: Styles, Structured Plan, ICD-10 Validation, Smart Merge (v2.26)
+
+### 45.1 Origin
+
+The user asked for the core logic behind a "click-to-autofill Assessment and Plan engine": concise bulleted clinical fragments (never narrative filler like "The patient presents with..."), maximal use of standard eye-care abbreviations (OD/OS/OU/RTC/QD/HS), integrated ICD-10 validation (laterality specificity; glaucoma 7th-character staging), and an editable text state where manual clinician edits are never silently overwritten by further checkbox clicks. Follow-up direction: replace the live form's composer now (not a side module only), support both a Narrative and an Abbreviated style behind a toggle, and keep the ICD-10 rules on a curated code table (the app's existing, explicitly-scoped tradeoff, per §4.4/§7.2 in the research doc) rather than a full terminology-server integration.
+
+### 45.2 Core module: `ehr/services/ap_composer.py`
+
+A new, UI-independent Python module is the reference implementation the live form's JavaScript composer mirrors line-for-line:
+
+- **Data models**: `Finding` (diagnosis key + laterality + severity/status + glaucoma stage), `MedOrder`/`DiagnosticOrder`/`FollowUp` (plan-side structured inputs), `Icd10Rule`/`Icd10Resolution`/`ValidationIssue` (the validator's inputs/outputs), `ComposedNote` (the final Assessment/Plan/issues payload).
+- **`ICD10_TABLE`**: a curated lookup covering every diagnosis this app's dashboards structurally capture — the six Refractive diagnoses (unchanged since v2.15), Pterygium/Pinguecula and three age-related cataract subtypes (Anterior Segment), Dry Eye Syndrome, Primary Open-Angle Glaucoma (the one diagnosis requiring 7th-character staging), Convergence Insufficiency, and the Cataract Extraction aftercare status code — every code checked against the current ICD-10-CM tabular list when added (same v2.25 verification standard).
+- **`resolve_icd10()`**: enforces laterality specificity (refuses to guess an unspecified-eye code when the diagnosis's table has none, and `reject_unspecified_when_known()` additionally guards against emitting an unspecified code when the exam *did* record a specific eye) and glaucoma 7th-character staging (a `requires_staging` diagnosis without a selected stage still resolves — ICD-10-CM does define a real "0 = unspecified stage" digit — but is flagged as a documentation-quality WARNING, not silently accepted as equivalent to a real stage).
+- **Two output styles**: `NoteStyle.ABBREVIATED` ("- H11.031 - Pterygium OD - Mild") and `NoteStyle.NARRATIVE` ("- Pterygium OD, mild (H11.031)."). Both remain a bulleted fragment per finding — narrative style differs in wording, not in structure — and neither ever emits presenting-complaint-style filler text.
+- **Plan structure**: `build_plan_lines()` renders Meds/Testing/RTC bullets explicitly, e.g. "- Meds: Latanoprost, 0.005%, QHS, OU" / "- Testing: Humphrey VF 24-2" / "- RTC: 3 months" (abbreviated), or the narrative equivalents.
+- **`merge_manual_edits()`**: the editability/merge-state logic. Given what was last auto-written (`previous_auto`), what's currently in the field (`current_value`, which may carry manual clinician edits), and a freshly recomputed auto block (`new_auto`), it splices the new content into wherever the old auto block still sits intact — before, after, or spliced between manual text — so an appended note like "- patient reports poor compliance due to cost" survives every subsequent checkbox click. Only when the clinician's edit falls *inside* the auto-generated bullets themselves (retyping or deleting a line by hand, breaking that block's contiguity) does it freeze — returning the field untouched rather than guessing which parts are still safe to regenerate. This is strictly smarter than the app's older, simpler "edited" boolean (which freezes on any keystroke, wherever it lands).
+- 18 unit tests (`tests/test_ap_composer.py`, pure Python, no browser/DB) cover every validation rule, both styles, and five merge scenarios (append, prepend, splice-around, freeze-on-inline-edit, idempotent no-op).
+
+### 45.3 Live form changes (`ehr/templates/exams/form.html`)
+
+- A **Note Style** selector (Abbreviated / Narrative) sits above Assessment & Plan; switching it re-renders both fields immediately in the new style (subject to the same merge logic — a manual edit survives a style switch exactly as it survives a checkbox click).
+- Every dashboard's assessment clause (`buildRefractiveLines`/`buildAnteriorLines`/`buildDryEyeLines`/`buildGlaucomaLines`/`buildBinocularLines`/`buildSurgeryLines`) now emits one bullet per finding via a shared `bulletLine(style, code, label, laterality, status)` helper matching `build_assessment_line()`'s exact two-style format, replacing the old single-sentence-per-section prose. `composePlan()` was rewritten around the Meds/Testing/RTC/Therapy bullet structure (`planLine()`), replacing the old single joined-sentence Plan text.
+- **Glaucoma staging**: the Posterior Segment / Glaucoma dashboard gained a **Glaucoma Stage** select (Mild/Moderate/Severe/Indeterminate/Unspecified) — new `GlaucomaTracking.glaucoma_stage` column, migration `025_glaucoma_stage` (`_add_column_if_missing`, same pattern as every other column addition), route field, and a display row on the exam detail card. Without this field the 7th-character staging requirement had nothing to validate against; it's the smallest change that makes the rule real rather than theoretical.
+- **Validation surfaced in the UI**: a small warning area above Assessment lists, live: (1) a Refractive diagnosis needing laterality (all except Presbyopia/Anisometropia/Emmetropia) checked with no laterality selected, and (2) glaucoma data entered with no stage selected — both resolved as soon as the missing selection is made. This mirrors `resolve_icd10()`'s WARNING-level issues; nothing is ever silently hidden or blocked from saving (a warning, not a hard stop, matching this app's established pattern of composer fields being suggestions the clinician can always override).
+- **The same append/prepend/splice/freeze merge algorithm as `merge_manual_edits()`** now drives the Assessment and Plan textareas, replacing the old boolean "edited" flags used since v2.12. Every other composer field (`diagnosis_codes`, `follow_up_weeks`, the per-dashboard Primary Diagnosis Code fields) keeps the simpler boolean-flag behavior, appropriate for single-value fields rather than multi-line bulleted notes.
+
+### 45.4 Verified
+
+`python3 -m py_compile` on every touched Python file. `pytest tests/test_ap_composer.py`: 18/18 passed (pure logic, no browser). Local instance via a real browser, driving the live form directly: abbreviated vs. narrative style produce the expected bullet formats for the same data; the Refractive-laterality and Glaucoma-staging warnings appear and clear correctly; a manually appended note after the auto-generated bullets survives a further checkbox click (still present, still at the end); a manually prepended chief-complaint line survives the same way; an in-place edit to an existing auto-generated bullet (not merely appending after it) correctly freezes further auto-updates to that field, leaving the clinician's edit untouched. Full Playwright suite re-run with the existing composer-assertion tests updated to match the new bulleted-fragment format (substance unchanged — same fields, same data flow — only the literal string assertions, since the output format itself is what this round intentionally changed).
+
+### 45.5 Explicitly not done
+
+No auto-suggestion of ICD-10 codes for Glaucoma or Binocular Vision diagnoses from `resolve_icd10()`-style rules (both stay manually typed, per v2.25's scoping — staging/subtype/strabismus-direction variability still isn't safely derivable from today's discrete fields). No real ICD-10 terminology-server integration (§4.4, still deferred) — `ICD10_TABLE` remains a curated, verified-at-write-time lookup. No server-side persistence of note style (it's a per-session UI choice, not stored on the exam). No change to how `assessment`/`plan`/`diagnosis_codes` are saved (still plain `Text`/`String` columns on `EyeExam` — the composer only changes what text gets suggested into them before a clinician edits or submits).
+
+**Version 2.26 change log (relative to v2.25) — rebuilds the A&P composer around a tested core module, adds a style toggle, structured plan bullets, ICD-10 validation, and a manual-edit-preserving merge:**
+
+| Area | Change |
+| --- | --- |
+| New capability | `ehr/services/ap_composer.py`: a unit-tested (18 tests), UI-independent reference module for ICD-10 resolution/validation, both note styles, and the merge algorithm. See §45.2. |
+| New capability | Note Style toggle (Abbreviated/Narrative) on the New Exam form; every dashboard's Assessment clause and the Plan field now render as bulleted clinical fragments (Meds/Testing/RTC/Therapy structure for Plan) instead of joined narrative sentences. See §45.3. |
+| New capability | ICD-10 validation surfaced live: Refractive laterality-required warning, glaucoma 7th-character staging warning. New `GlaucomaTracking.glaucoma_stage` field (migration `025_glaucoma_stage`) makes the staging rule real. See §45.3. |
+| New capability | Assessment/Plan now use an append/prepend/splice-aware merge (mirroring `merge_manual_edits()`) instead of a simple "stop on first edit" flag — a manually appended or inserted note survives further checkbox clicks; an edit made inside an auto-generated bullet still safely freezes that field. See §45.2/§45.3. |
+| Updated | `ehr/templates/exams/form.html`, `ehr/templates/exams/detail.html` (Glaucoma Stage row), `ehr/models/database.py`, `ehr/db/migrations.py`, `ehr/routes/exams.py`. `tests/test_ap_composer.py` (new, 18 tests). `tests/test_smoke.py` composer assertions updated to match the new bulleted format (same fields/data, new literal strings). |
+| Explicitly not done | No ICD-10 auto-suggestion for Glaucoma/Binocular diagnoses. No terminology-server integration. No server-side persistence of note style. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |

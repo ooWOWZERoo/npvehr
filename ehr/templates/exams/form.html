@@ -285,10 +285,13 @@
       <div class="vf-body" id="focus-glaucoma">
     <div class="form-row cols-3">
       <div class="form-group"><label>Primary Diagnosis Code</label><input name="gt_primary_diagnosis_code" placeholder="H40.1132"></div>
-      <div class="form-group"><label>IOP Time Measured</label><input name="gt_iop_time_measured" type="time"></div>
-      <div class="form-group"><label>IOP Method</label>
-        <select name="gt_iop_method"><option value="">&mdash;</option><option>Goldmann Applanation</option><option>Tono-Pen</option><option>iCare</option></select>
+      <div class="form-group"><label>Glaucoma Stage</label>
+        <select name="gt_glaucoma_stage"><option value="">&mdash;</option><option>Mild</option><option>Moderate</option><option>Severe</option><option>Indeterminate</option><option>Unspecified</option></select>
       </div>
+      <div class="form-group"><label>IOP Time Measured</label><input name="gt_iop_time_measured" type="time"></div>
+    </div>
+    <div class="form-group"><label>IOP Method</label>
+      <select name="gt_iop_method"><option value="">&mdash;</option><option>Goldmann Applanation</option><option>Tono-Pen</option><option>iCare</option></select>
     </div>
     <div class="table-responsive">
     <table class="exam-table">
@@ -453,6 +456,11 @@
     {% endfor %}
     {% endif %}
     <div class="section-title">Assessment &amp; Plan <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; auto-filled from the structured fields above as you fill them in; edit freely</span></div>
+    <div class="form-group" style="max-width:260px">
+      <label>Note Style</label>
+      <select id="ap_note_style"><option value="abbreviated">Abbreviated (bulleted fragments)</option><option value="narrative">Narrative (sentences)</option></select>
+    </div>
+    <div id="ap_validation_issues" style="display:none;margin-bottom:var(--space-2);font-size:0.85rem;color:#b45309"></div>
     <div class="form-row cols-2">
       <div class="form-group"><label>Assessment</label><textarea name="assessment" id="assessment"></textarea></div>
       <div class="form-group"><label>Plan</label><textarea name="plan" id="plan"></textarea></div>
@@ -556,11 +564,13 @@ document.querySelectorAll('.vf-body').forEach(function (body) {
 // tracked via each textarea's own native `input` event, which only fires on
 // a real keystroke, never on this script's own `.value =` assignment.
 // ICD-10 auto-suggestion lookup (VISION_EHR_DATA_STANDARDS_RESEARCH.md 7.2) --
-// a small hardcoded lookup for exactly the six diagnoses offered as chips
-// above, not a substitute for real ICD-10 code-set integration (4.4,
-// still deferred). Emmetropia is intentionally omitted -- normal refractive
-// status, not a billable diagnosis. Presbyopia/Anisometropia have no
-// laterality split in ICD-10 itself.
+// a small hardcoded lookup, not a substitute for real ICD-10 code-set
+// integration (4.4, still deferred). Every code below was checked against
+// the current (FY2026) ICD-10-CM tabular list at implementation time; a
+// terminology-server integration remains the only way to keep this
+// automatically current going forward. Emmetropia is intentionally omitted
+// -- normal refractive status, not a billable diagnosis. Presbyopia/
+// Anisometropia have no laterality split in ICD-10 itself.
 var ICD10_BY_DX = {
   'Myopia':        {OD: 'H52.11', OS: 'H52.12', OU: 'H52.13', '': 'H52.10'},
   'Hyperopia':     {OD: 'H52.01', OS: 'H52.02', OU: 'H52.03', '': 'H52.00'},
@@ -568,17 +578,55 @@ var ICD10_BY_DX = {
   'Presbyopia':    {OD: 'H52.4', OS: 'H52.4', OU: 'H52.4', '': 'H52.4'},
   'Anisometropia': {OD: 'H52.31', OS: 'H52.31', OU: 'H52.31', '': 'H52.31'}
 };
+// Anterior Segment: pterygium/pinguecula (per-eye) and age-related cataract
+// (per-eye, by structural subtype selected in the Lens table).
+var ICD10_PTERYGIUM = {OD: 'H11.031', OS: 'H11.032', OU: 'H11.033'};
+var ICD10_PINGUECULA = {OD: 'H11.151', OS: 'H11.152', OU: 'H11.153'};
+var ICD10_CATARACT_BY_TYPE = {
+  'Nuclear Sclerosis':         {OD: 'H25.11',  OS: 'H25.12',  OU: 'H25.13'},
+  'Cortical':                  {OD: 'H25.011', OS: 'H25.012', OU: 'H25.013'},
+  'Posterior Subcapsular':     {OD: 'H25.041', OS: 'H25.042', OU: 'H25.043'},
+  'Combined':                  {OD: 'H25.811', OS: 'H25.812', OU: 'H25.813'}
+};
+// Dry Eye: keratoconjunctivitis sicca / dry eye syndrome, per lacrimal gland.
+var ICD10_DRY_EYE = {OD: 'H04.121', OS: 'H04.122', OU: 'H04.123'};
+// Pre-/Post-Op: cataract-extraction aftercare status (no bilateral code
+// exists in ICD-10-CM for Z98.4 -- OU reports both single-eye codes).
+var ICD10_CATARACT_STATUS = {OD: 'Z98.41', OS: 'Z98.42', OU: 'Z98.41, Z98.42'};
 
 (function () {
   var assessmentEl = document.getElementById('assessment');
   var planEl = document.getElementById('plan');
   var diagnosisCodesEl = document.getElementById('diagnosis_codes');
   var followUpWeeksEl = document.getElementById('follow_up_weeks');
-  var assessmentEdited = false, planEdited = false, diagnosisCodesEdited = false, followUpWeeksEdited = false;
-  assessmentEl.addEventListener('input', function () { assessmentEdited = true; });
-  planEl.addEventListener('input', function () { planEdited = true; });
+  var antCodeEl = document.querySelector('[name="ant_primary_diagnosis_code"]');
+  var deCodeEl = document.querySelector('[name="de_primary_diagnosis_code"]');
+  var noteStyleEl = document.getElementById('ap_note_style');
+  var validationIssuesEl = document.getElementById('ap_validation_issues');
+  var diagnosisCodesEdited = false, followUpWeeksEdited = false, antCodeEdited = false, deCodeEdited = false;
   diagnosisCodesEl.addEventListener('input', function () { diagnosisCodesEdited = true; });
   followUpWeeksEl.addEventListener('input', function () { followUpWeeksEdited = true; });
+  antCodeEl.addEventListener('input', function () { antCodeEdited = true; });
+  deCodeEl.addEventListener('input', function () { deCodeEdited = true; });
+  noteStyleEl.addEventListener('change', function () { refresh(); });
+  function noteStyle() { return noteStyleEl.value; }
+
+  // Assessment/Plan use a smarter merge than the plain "edited" flags above
+  // (ehr/services/ap_composer.py's merge_manual_edits is the reference this
+  // mirrors): a clinician can append or insert manual text anywhere around
+  // the auto-generated bullets and every subsequent checkbox click keeps
+  // preserving it, splicing the freshly recomputed bullets back into the
+  // same spot. Only an edit made *inside* the auto-generated bullets
+  // themselves (retyping/deleting a line by hand) freezes that field --
+  // safer than ever guessing which parts are still "ours" to overwrite.
+  var lastAutoAssessment = '', lastAutoPlan = '';
+  function mergeManualEdits(previousAuto, currentValue, newAuto) {
+    if (currentValue === '' || previousAuto === '') return { text: newAuto, frozen: false };
+    var idx = currentValue.indexOf(previousAuto);
+    if (idx === -1) return { text: currentValue, frozen: true };
+    var before = currentValue.slice(0, idx), after = currentValue.slice(idx + previousAuto.length);
+    return { text: before + newAuto + after, frozen: false };
+  }
 
   function checkedValues(name) {
     return Array.prototype.map.call(
@@ -593,90 +641,191 @@ var ICD10_BY_DX = {
     return cb ? cb.checked : false;
   }
 
-  function composeAssessment() {
-    var parts = [];
-    if (isFocusOn('focus-refractive')) {
-      var dx = checkedValues('refractive_diagnosis'), lat = fieldValue('refractive_laterality'),
-          stab = fieldValue('refractive_stability'), sec = checkedValues('refractive_secondary_findings');
-      if (dx.length || lat || stab) {
-        var s = dx.join(', ') || 'Refractive error';
-        if (lat) s += ' ' + lat;
-        if (stab) s += ', ' + stab.toLowerCase();
-        s += '.';
-        if (sec.length) s += ' ' + sec.join(', ') + ' noted.';
-        parts.push(s);
-      }
-    }
-    if (isFocusOn('focus-anterior')) {
-      var antSev = fieldValue('ant_severity'), antCode = fieldValue('ant_primary_diagnosis_code'),
-          ptOd = fieldValue('ant_pterygium_pinguecula_od'), ptOs = fieldValue('ant_pterygium_pinguecula_os'),
-          catOd = fieldValue('ant_lens_cataract_type_od'), catOs = fieldValue('ant_lens_cataract_type_os');
-      if (antSev || antCode || (ptOd && ptOd !== 'None') || (ptOs && ptOs !== 'None') ||
-          (catOd && catOd !== 'None') || (catOs && catOs !== 'None')) {
-        var s2b = (antSev ? antSev + ' ' : '') + 'anterior segment findings';
-        if (antCode) s2b += ' (' + antCode + ')';
-        s2b += '.';
-        var findings = [];
-        if (ptOd && ptOd !== 'None') findings.push(ptOd + ' OD');
-        if (ptOs && ptOs !== 'None') findings.push(ptOs + ' OS');
-        if (catOd && catOd !== 'None') findings.push(catOd + ' cataract OD');
-        if (catOs && catOs !== 'None') findings.push(catOs + ' cataract OS');
-        if (findings.length) s2b += ' ' + findings.join(', ') + '.';
-        parts.push(s2b);
-      }
-    }
-    if (isFocusOn('focus-dryeye')) {
-      var sev = fieldValue('de_severity'), code = fieldValue('de_primary_diagnosis_code');
-      if (sev || code) {
-        var s2 = (sev ? sev + ' ' : '') + 'dry eye disease';
-        if (code) s2 += ' (' + code + ')';
-        s2 += '.';
-        parts.push(s2);
-      }
-    }
-    if (isFocusOn('focus-glaucoma')) {
-      var gtIopOd = fieldValue('gt_iop_current_od'), gtIopOs = fieldValue('gt_iop_current_os'),
-          gtTargetOd = fieldValue('gt_target_iop_od'), gtTargetOs = fieldValue('gt_target_iop_os'),
-          gtCode = fieldValue('gt_primary_diagnosis_code');
-      if (gtIopOd || gtIopOs || gtCode) {
-        var s3 = 'Glaucoma' + (gtCode ? ' (' + gtCode + ')' : '');
-        if (gtIopOd || gtIopOs) s3 += ', IOP ' + (gtIopOd || '—') + '/' + (gtIopOs || '—') + ' mmHg';
-        if (gtTargetOd || gtTargetOs) s3 += ' (target ' + (gtTargetOd || '—') + '/' + (gtTargetOs || '—') + ')';
-        s3 += '.';
-        parts.push(s3);
-      }
-    }
-    if (isFocusOn('focus-binocular')) {
-      var bvCode = fieldValue('bv_primary_diagnosis_code'), bvStrab = fieldValue('bv_strabismus_present'),
-          bvDir = fieldValue('bv_strabismus_direction');
-      if (bvCode || bvStrab) {
-        var s4 = 'Binocular vision dysfunction' + (bvCode ? ' (' + bvCode + ')' : '');
-        if (bvStrab === 'Yes') s4 += ', strabismus present' + (bvDir ? ' (' + bvDir + ')' : '');
-        else if (bvStrab === 'No') s4 += ', no strabismus';
-        s4 += '.';
-        parts.push(s4);
-      }
-    }
-    if (isFocusOn('focus-surgery')) {
-      var sxProc = fieldValue('sx_surgical_procedure'), sxEye = fieldValue('sx_operative_eye'),
-          sxMilestone = fieldValue('sx_current_milestone');
-      if (sxProc || sxMilestone) {
-        var s5 = 'Post-op' + (sxProc ? ' ' + sxProc : '') + (sxEye ? ' ' + sxEye : '');
-        if (sxMilestone) s5 += ', ' + sxMilestone;
-        s5 += '.';
-        parts.push(s5);
-      }
-    }
-    return parts.join(' ');
+  // 7th-character glaucoma staging (H40.11<laterality digit><stage digit>) --
+  // verified against the current ICD-10-CM tabular list; mirrors
+  // ehr/services/ap_composer.py's _staged_poag_codes() exactly.
+  var GLAUCOMA_LATERALITY_DIGIT = {OD: '1', OS: '2', OU: '3', '': '9'};
+  var GLAUCOMA_STAGE_DIGIT = {Mild: '1', Moderate: '2', Severe: '3', Indeterminate: '4', '': '0'};
+  function buildGlaucomaCode(lat, stage) {
+    return 'H40.11' + GLAUCOMA_LATERALITY_DIGIT[lat || ''] + GLAUCOMA_STAGE_DIGIT[stage || ''];
   }
 
+  // One clinical-fragment bullet, in either style -- the same shape as
+  // ehr/services/ap_composer.py's build_assessment_line(): abbreviated is
+  // "CODE - Label [Laterality] [- Status]"; narrative is one full sentence,
+  // still a single bulleted fragment, never a "The patient presents..."
+  // paragraph. Every caller below builds its label/laterality/status from
+  // the same structured field reads the old sentence-only composer used.
+  function bulletLine(style, code, label, lat, status) {
+    code = code || 'UNCODED';
+    if (style === 'narrative') {
+      var s = label + (lat ? ' ' + lat : '') + (status ? ', ' + status.toLowerCase() : '') + ' (' + code + ').';
+      return '- ' + s;
+    }
+    var line = code + ' - ' + label + (lat ? ' ' + lat : '');
+    if (status) line += ' - ' + status;
+    return '- ' + line;
+  }
+
+  function buildRefractiveLines(style) {
+    var dx = checkedValues('refractive_diagnosis'), lat = fieldValue('refractive_laterality'),
+        stab = fieldValue('refractive_stability'), sec = checkedValues('refractive_secondary_findings');
+    var lines = [];
+    dx.forEach(function (d) {
+      var code = ICD10_BY_DX[d] ? (ICD10_BY_DX[d][lat] || ICD10_BY_DX[d]['']) : null;
+      lines.push(bulletLine(style, code, d, lat, stab));
+    });
+    if (!dx.length && (lat || stab)) lines.push(bulletLine(style, null, 'Refractive error', lat, stab));
+    if (sec.length) lines.push(style === 'narrative' ? ('- ' + sec.join(', ') + ' noted.') : ('- Secondary: ' + sec.join(', ')));
+    return lines;
+  }
+
+  function buildAnteriorLines(style) {
+    var severity = fieldValue('ant_severity'), lines = [];
+    ['od', 'os'].forEach(function (eye) {
+      var EYE = eye.toUpperCase();
+      var pg = fieldValue('ant_pterygium_pinguecula_' + eye);
+      if (pg === 'Pterygium' || pg === 'Pinguecula') {
+        lines.push(bulletLine(style, (pg === 'Pterygium' ? ICD10_PTERYGIUM : ICD10_PINGUECULA)[EYE], pg, EYE, severity));
+      }
+      var cat = fieldValue('ant_lens_cataract_type_' + eye);
+      if (cat && cat !== 'None' && ICD10_CATARACT_BY_TYPE[cat]) {
+        lines.push(bulletLine(style, ICD10_CATARACT_BY_TYPE[cat][EYE], cat + ' cataract', EYE, severity));
+      }
+    });
+    if (!lines.length && (severity || fieldValue('ant_primary_diagnosis_code'))) {
+      lines.push(bulletLine(style, fieldValue('ant_primary_diagnosis_code'), 'Anterior segment findings', '', severity));
+    }
+    return lines;
+  }
+
+  function buildDryEyeLines(style) {
+    var severity = fieldValue('de_severity');
+    var derived = computeDePrimaryCode(), code = derived || fieldValue('de_primary_diagnosis_code');
+    if (!severity && !code) return [];
+    var lat = code === ICD10_DRY_EYE.OD ? 'OD' : code === ICD10_DRY_EYE.OS ? 'OS' : code === ICD10_DRY_EYE.OU ? 'OU' : '';
+    return [bulletLine(style, code, 'Dry eye syndrome', lat, severity)];
+  }
+
+  function buildGlaucomaLines(style) {
+    var code = fieldValue('gt_primary_diagnosis_code'), stage = fieldValue('gt_glaucoma_stage'),
+        iopOd = fieldValue('gt_iop_current_od'), iopOs = fieldValue('gt_iop_current_os'),
+        targetOd = fieldValue('gt_target_iop_od'), targetOs = fieldValue('gt_target_iop_os');
+    if (!code && !iopOd && !iopOs && !stage) return [];
+    var lines = [bulletLine(style, code, 'Primary open-angle glaucoma', '', stage)];
+    if (iopOd || iopOs) {
+      if (style === 'narrative') {
+        lines.push('- IOP is ' + (iopOd || '—') + ' mmHg OD and ' + (iopOs || '—') + ' mmHg OS' +
+          ((targetOd || targetOs) ? (', target ' + (targetOd || '—') + '/' + (targetOs || '—')) : '') + '.');
+      } else {
+        lines.push('- IOP: OD ' + (iopOd || '—') + ' / OS ' + (iopOs || '—') + ' mmHg' +
+          ((targetOd || targetOs) ? (' (target OD ' + (targetOd || '—') + ' / OS ' + (targetOs || '—') + ')') : ''));
+      }
+    }
+    return lines;
+  }
+
+  function buildBinocularLines(style) {
+    var code = fieldValue('bv_primary_diagnosis_code'), strab = fieldValue('bv_strabismus_present'),
+        dir = fieldValue('bv_strabismus_direction');
+    if (!code && !strab) return [];
+    var label = strab === 'Yes' ? (dir || 'Strabismus') : 'Binocular vision dysfunction';
+    var status = strab === 'Yes' ? 'present' : (strab === 'No' ? 'no strabismus' : '');
+    return [bulletLine(style, code, label, '', status)];
+  }
+
+  function buildSurgeryLines(style) {
+    var proc = fieldValue('sx_surgical_procedure'), eye = fieldValue('sx_operative_eye'), milestone = fieldValue('sx_current_milestone');
+    if (!proc && !milestone) return [];
+    var code = (proc === 'Cataract Extraction with IOL' && ICD10_CATARACT_STATUS[eye]) ? ICD10_CATARACT_STATUS[eye] : null;
+    return [bulletLine(style, code, proc || 'Post-op status', eye, milestone)];
+  }
+
+  function composeAssessment(style) {
+    var lines = [];
+    if (isFocusOn('focus-refractive')) lines = lines.concat(buildRefractiveLines(style));
+    if (isFocusOn('focus-anterior')) lines = lines.concat(buildAnteriorLines(style));
+    if (isFocusOn('focus-dryeye')) lines = lines.concat(buildDryEyeLines(style));
+    if (isFocusOn('focus-glaucoma')) lines = lines.concat(buildGlaucomaLines(style));
+    if (isFocusOn('focus-binocular')) lines = lines.concat(buildBinocularLines(style));
+    if (isFocusOn('focus-surgery')) lines = lines.concat(buildSurgeryLines(style));
+    return lines.join('\n');
+  }
+
+  // Anterior Segment primary code: derived from whichever structural finding
+  // is most specific (pterygium/pinguecula, then cataract subtype), per eye.
+  // A clinician's own typed code always wins once they touch the field
+  // (tracked via antCodeEdited, same convention as assessment/plan).
+  function computeAntPrimaryCode() {
+    var codes = [];
+    ['od', 'os'].forEach(function (eye) {
+      var EYE = eye.toUpperCase();
+      var pg = fieldValue('ant_pterygium_pinguecula_' + eye);
+      if (pg === 'Pterygium') codes.push(ICD10_PTERYGIUM[EYE]);
+      else if (pg === 'Pinguecula') codes.push(ICD10_PINGUECULA[EYE]);
+      var cat = fieldValue('ant_lens_cataract_type_' + eye);
+      if (cat && cat !== 'None' && ICD10_CATARACT_BY_TYPE[cat]) codes.push(ICD10_CATARACT_BY_TYPE[cat][EYE]);
+    });
+    return dedupe(codes).join(', ');
+  }
+
+  // Dry Eye primary code: laterality inferred from which eye(s) actually
+  // have exam findings entered (any of its five per-eye fields non-blank).
+  function computeDePrimaryCode() {
+    var perEye = ['de_conjunctival_injection_', 'de_corneal_staining_', 'de_mgd_expression_', 'de_tbut_seconds_', 'de_schirmer_mm_'];
+    function eyeFilled(eye) {
+      return perEye.some(function (prefix) { return fieldValue(prefix + eye).trim() !== ''; });
+    }
+    var od = eyeFilled('od'), os = eyeFilled('os');
+    if (od && os) return ICD10_DRY_EYE.OU;
+    if (od) return ICD10_DRY_EYE.OD;
+    if (os) return ICD10_DRY_EYE.OS;
+    return '';
+  }
+
+  function dedupe(arr) {
+    return arr.filter(function (v, i) { return v && arr.indexOf(v) === i; });
+  }
+
+  // Rolls up every active section's ICD-10 code(s) into one comma-separated
+  // list -- refractive stays derived purely from its chips/laterality;
+  // anterior/dry eye include whatever computeAntPrimaryCode()/
+  // computeDePrimaryCode() produced (or a clinician's own typed override);
+  // glaucoma/binocular are typed directly (too variable -- staging, subtype,
+  // strabismus direction -- to derive safely from today's fields); surgery
+  // adds the cataract-extraction aftercare status code once a post-op
+  // milestone is reached.
   function composeDiagnosisCodes() {
-    if (!isFocusOn('focus-refractive')) return '';
-    var lat = fieldValue('refractive_laterality');
-    var codes = checkedValues('refractive_diagnosis')
-      .filter(function (dx) { return ICD10_BY_DX[dx]; })
-      .map(function (dx) { return ICD10_BY_DX[dx][lat] || ICD10_BY_DX[dx][''] ; });
-    return codes.join(', ');
+    var codes = [];
+    if (isFocusOn('focus-refractive')) {
+      var lat = fieldValue('refractive_laterality');
+      checkedValues('refractive_diagnosis').forEach(function (dx) {
+        if (ICD10_BY_DX[dx]) codes.push(ICD10_BY_DX[dx][lat] || ICD10_BY_DX[dx]['']);
+      });
+    }
+    if (isFocusOn('focus-anterior')) {
+      fieldValue('ant_primary_diagnosis_code').split(',').forEach(function (c) { c = c.trim(); if (c) codes.push(c); });
+    }
+    if (isFocusOn('focus-dryeye')) {
+      var deCode = fieldValue('de_primary_diagnosis_code');
+      if (deCode) codes.push(deCode);
+    }
+    if (isFocusOn('focus-glaucoma')) {
+      var gtCode = fieldValue('gt_primary_diagnosis_code');
+      if (gtCode) codes.push(gtCode);
+    }
+    if (isFocusOn('focus-binocular')) {
+      var bvCode = fieldValue('bv_primary_diagnosis_code');
+      if (bvCode) codes.push(bvCode);
+    }
+    if (isFocusOn('focus-surgery')) {
+      var proc = fieldValue('sx_surgical_procedure'), eye = fieldValue('sx_operative_eye'),
+          milestone = fieldValue('sx_current_milestone');
+      if (proc === 'Cataract Extraction with IOL' && milestone && milestone !== 'Pre-Op Clearance' && ICD10_CATARACT_STATUS[eye]) {
+        ICD10_CATARACT_STATUS[eye].split(', ').forEach(function (c) { codes.push(c); });
+      }
+    }
+    return dedupe(codes).join(', ');
   }
 
   function composeFollowUpWeeks() {
@@ -688,54 +837,115 @@ var ICD10_BY_DX = {
     return sec.indexOf('Suspect Glaucoma') !== -1 ? '26' : '52';
   }
 
-  function composePlan() {
-    var parts = [];
+  // Plan bullets follow the Meds / Testing / RTC structure explicitly (plus
+  // a Therapy bucket for vision-therapy exercises, which don't fit either).
+  function planLine(style, category, text) {
+    if (style === 'abbreviated') return '- ' + category + ': ' + text;
+    if (category === 'RTC') return '- RTC ' + text + '.';
+    if (category === 'Testing') return '- Order ' + text + '.';
+    if (category === 'Therapy') return '- Vision therapy: ' + text + '.';
+    return '- Start ' + text + '.';
+  }
+
+  function composePlan(style) {
+    var lines = [];
+    function pushMeds(items) { items.forEach(function (i) { lines.push(planLine(style, 'Meds', i)); }); }
+    function pushRtc(fu) { if (fu) lines.push(planLine(style, 'RTC', fu)); }
+
     if (isFocusOn('focus-anterior')) {
-      var antTx = checkedValues('ant_plan_therapeutics'), antFu = fieldValue('ant_follow_up_interval');
-      if (antTx.length) parts.push(antTx.join(', ') + '.');
-      if (antFu) parts.push('Follow up in ' + antFu + '.');
+      pushMeds(checkedValues('ant_plan_therapeutics'));
+      pushRtc(fieldValue('ant_follow_up_interval'));
     }
     if (isFocusOn('focus-dryeye')) {
-      var tx = checkedValues('de_plan_therapeutics'), fu = fieldValue('de_follow_up_interval');
-      if (tx.length) parts.push(tx.join(', ') + '.');
-      if (fu) parts.push('Follow up in ' + fu + '.');
+      pushMeds(checkedValues('de_plan_therapeutics'));
+      pushRtc(fieldValue('de_follow_up_interval'));
     }
     if (isFocusOn('focus-glaucoma')) {
-      var meds = checkedValues('gt_prescribed_glaucoma_meds'), orders = checkedValues('gt_diagnostic_orders'),
-          gtFu = fieldValue('gt_follow_up_interval');
-      if (meds.length) parts.push(meds.join(', ') + '.');
-      if (orders.length) parts.push('Order ' + orders.join(', ') + '.');
-      if (gtFu) parts.push('Follow up in ' + gtFu + '.');
+      pushMeds(checkedValues('gt_prescribed_glaucoma_meds'));
+      checkedValues('gt_diagnostic_orders').forEach(function (o) { lines.push(planLine(style, 'Testing', o)); });
+      pushRtc(fieldValue('gt_follow_up_interval'));
     }
     if (isFocusOn('focus-binocular')) {
-      var exercises = checkedValues('bv_assigned_home_exercises'), bvFu = fieldValue('bv_follow_up_interval'),
-          sessionNum = fieldValue('bv_therapy_session_number');
-      if (exercises.length) parts.push('Vision therapy: ' + exercises.join(', ') + (sessionNum ? ' (session ' + sessionNum + ')' : '') + '.');
-      if (bvFu) parts.push('Follow up in ' + bvFu + '.');
+      var sessionNum = fieldValue('bv_therapy_session_number');
+      checkedValues('bv_assigned_home_exercises').forEach(function (e) {
+        lines.push(planLine(style, 'Therapy', e + (sessionNum ? ' (session ' + sessionNum + ')' : '')));
+      });
+      pushRtc(fieldValue('bv_follow_up_interval'));
     }
     if (isFocusOn('focus-surgery')) {
       var taper = fieldValue('sx_steroid_taper_schedule'), nsaid = fieldValue('sx_nsaid_drops_frequency'),
-          abx = fieldValue('sx_antibiotic_drops_status'), sxFu = fieldValue('sx_follow_up_interval');
-      if (taper) parts.push(taper + (taper.trim().slice(-1) === '.' ? '' : '.'));
-      if (nsaid) parts.push('NSAID drops ' + nsaid + '.');
-      if (abx) parts.push('Antibiotic drops ' + abx + '.');
-      if (sxFu) parts.push('Follow up in ' + sxFu + '.');
+          abx = fieldValue('sx_antibiotic_drops_status');
+      if (taper) lines.push(planLine(style, 'Meds', taper));
+      if (nsaid) lines.push(planLine(style, 'Meds', 'NSAID drops ' + nsaid));
+      if (abx) lines.push(planLine(style, 'Meds', 'Antibiotic drops ' + abx));
+      pushRtc(fieldValue('sx_follow_up_interval'));
     }
-    if (!parts.length) {
+    if (!lines.length) {
       var weeks = fieldValue('follow_up_weeks');
-      if (weeks) parts.push('Follow up in ' + weeks + ' weeks.');
+      if (weeks) pushRtc(weeks + ' weeks');
     }
-    return parts.join(' ');
+    return lines.join('\n');
+  }
+
+  // ICD-10 validation surfaced to the clinician (never silently resolved):
+  // laterality specificity for Refractive (the one dashboard with an
+  // explicit laterality selector feeding a diagnosis that needs one), and
+  // the required glaucoma 7th-character stage.
+  function collectValidationIssues() {
+    var issues = [];
+    if (isFocusOn('focus-refractive')) {
+      var lat = fieldValue('refractive_laterality');
+      var needsLat = checkedValues('refractive_diagnosis').filter(function (d) {
+        return d !== 'Presbyopia' && d !== 'Anisometropia' && d !== 'Emmetropia';
+      });
+      if (needsLat.length && !lat) {
+        issues.push('Refractive diagnosis (' + needsLat.join(', ') + ') selected without laterality — OD/OS/OU is required for a specific ICD-10 code.');
+      }
+    }
+    if (isFocusOn('focus-glaucoma')) {
+      var hasGlaucomaData = fieldValue('gt_primary_diagnosis_code') || fieldValue('gt_iop_current_od') || fieldValue('gt_iop_current_os');
+      if (hasGlaucomaData && !fieldValue('gt_glaucoma_stage')) {
+        issues.push('Glaucoma diagnosis requires a 7th-character stage (Mild/Moderate/Severe/Indeterminate) — select Glaucoma Stage.');
+      }
+    }
+    return issues;
+  }
+
+  function renderValidationIssues() {
+    var issues = collectValidationIssues();
+    if (issues.length) {
+      validationIssuesEl.style.display = '';
+      validationIssuesEl.innerHTML = issues.map(function (m) { return '⚠ ' + m; }).join('<br>');
+    } else {
+      validationIssuesEl.style.display = 'none';
+      validationIssuesEl.innerHTML = '';
+    }
   }
 
   function refresh() {
-    if (!assessmentEdited) assessmentEl.value = composeAssessment();
+    var style = noteStyle();
+
+    var newAssessment = composeAssessment(style);
+    var mergedAssessment = mergeManualEdits(lastAutoAssessment, assessmentEl.value, newAssessment);
+    assessmentEl.value = mergedAssessment.text;
+    if (!mergedAssessment.frozen) lastAutoAssessment = newAssessment;
+
+    // Per-section primary diagnosis codes must be set before
+    // composeDiagnosisCodes() runs, since it reads them from the live DOM.
+    if (!antCodeEdited) antCodeEl.value = computeAntPrimaryCode();
+    if (!deCodeEdited) deCodeEl.value = computeDePrimaryCode();
     if (!diagnosisCodesEdited) diagnosisCodesEl.value = composeDiagnosisCodes();
     // follow_up_weeks must be set before composePlan() runs -- its fallback
     // reads the live DOM value, so the auto-suggested weeks flows into the
-    // Plan sentence on the same refresh cycle.
+    // Plan bullet on the same refresh cycle.
     if (!followUpWeeksEdited) followUpWeeksEl.value = composeFollowUpWeeks();
-    if (!planEdited) planEl.value = composePlan();
+
+    var newPlan = composePlan(style);
+    var mergedPlan = mergeManualEdits(lastAutoPlan, planEl.value, newPlan);
+    planEl.value = mergedPlan.text;
+    if (!mergedPlan.frozen) lastAutoPlan = newPlan;
+
+    renderValidationIssues();
   }
 
   document.querySelectorAll(

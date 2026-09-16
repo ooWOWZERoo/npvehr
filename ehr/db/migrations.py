@@ -865,6 +865,15 @@ def migration_024_create_anterior_segment_assessments(conn):
         "ON anterior_segment_assessments (exam_id)"
     ))
 
+def migration_025_glaucoma_stage(conn):
+    """Adds a discrete glaucoma staging field (Mild/Moderate/Severe/
+    Indeterminate/Unspecified) to GlaucomaTracking -- needed so the v2.26
+    A&P composer's ICD-10 validator can enforce the real, required 7th
+    character on primary open-angle glaucoma codes (H40.11<laterality><stage>,
+    e.g. H40.1132 = bilateral, moderate); before this, the dashboard had no
+    discrete stage of its own for that character to come from."""
+    _add_column_if_missing(conn, "glaucoma_trackings", "glaucoma_stage", "VARCHAR")
+
 # Ordered list of (id, function). Adding new migrations: append, never edit past entries.
 COLUMN_MIGRATIONS = [
     ("001_appointment_columns", migration_001_appointment_columns),
@@ -886,6 +895,7 @@ COLUMN_MIGRATIONS = [
     ("022_motility_and_confrontation_vf", migration_022_motility_and_confrontation_vf),
     ("023_rename_anterior_segment_to_dry_eye", migration_023_rename_anterior_segment_to_dry_eye),
     ("024_create_anterior_segment_assessments", migration_024_create_anterior_segment_assessments),
+    ("025_glaucoma_stage", migration_025_glaucoma_stage),
 ]
 POST_CREATE_ALL_MIGRATIONS = [
     ("002_seed_appointment_types", migration_002_seed_appointment_types),
