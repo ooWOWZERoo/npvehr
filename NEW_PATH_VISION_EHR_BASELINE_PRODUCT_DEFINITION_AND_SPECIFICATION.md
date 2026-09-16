@@ -1,7 +1,7 @@
 # New Path Vision EHR
 ## Baseline Product Definition and Current-State Functional Specification
 
-**Document version:** 2.26 (supersedes v2.25; rebuilds the Assessment & Plan composer around a dedicated, unit-tested core module (`ehr/services/ap_composer.py`) with a Narrative/Abbreviated style toggle, structured Meds/Testing/RTC plan bullets, explicit ICD-10 laterality and glaucoma 7th-character-staging validation surfaced to the clinician, and a manual-edit-preserving merge algorithm that survives appended or inserted clinician notes; the live form's JS composer mirrors this module's logic line-for-line; see new §45; none of this bears on the four go-live prerequisites, which are unchanged from v2.6)
+**Document version:** 2.27 (supersedes v2.26; Calendar & Appointments UX Overhaul Phase 1 -- replaces the server-rendered day/week/month appointment views with a FullCalendar-driven grid supporting drag-and-drop reschedule, hover-card quick info, extended filters, and a free-tier multi-provider board view; see new §46; none of this bears on the four go-live prerequisites, which are unchanged from v2.6)
 **Baseline date:** September 9, 2026
 **Application-reported version:** 1.0.0
 **Baseline source:** `setup_ehr.py` self-contained scaffold script (locally generated `visioncare_ehr/` project directory; see §2.2)
@@ -3172,3 +3172,50 @@ No auto-suggestion of ICD-10 codes for Glaucoma or Binocular Vision diagnoses fr
 | New capability | Assessment/Plan now use an append/prepend/splice-aware merge (mirroring `merge_manual_edits()`) instead of a simple "stop on first edit" flag — a manually appended or inserted note survives further checkbox clicks; an edit made inside an auto-generated bullet still safely freezes that field. See §45.2/§45.3. |
 | Updated | `ehr/templates/exams/form.html`, `ehr/templates/exams/detail.html` (Glaucoma Stage row), `ehr/models/database.py`, `ehr/db/migrations.py`, `ehr/routes/exams.py`. `tests/test_ap_composer.py` (new, 18 tests). `tests/test_smoke.py` composer assertions updated to match the new bulleted format (same fields/data, new literal strings). |
 | Explicitly not done | No ICD-10 auto-suggestion for Glaucoma/Binocular diagnoses. No terminology-server integration. No server-side persistence of note style. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |
+
+## 46. Calendar & Appointments UX Overhaul, Phase 1: Grid Calendar Core (v2.27)
+
+### 46.1 Origin
+
+The user asked for a deep-dive rethink of the calendar/scheduling UX against ten specific features (multi-view flexibility, color-coding/filters, drag-and-drop, availability/shift management, hover cards, online self-booking, automated reminders, waitlist, conflict/rule checking, EHR/billing integration). A gap map against the actual code (not assumptions) found half of these already built and substantially mature — day/week/month views, color-coding via `AppointmentTypeColorRule`, and conflict/rule checking (`_apply_scheduling_rules`, provider + resource double-booking with override+reason+audit) — while multi-provider/location grids, drag-and-drop, and hover cards were not built at all. A four-phase roadmap was agreed (full detail: `BUILD_BACKLOG.md` §5a); this section covers Phase 1.
+
+### 46.2 What changed
+
+**FullCalendar replaces the server-rendered list views.** `ehr/templates/appointments/{day,week,calendar}.html` (plain HTML lists/agendas) are gone, replaced by one shared template, `appointments/board.html`, rendered by all four view routes (`/calendar`, `/day`, `/week`, and the new `/board`) with a different `initial_view`/`initial_date` baked in per route. The template no longer receives pre-queried appointment data from Python at all — FullCalendar fetches everything itself, live, from a new JSON feed endpoint (`GET /appointments/feed.json`), so there is exactly one code path that turns an `Appointment` row into calendar-displayable data, not one per view as before.
+
+**Vendored, not CDN-loaded.** FullCalendar's free "Standard Bundle" (MIT-licensed; `@fullcalendar/core` + `list`/`daygrid`/`timegrid`/`multimonth`/`interaction`) is fetched from `registry.npmjs.org` and committed at `ehr/static/js/vendor/fullcalendar/fullcalendar-6.1.19.min.js`, rather than loaded from a public CDN at runtime — this app's first real front-end dependency, and a deliberate choice to avoid a third-party runtime dependency for a clinical application (works in network-restricted deployments too). FullCalendar Premium's paid `resource-timeline` plugin (true unified multi-resource columns) was evaluated and explicitly declined for this round — see §46.3.
+
+**Drag-and-drop / resize reschedule.** `POST /appointments/{id}/reschedule` (which already existed, unused by any UI before this round) now answers with JSON when the caller sends `Accept: application/json`, alongside its original redirect/plain-text behavior. It reuses `_apply_scheduling_rules` exactly as the full edit form does: a drag or resize that would create a real provider/resource conflict gets rejected (409) and the board reverts the drag/resize visually — nothing is ever silently overbooked from the calendar. A resize (event duration change) is treated as a duration override, same as the manual "Duration Override" field on the edit form.
+
+**Hover cards.** Hovering any event shows patient name, phone, provider, type, relationship/status badges, room(s), a has-notes flag, and an overbook flag — all without leaving the board (a single shared, JS-positioned popover element, not a native browser tooltip).
+
+**Multi-provider board — the free-tier workaround.** `GET /appointments/board` renders one FullCalendar `timeGridDay` instance per active provider, in a CSS grid, sharing one external toolbar (Prev/Today/Next, kept in sync across every instance via `datesSet`). This approximates FullCalendar Premium's true unified resource-timeline columns without the paid license — see §46.3 for the tradeoff.
+
+**Extended filters**, all client-side (no page reload — each filter change calls `refetchEvents()`): provider (hidden in board mode, since it's per-column there), appointment type, new/established relationship, status, room (a new filter — joins `AppointmentResourceReservation` to `Resource` where `resource_class == 'room'`), and has-notes (a new filter — whether `Appointment.notes` is non-empty). No payment-status filter: no payment/billing data model exists anywhere in this app yet (research doc §6, gated behind a real clearinghouse relationship), so a payment-status filter would have nothing real to filter on.
+
+### 46.3 The FullCalendar Premium licensing tradeoff
+
+FullCalendar's free core (month/week/day grids, drag-and-drop, event popovers) is MIT-licensed with no cost. Its `resource-timeline` plugin — the feature that would give a single calendar true unified multi-provider/multi-room *columns* sharing one time axis — is FullCalendar Premium, free only to evaluate; production commercial use requires a paid license this app has not purchased. Phase 1 ships the side-by-side-single-provider-calendars approximation described above instead of buying that license. Revisit only if that approximation proves too limiting with real usage (`BUILD_BACKLOG.md` §5a records this decision for that future re-evaluation).
+
+### 46.4 A pre-existing bug found and fixed along the way
+
+Every board/day/week/calendar route's `provider_id`/`appointment_type_version_id`/`room_resource_id` query parameters were typed as plain `int = None` in FastAPI. An HTML `<select>`'s empty-value "All" option (e.g. "All Providers") submits that parameter as an *empty string*, not an absent one — and FastAPI's `int`-typed parameter rejects `""` with a 422, distinct from omitting the parameter entirely. This bug predates this round (the old day/week views' filter forms had the identical shape) but was never exercised by the existing test suite, which never changes a filter back to "All" after selecting something. Fixed with a small `_qi()` helper (`ehr/routes/appointments.py`) that treats `""` the same as absent, applied to every affected query parameter on every affected route, plus a client-side belt-and-suspenders fix (the board's own filter-reading JS omits empty values from the query string it builds, rather than relying solely on the server to tolerate them).
+
+### 46.5 Verified
+
+`python3 -m py_compile` on the one touched Python file. Local instance via a real browser: month view renders a real FullCalendar grid; `feed.json` returns correctly-shaped events (id, title, start/end, resolved color, and every extended property the hover card and event rendering need); day view renders an event with a working hover card showing accurate patient/provider/type/badge/room/notes data; the multi-provider board renders one FullCalendar instance per provider; filter changes fire a `refetchEvents()` network call with exactly the expected query string (empty filters omitted); a direct-fetch reschedule to a conflict-free time succeeds (200, persisted, confirmed via a second feed fetch) and a reschedule onto another appointment's exact slot for the same provider correctly 409s with the same conflict message the edit form produces. Full Playwright suite re-run to confirm no regressions to the one existing calendar test (`test_appointments_calendar_loads`) or any other appointment-flow test.
+
+### 46.6 Explicitly not done (this round)
+
+No Phase 2 (waitlist), Phase 3 (reminders), or Phase 4 (self-booking) work — tracked separately in `BUILD_BACKLOG.md` §5a. No FullCalendar Premium purchase. No payment-status filter (no billing data model exists). No change to the full appointment create/edit form (`appointments/form.html`/`edit.html`) — drag/resize only handles simple time/duration changes; anything needing relationship/type/test changes or a documented conflict-override reason still goes through the existing form. No down-migration/schema changes at all this round — Phase 1 is purely a presentation-layer rebuild reusing every existing model and business-rule function unchanged.
+
+**Version 2.27 change log (relative to v2.26) — Calendar & Appointments UX Overhaul Phase 1 (grid calendar core):**
+
+| Area | Change |
+| --- | --- |
+| New capability | FullCalendar-driven grid replaces the server-rendered day/week/month list views; new JSON feed endpoint (`GET /appointments/feed.json`) is the single source of calendar event data. See §46.2. |
+| New capability | Drag-and-drop reschedule and resize, reusing the existing (previously unused by any UI) `POST /appointments/{id}/reschedule` endpoint and its full conflict-checking logic; rejected moves revert visually, never silently overbook. See §46.2. |
+| New capability | Hover-card quick info (patient/phone/provider/type/status/room/notes) on every event. New `GET /appointments/board` multi-provider view (free-tier side-by-side-calendars workaround for FullCalendar Premium's paid resource-timeline plugin — see §46.3). Extended filters: room, has-notes. |
+| Fixed | A pre-existing, previously-untriggered bug: an empty-value filter `<select>` ("All Providers" etc.) 422'd every affected route. See §46.4. |
+| Updated | `ehr/routes/appointments.py`, new `ehr/templates/appointments/board.html` (replaces `day.html`/`week.html`/`calendar.html`), `ehr/static/css/app.css`, `ehr/templates/base.html`/`appointments/list.html` (new "Providers" nav link), new vendored `ehr/static/js/vendor/fullcalendar/`. |
+| Explicitly not done | Phases 2-4 (waitlist, reminders, self-booking) — tracked in `BUILD_BACKLOG.md` §5a. No FullCalendar Premium purchase. No payment-status filter (no billing model exists). No schema/migration changes. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |

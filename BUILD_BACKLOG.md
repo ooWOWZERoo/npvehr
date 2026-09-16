@@ -1,6 +1,6 @@
 # New Path Vision EHR — Master Build Backlog
 
-**Status:** Living tracking document. **Baseline as of:** spec v2.26 / research doc v2.24 (2026-09-14).
+**Status:** Living tracking document. **Baseline as of:** spec v2.27 / research doc v2.24 (2026-09-16).
 
 ## Purpose and how to use this document
 
@@ -29,7 +29,8 @@ This consolidates every outstanding build item, investigation, and test scattere
 - [x] **Anterior Segment / Dry Eye split** — user request: separate the two, fully scoped. **Done, v2.23** — see baseline spec §42, research doc §8.3. `AnteriorSegmentAssessment` renamed to `DryEyeAssessment` (no data change); a real, new structural Anterior Segment dashboard built alongside it. Also resolves §12's "conjunctiva/anterior-chamber/iris as discrete slit-lamp structures" item.
 - [x] **Visit Focus activation redesign** — user request: status dots, real accordions, a sticky chip row, prototyped first then built into the real form. **Done, v2.24** — see baseline spec §43. Layered on top of the existing chip/hidden-attribute mechanism; no route or dashboard-field changes.
 - [x] **ICD-10 coverage expansion for Anterior Segment / Dry Eye / Pre-Post-Op** — user request: confirm the composer keeps auto-populating for the dashboards added since v2.15, and bring the ICD-10 lookup up to date with as complete a set of diagnosis/aftercare codes as today's structured fields support. **Done, v2.25** — see baseline spec §44, research doc §7.2. Verified codes added for pterygium, pinguecula, three age-related cataract subtypes, dry eye syndrome, and cataract-extraction aftercare status; `diagnosis_codes` now aggregates every active Visit Focus section's code(s), not just Refractive's.
-- [x] **Assessment & Plan composer rebuild: styles, structured plan, ICD-10 validation, smart merge** — user request: a dedicated, tested "click-to-autofill A&P engine" core module with bulleted clinical fragments (not narrative filler), a Narrative/Abbreviated style toggle, Meds/Testing/RTC plan structure, ICD-10 laterality + glaucoma 7th-character-staging validation, and a manual-edit-preserving merge. **Done, v2.26** — see baseline spec §45. New `ehr/services/ap_composer.py` (18 unit tests) is the reference the live form's JS composer mirrors; new `GlaucomaTracking.glaucoma_stage` field makes the staging rule real. Pick the next item from the sections below, or from §12's remaining visit-summary gaps.
+- [x] **Assessment & Plan composer rebuild: styles, structured plan, ICD-10 validation, smart merge** — user request: a dedicated, tested "click-to-autofill A&P engine" core module with bulleted clinical fragments (not narrative filler), a Narrative/Abbreviated style toggle, Meds/Testing/RTC plan structure, ICD-10 laterality + glaucoma 7th-character-staging validation, and a manual-edit-preserving merge. **Done, v2.26** — see baseline spec §45. New `ehr/services/ap_composer.py` (18 unit tests) is the reference the live form's JS composer mirrors; new `GlaucomaTracking.glaucoma_stage` field makes the staging rule real.
+- [~] **Calendar & Appointments UX Overhaul, Phase 1 (grid calendar core)** — user request: a deep-dive rethink of calendar/scheduling UX. **In progress** — see new §5a for the full gap map and 4-phase roadmap.
 
 ---
 
@@ -90,9 +91,21 @@ The foundational, largest-scope item underlying much of the above — deliberate
 ## 5. Appointment Scheduling Module — remaining gaps (spec §26.10, §36.5)
 
 - [ ] `AppointmentTypeVersion` `created_by`/`updated_by` attribution — `Appointment` itself got this in v2.7; the type-version side was explicitly out of scope for that round (§36.5 item 10)
-- [ ] Visual **Resource Schedule grid view** — `Resource`/`AvailabilityTemplate` data already exists and is enforced; no grid UI was ever built (§27.6, §31.3, §36.5 item 12)
+- [~] Visual **Resource Schedule grid view** — subsumed by the Calendar & Appointments UX Overhaul below (Phase 1's board view covers per-provider scheduling; a dedicated non-provider Resource grid, e.g. rooms/lanes/devices as their own board, is still open)
 - [ ] Room/lane/device resource conflict enforcement extended to a resource-picker UI on the booking form itself (today, resource assignment is automatic based on type requirements — no manual override UI, §31.3)
 - [ ] Calendar click-to-create does not itself pre-check availability before opening the form (§18.2 item 7, still open per that item's own note)
+
+---
+
+## 5a. Calendar & Appointments UX Overhaul (user request, 2026-09-16) — in progress
+
+User asked for a deep-dive rethink of the calendar/scheduling UX against ten specific features. Gap map against the code as of v2.26 (not assumptions): color-coding (`AppointmentTypeColorRule`), day/week/month views, and conflict/rule checking (`_apply_scheduling_rules`, provider + resource double-booking, override+reason+audit) were **already built and substantially mature**; multi-provider/location grids, drag-and-drop, hover cards, waitlist, online self-booking, and automated reminders were **not built at all**. Full gap map recorded in this session's transcript; phased roadmap below.
+
+- [x] **Phase 1 — Grid calendar core.** FullCalendar (MIT core, vendored locally rather than CDN-loaded) replaces the server-rendered day/week/month list views with a real time-slot grid: drag-and-drop reschedule (reuses the existing `POST /appointments/{id}/reschedule` endpoint and its `_apply_scheduling_rules` conflict check — a drag that would double-book is blocked/reverted exactly like the form is today), hover-card popovers, and extended filters (room, has-notes — no payment-status filter, since no payment/billing data model exists yet, per §2's gate). Multi-provider/room view ships as a **free workaround**: side-by-side single-provider FullCalendar instances sharing one time axis, not FullCalendar Premium's paid resource-timeline plugin (evaluated and explicitly declined pending real usage feedback). **Done, v2.27** — see baseline spec §46. Also fixed a pre-existing, previously-untriggered 422 bug (empty-value filter selects) affecting every board/day/week/calendar route.
+- [ ] **Phase 2 — Waitlist.** New `Waitlist` model + patient-workspace tab; cancelling/rescheduling surfaces matching entries to staff. No auto-notify yet (needs Phase 3's messaging infra).
+- [ ] **Phase 3 — Automated confirmations/reminders + waitlist auto-notify.** Needs an SMS/email vendor decision (deferred — no preference yet), patient consent/opt-in fields on `Patient`, and a scheduler (Vercel Cron Jobs, since this app has no persistent worker). First feature touching real secrets and outbound patient contact — needs a security/compliance pass before going live.
+- [ ] **Phase 4 — Online patient self-booking.** Largest lift: a separate patient-facing auth system, a public booking flow reusing existing availability-search logic, self-service cancel/reschedule under the same conflict rules. Effectively a second application surface — deserves its own dedicated planning round when picked up.
+- Explicitly **not** rescheduled by this round: EHR/billing integration (Appointment→Exam linkage still needs re-verification per the item above; real billing/claims stays gated behind §2's clearinghouse/compliance/BAA prerequisites, unchanged by this plan).
 
 ---
 
