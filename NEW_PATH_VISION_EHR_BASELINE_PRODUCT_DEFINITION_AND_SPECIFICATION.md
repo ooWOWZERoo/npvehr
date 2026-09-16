@@ -3259,3 +3259,45 @@ Phase 3 (automated reminders/confirmations, real auto-notify off the waitlist) a
 | New capability | `GET /appointments/new` gained an optional `provider_id` prefill query param, reusing the existing `posted.provider_id` template hook. See §47.3. |
 | Updated | `ehr/models/database.py`, `ehr/db/migrations.py`, `ehr/services/scheduling.py`, `ehr/routes/{appointments,patients}.py`, new `ehr/templates/{patients/waitlist_tab,appointments/waitlist}.html`, `ehr/templates/appointments/detail.html`, nav links in `base.html`/`appointments/{list,board}.html`/`patients/_workspace.html`. `tests/test_smoke.py` gained two new tests. |
 | Explicitly not done | Phase 3 (reminders/auto-notify) and Phase 4 (self-booking) -- tracked in `BUILD_BACKLOG.md` §5a. No "fulfilled" status automation. No reschedule-vacated-slot matching. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |
+
+## 48. Calendar & Appointments UX Overhaul, Phase 3: Automated Confirmations & Reminders (v2.29)
+
+### 48.1 Origin
+
+Phase 3 of the roadmap agreed in Phase 1 (§46, `BUILD_BACKLOG.md` §5a). Scoped by explicit decision before building: (1) no real SMS/email vendor account or API key this round -- sends are mocked/logged only, behind a swappable interface so a real provider (Twilio/SendGrid) can be dropped in later without touching any caller; (2) patient consent is opt-in and defaults OFF -- a reminder must never be sent to a patient on a channel they haven't explicitly turned on; (3) scope is appointment confirmations/reminders only, not the waitlist's auto-notify (still deferred, tracked in `BUILD_BACKLOG.md` §5a).
+
+### 48.2 What changed
+
+**Patient consent fields**: `Patient.sms_opt_in` / `email_opt_in` (migration `027_reminders_and_opt_in`), both boolean, both defaulting `False` -- including for every pre-existing patient row, so nobody is silently opted in by the migration itself. Two checkboxes on `patients/form.html`, threaded through `create_patient`/`update_patient` in `ehr/routes/patients.py` (both success paths and both MRN-conflict reconstruction branches, so an opt-in choice survives a conflict-and-retry).
+
+**Swappable mock notification interface** (`ehr/services/notifications.py`): `send_appointment_notice(db, appointment, kind)` composes a message and, per channel (sms/email), checks the patient's own opt-in before "sending" -- today's `_mock_send()` only logs what would have gone out and always reports success; a real vendor-backed implementation can replace it later behind the same call site. Every attempt (sent, skipped for no opt-in, or failed) is recorded in a new `AppointmentReminder` audit row, deduplicated per appointment+channel+kind regardless of outcome -- an hourly cron run must not re-log a fresh skip for a still-opted-out patient every hour, nor ever double-send.
+
+**Booking-time confirmation**: `create_appointment` (`ehr/routes/appointments.py`) calls `send_appointment_notice(db, appt, "confirmation")` right after a successful booking.
+
+**Cron-triggered reminder scan** (`GET /appointments/reminders/run`): scans every `scheduled` appointment starting within the next 24 hours and sends (mock) reminder notices per patient opt-in. Registered on a separate `cron_router` included directly on `app` with no session dependency (Vercel's Cron Job caller has no session cookie), authenticated instead via `Authorization: Bearer $CRON_SECRET` compared with `hmac.compare_digest`. GET, not POST, because Vercel Cron Jobs always trigger with a GET request. Wired to run hourly via `vercel.json`'s new `crons` entry.
+
+**New `CRON_SECRET` env var** (`ehr/env_info.py`): same dev-fallback-with-printed-warning treatment as the existing `SECRET_KEY` -- a random value is generated when unset so local development still works, but any real deployment must set it explicitly (and configure it identically on Vercel) or scheduled reminder runs can't authenticate.
+
+**Staff-facing audit log** (`GET /appointments/reminders`, `appointments/reminders.html`): every attempted send, newest first -- appointment link, channel, kind, outcome, recipient, and the exact message composed. Mirrors the Waitlist queue page's pattern (§47.2). Linked from the appointments nav (`base.html`, `appointments/{list,board}.html`).
+
+### 48.3 Verified
+
+`python3 -m py_compile` on every touched Python file. Fresh-database boot and idempotent re-run against an already-migrated database (both via a local SQLite instance). Manual end-to-end checks via `requests` against a live instance: opting a patient in/out and confirming the checkbox state round-trips; booking an appointment fires a mock confirmation recorded correctly per-channel; a non-opted-in patient's attempt is recorded as `skipped_no_opt_in` (not silently dropped); the cron endpoint rejects a missing or wrong bearer token (403) and accepts the correct one with no session at all; a repeated scan does not re-send or re-log an appointment+channel+kind already attempted (a real bug found and fixed during this check -- see below). One new Playwright test (`test_reminders_opt_in_gating_and_cron_scan`) added to the permanent suite; full suite re-run to confirm no regressions.
+
+**A real idempotency bug found and fixed along the way**: the first cut of the dedup check only looked for a prior row with `status == "sent"`, so an hourly cron run would keep re-logging a fresh `skipped_no_opt_in` row for the same still-opted-out patient every single run. Fixed by deduplicating on *any* prior attempt (sent, skipped, or failed) for that appointment+channel+kind, not just successful sends.
+
+### 48.4 Explicitly not done
+
+No real SMS/email vendor integration (Twilio/SendGrid or otherwise) -- sends are mocked/logged only, by explicit decision, behind an interface designed to make a real implementation a drop-in swap. No waitlist auto-notify (still deferred, tracked in `BUILD_BACKLOG.md` §5a). No configurable reminder lead time (hardcoded 24-hour lookahead, `REMINDER_LOOKAHEAD_HOURS`). No patient-facing reply/opt-out handling (e.g. an inbound "STOP" SMS) -- opt-in/out is staff-entered via the patient form only. No retry/backoff for a "failed" send (the mock implementation never actually fails). Phase 4 (online self-booking) remains future work.
+
+**Version 2.29 change log (relative to v2.28) — Calendar & Appointments UX Overhaul Phase 3 (Automated Confirmations & Reminders):**
+
+| Area | Change |
+| --- | --- |
+| New capability | `Patient.sms_opt_in` / `email_opt_in` (default `False`), migration `027_reminders_and_opt_in`. Checkboxes on `patients/form.html`; threaded through `create_patient`/`update_patient` including both conflict-retry branches. See §48.2. |
+| New capability | `ehr/services/notifications.py`: mock, swappable `send_appointment_notice()`, gated per-channel on patient opt-in, recorded in new `AppointmentReminder` audit table (migration `027_reminders_and_opt_in`). See §48.2. |
+| New capability | Booking-time mock confirmation send (`create_appointment`). Cron-triggered reminder scan (`GET /appointments/reminders/run`, 24h lookahead, `CRON_SECRET`-gated, on a session-dependency-free `cron_router`), wired into `vercel.json`'s new `crons` entry. New `CRON_SECRET` env var (`ehr/env_info.py`). See §48.2. |
+| New capability | Staff-facing reminders audit log (`GET /appointments/reminders`, `appointments/reminders.html`), linked from the appointments nav. See §48.2. |
+| Bug fix | Reminder dedup originally checked only `status == "sent"`, so a still-opted-out patient got a fresh skip logged every cron run; fixed to dedupe on any prior attempt. See §48.3. |
+| Updated | `ehr/models/database.py`, `ehr/db/migrations.py`, `ehr/env_info.py`, `ehr/app.py`, `ehr/routes/{appointments,patients}.py`, `ehr/templates/{patients/form,appointments/reminders,base,appointments/list,appointments/board}.html`, `vercel.json`. `tests/test_smoke.py`/`tests/conftest.py` gained one new test and a fixed `CRON_SECRET` test env value. |
+| Explicitly not done | No real SMS/email vendor. No waitlist auto-notify (still `BUILD_BACKLOG.md` §5a). No configurable lead time. No patient-facing opt-out flow. Phase 4 (self-booking) remains future work. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |

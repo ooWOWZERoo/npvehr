@@ -901,6 +901,33 @@ def migration_026_create_waitlist_entries(conn):
     conn.execute(text(
         "CREATE INDEX IF NOT EXISTS ix_waitlist_status_type ON waitlist_entries (status, appointment_type_version_id)"))
 
+def migration_027_reminders_and_opt_in(conn):
+    """Automated Confirmations & Reminders (Calendar & Appointments UX
+    Overhaul Phase 3 -- BUILD_BACKLOG.md 5a). Patient consent is opt-in and
+    defaults OFF: a pre-existing patient row gets FALSE on both new columns,
+    same as a freshly created one, so a reminder never sends to anyone who
+    hasn't explicitly turned it on since this migration ran."""
+    if _table_exists(conn, "patients"):
+        _add_column_if_missing(conn, "patients", "sms_opt_in", "BOOLEAN DEFAULT FALSE")
+        _add_column_if_missing(conn, "patients", "email_opt_in", "BOOLEAN DEFAULT FALSE")
+    conn.execute(text(f"""
+        CREATE TABLE IF NOT EXISTS appointment_reminders (
+            id {_pk_ddl(conn)},
+            appointment_id INTEGER NOT NULL,
+            channel VARCHAR NOT NULL,
+            kind VARCHAR NOT NULL,
+            status VARCHAR NOT NULL,
+            recipient VARCHAR,
+            message_body TEXT,
+            scheduled_for TIMESTAMP,
+            sent_at TIMESTAMP,
+            created_at TIMESTAMP
+        )
+    """))
+    conn.execute(text(
+        "CREATE INDEX IF NOT EXISTS ix_reminder_appt_channel_kind "
+        "ON appointment_reminders (appointment_id, channel, kind)"))
+
 # Ordered list of (id, function). Adding new migrations: append, never edit past entries.
 COLUMN_MIGRATIONS = [
     ("001_appointment_columns", migration_001_appointment_columns),
@@ -924,6 +951,7 @@ COLUMN_MIGRATIONS = [
     ("024_create_anterior_segment_assessments", migration_024_create_anterior_segment_assessments),
     ("025_glaucoma_stage", migration_025_glaucoma_stage),
     ("026_create_waitlist_entries", migration_026_create_waitlist_entries),
+    ("027_reminders_and_opt_in", migration_027_reminders_and_opt_in),
 ]
 POST_CREATE_ALL_MIGRATIONS = [
     ("002_seed_appointment_types", migration_002_seed_appointment_types),

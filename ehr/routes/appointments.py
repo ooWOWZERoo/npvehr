@@ -7,9 +7,10 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from ehr.models.database import (get_db, Appointment, Patient, Provider, AppointmentStatus, AppointmentType,
     AppointmentTypeVersion, DiagnosticTest, AppointmentTest, AppointmentAuditEvent, AppointmentResourceReservation,
-    Resource, WaitlistEntry, User)
+    Resource, WaitlistEntry, User, AppointmentReminder)
 from ehr.services import scheduling as sched
-from ehr.env_info import EHR_ENV
+from ehr.services import notifications as notify
+from ehr.env_info import EHR_ENV, CRON_SECRET
 from ehr.utils import patient_context
 from ehr.auth.permissions import require_role, APPOINTMENT_EDIT, ROLE_LABELS
 from ehr.auth.deps import get_current_user
@@ -18,6 +19,48 @@ from ehr.auth import csrf
 router = APIRouter(prefix="/appointments", tags=["appointments"])
 templates = Jinja2Templates(directory="ehr/templates")
 templates.env.globals["ehr_env"] = EHR_ENV
+
+# Separate, unauthenticated router for the reminder cron endpoint. Every route
+# on `router` above gets the session-auth dependency applied at inclusion time
+# in ehr/app.py -- fine for staff-facing pages, but Vercel's Cron Job caller
+# has no session cookie, only a bearer token (see CRON_SECRET in
+# ehr/env_info.py). This router is included directly on `app` with no
+# dependency, so it must do its own auth check in the route body.
+cron_router = APIRouter(prefix="/appointments", tags=["appointments-cron"])
+
+REMINDER_LOOKAHEAD_HOURS = 24
+
+
+@cron_router.get("/reminders/run")
+def run_reminder_scan(request: Request, db: Session = Depends(get_db)):
+    """Cron-triggered reminder scan (Phase 3 -- BUILD_BACKLOG.md 5a): finds
+    every scheduled appointment starting within REMINDER_LOOKAHEAD_HOURS and
+    sends (mock) reminder notices, per patient opt-in, for any channel that
+    hasn't already been sent for this appointment (send_appointment_notice's
+    own idempotency check). GET, not POST -- Vercel Cron Jobs always trigger
+    with a GET request (see vercel.json's `crons` entry). Authenticated the
+    same way Vercel signs those requests: `Authorization: Bearer
+    $CRON_SECRET`. Not CSRF-protected -- CSRF guards session-authenticated
+    browser forms, and this endpoint is neither (no session, no form), it's
+    a bearer-token service-to-service call, same posture as an API key."""
+    import hmac
+    auth = request.headers.get("authorization") or ""
+    expected = f"Bearer {CRON_SECRET}"
+    if not hmac.compare_digest(auth, expected):
+        return HTMLResponse("Forbidden", status_code=403)
+
+    now = datetime.utcnow()
+    window_end = now + timedelta(hours=REMINDER_LOOKAHEAD_HOURS)
+    upcoming = (db.query(Appointment)
+                .filter(Appointment.status == AppointmentStatus.scheduled,
+                        Appointment.scheduled_at >= now,
+                        Appointment.scheduled_at <= window_end)
+                .all())
+    sent_count = 0
+    for appt in upcoming:
+        results = notify.send_appointment_notice(db, appt, "reminder")
+        sent_count += sum(1 for r in results if r.status == "sent")
+    return JSONResponse({"ok": True, "appointments_checked": len(upcoming), "notices_sent": sent_count})
 templates.env.globals["ROLE_LABELS"] = ROLE_LABELS
 
 # Every route in this router requires a valid session (applied at router-inclusion
@@ -433,6 +476,17 @@ def staff_waitlist_queue(request: Request, db: Session = Depends(get_db)):
     return templates.TemplateResponse(request, "appointments/waitlist.html", {"entries": entries})
 
 
+@router.get("/reminders", response_class=HTMLResponse)
+def reminders_audit_log(request: Request, db: Session = Depends(get_db)):
+    """Automated Confirmations & Reminders (Phase 3 -- BUILD_BACKLOG.md 5a):
+    staff-facing audit trail of every attempted send (sent, skipped for no
+    opt-in, or failed), newest first. Mirrors the Waitlist queue page's
+    pattern for a global, non-patient-scoped staff view."""
+    entries = (db.query(AppointmentReminder)
+               .order_by(AppointmentReminder.created_at.desc()).limit(200).all())
+    return templates.TemplateResponse(request, "appointments/reminders.html", {"entries": entries})
+
+
 @router.get("/new", response_class=HTMLResponse)
 def new_appointment_form(request: Request, patient_id: int = None, date: str = None, provider_id: int = None,
                           db: Session = Depends(get_db)):
@@ -504,6 +558,7 @@ def create_appointment(request: Request, patient_id: int = Form(...), provider_i
     if appt.conflict_overridden:
         _audit(db, appt.id, "conflict_override", reason=appt.conflict_override_reason)
     db.commit(); db.refresh(appt)
+    notify.send_appointment_notice(db, appt, "confirmation")
     return RedirectResponse(f"/appointments/{appt.id}", status_code=303)
 
 

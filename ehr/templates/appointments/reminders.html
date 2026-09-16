@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Reminders &mdash; New Path Vision EHR{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Reminders &amp; Confirmations</h1>
+  <div style="display:flex;gap:0.5rem">
+    <a href="/appointments/calendar" class="btn btn-secondary btn-sm">Calendar</a>
+  </div>
+</div>
+<p style="color:var(--ink-muted);font-size:0.85rem;margin-top:-0.5rem">
+  Audit log of every attempted confirmation/reminder send. No real SMS/email vendor is
+  connected yet -- "Sent" here means the mock send interface logged what would have gone
+  out; "Skipped" means the patient hasn't opted into that channel.
+</p>
+<div class="card">
+  {% if not entries %}
+  <p style="color:#64748b;text-align:center">No reminder activity yet.</p>
+  {% else %}
+  <div class="table-responsive">
+  <table class="exam-table">
+    <tr><th>When</th><th>Appointment</th><th>Channel</th><th>Kind</th><th>Status</th><th>Recipient</th><th>Message</th></tr>
+    {% for e in entries %}
+    <tr>
+      <td class="mono-data">{{ e.created_at.strftime('%Y-%m-%d %H:%M') if e.created_at else '—' }}</td>
+      <td><a href="/appointments/{{ e.appointment_id }}">#{{ e.appointment_id }}</a></td>
+      <td>{{ e.channel|upper }}</td>
+      <td>{{ e.kind|capitalize }}</td>
+      <td>
+        {% if e.status == 'sent' %}<span style="color:#166534;font-weight:600">Sent</span>
+        {% elif e.status == 'skipped_no_opt_in' %}<span style="color:#92400e">Skipped (no opt-in)</span>
+        {% else %}<span style="color:#b91c1c;font-weight:600">Failed</span>{% endif %}
+      </td>
+      <td class="mono-data">{{ e.recipient or '—' }}</td>
+      <td>{{ e.message_body or '—' }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

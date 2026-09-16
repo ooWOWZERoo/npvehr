@@ -56,7 +56,10 @@ def live_server():
     exercised here every run)."""
     with tempfile.TemporaryDirectory(prefix="npvehr-e2e-") as tmp_dir:
         db_path = Path(tmp_dir) / "test_ehr.db"
-        env = {**os.environ, "DATABASE_URL": f"sqlite:///{db_path}", "EHR_ENV": "test"}
+        # CRON_SECRET fixed (rather than the random-per-process dev fallback) so
+        # tests can exercise the reminder cron endpoint's own auth check.
+        env = {**os.environ, "DATABASE_URL": f"sqlite:///{db_path}", "EHR_ENV": "test",
+               "CRON_SECRET": "test-cron-secret"}
 
         subprocess.run([sys.executable, "-m", "ehr.db.seed"], cwd=REPO_ROOT, env=env, check=True)
 

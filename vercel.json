@@ -4,5 +4,11 @@
     "ehr/app.py": {
       "maxDuration": 30
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/appointments/reminders/run",
+      "schedule": "0 * * * *"
+    }
+  ]
 }
