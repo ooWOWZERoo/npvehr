@@ -874,6 +874,33 @@ def migration_025_glaucoma_stage(conn):
     discrete stage of its own for that character to come from."""
     _add_column_if_missing(conn, "glaucoma_trackings", "glaucoma_stage", "VARCHAR")
 
+def migration_026_create_waitlist_entries(conn):
+    """Waitlist Management (Calendar & Appointments UX Overhaul Phase 2 --
+    BUILD_BACKLOG.md 5a). See models.database.WaitlistEntry for the
+    open-ended "any provider/type/date" shape."""
+    conn.execute(text(f"""
+        CREATE TABLE IF NOT EXISTS waitlist_entries (
+            id {_pk_ddl(conn)},
+            patient_id INTEGER NOT NULL,
+            provider_id INTEGER,
+            appointment_type_version_id INTEGER,
+            desired_date_start VARCHAR,
+            desired_date_end VARCHAR,
+            priority VARCHAR,
+            notes TEXT,
+            status VARCHAR,
+            created_at TIMESTAMP,
+            created_by_user_id INTEGER,
+            fulfilled_at TIMESTAMP,
+            fulfilled_appointment_id INTEGER,
+            cancelled_at TIMESTAMP
+        )
+    """))
+    conn.execute(text(
+        "CREATE INDEX IF NOT EXISTS ix_waitlist_status_provider ON waitlist_entries (status, provider_id)"))
+    conn.execute(text(
+        "CREATE INDEX IF NOT EXISTS ix_waitlist_status_type ON waitlist_entries (status, appointment_type_version_id)"))
+
 # Ordered list of (id, function). Adding new migrations: append, never edit past entries.
 COLUMN_MIGRATIONS = [
     ("001_appointment_columns", migration_001_appointment_columns),
@@ -896,6 +923,7 @@ COLUMN_MIGRATIONS = [
     ("023_rename_anterior_segment_to_dry_eye", migration_023_rename_anterior_segment_to_dry_eye),
     ("024_create_anterior_segment_assessments", migration_024_create_anterior_segment_assessments),
     ("025_glaucoma_stage", migration_025_glaucoma_stage),
+    ("026_create_waitlist_entries", migration_026_create_waitlist_entries),
 ]
 POST_CREATE_ALL_MIGRATIONS = [
     ("002_seed_appointment_types", migration_002_seed_appointment_types),

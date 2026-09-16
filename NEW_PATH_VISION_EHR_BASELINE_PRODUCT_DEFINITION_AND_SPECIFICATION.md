@@ -1,7 +1,7 @@
 # New Path Vision EHR
 ## Baseline Product Definition and Current-State Functional Specification
 
-**Document version:** 2.27 (supersedes v2.26; Calendar & Appointments UX Overhaul Phase 1 -- replaces the server-rendered day/week/month appointment views with a FullCalendar-driven grid supporting drag-and-drop reschedule, hover-card quick info, extended filters, and a free-tier multi-provider board view; see new §46; none of this bears on the four go-live prerequisites, which are unchanged from v2.6)
+**Document version:** 2.28 (supersedes v2.27; Calendar & Appointments UX Overhaul Phase 2 -- adds Waitlist Management: a new `WaitlistEntry` model, a per-patient waitlist tab, a staff-facing global queue, and surfacing matching entries on an appointment's detail page when it's cancelled; see new §47; none of this bears on the four go-live prerequisites, which are unchanged from v2.6)
 **Baseline date:** September 9, 2026
 **Application-reported version:** 1.0.0
 **Baseline source:** `setup_ehr.py` self-contained scaffold script (locally generated `visioncare_ehr/` project directory; see §2.2)
@@ -3219,3 +3219,43 @@ No Phase 2 (waitlist), Phase 3 (reminders), or Phase 4 (self-booking) work — t
 | Fixed | A pre-existing, previously-untriggered bug: an empty-value filter `<select>` ("All Providers" etc.) 422'd every affected route. See §46.4. |
 | Updated | `ehr/routes/appointments.py`, new `ehr/templates/appointments/board.html` (replaces `day.html`/`week.html`/`calendar.html`), `ehr/static/css/app.css`, `ehr/templates/base.html`/`appointments/list.html` (new "Providers" nav link), new vendored `ehr/static/js/vendor/fullcalendar/`. |
 | Explicitly not done | Phases 2-4 (waitlist, reminders, self-booking) — tracked in `BUILD_BACKLOG.md` §5a. No FullCalendar Premium purchase. No payment-status filter (no billing model exists). No schema/migration changes. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |
+
+## 47. Calendar & Appointments UX Overhaul, Phase 2: Waitlist Management (v2.28)
+
+### 47.1 Origin
+
+Phase 2 of the Calendar & Appointments UX Overhaul roadmap agreed in Phase 1 (§46, `BUILD_BACKLOG.md` §5a): a patient's standing request for an earlier slot than what's currently bookable, surfaced to staff when a matching slot actually opens up. No auto-notify in this phase — that needs Phase 3's SMS/email infrastructure, not yet built.
+
+### 47.2 What changed
+
+**New `WaitlistEntry` model** (migration `026_create_waitlist_entries`): patient-scoped, with an intentionally open-ended shape — `provider_id`, `appointment_type_version_id`, `desired_date_start`, and `desired_date_end` are each independently nullable, where null means "no preference" rather than "unset." `priority` (normal/urgent) and free-text `notes` round it out; `status` (active/fulfilled/cancelled) tracks its lifecycle (this phase only ever sets active → cancelled — "fulfilled," meaning actually booked from the waitlist, is a manual status not yet wired to any route; a future phase could set it automatically when a matched patient is booked).
+
+**Per-patient waitlist tab** (`GET/POST /patients/{id}/waitlist`, `patients/waitlist_tab.html`): add an entry with any subset of preferences filled in, view active/fulfilled/cancelled history, cancel an active entry. Follows the same tab pattern as the Problem List (§39) and other patient-workspace tabs.
+
+**Staff-facing global queue** (`GET /appointments/waitlist`, `appointments/waitlist.html`): every active entry across all patients, urgent-first then oldest-first within a priority tier, with a "Book" link that jumps straight to the New Appointment form with the patient (and provider, if the entry specifies one) prefilled.
+
+**Matching surfaced on cancellation**: `ehr.services.scheduling.find_matching_waitlist_entries(db, provider_id, appointment_type_version_id, on_date)` returns every active entry that could take a slot freed on that date for that provider/type — an entry's null field matches anything, and (via SQLAlchemy's `column == None` → `IS NULL` translation) a *cancelled appointment's own* null type correctly narrows the match to only entries that also want "any type," not entries wanting a specific one. `appointment_detail` computes this whenever the appointment's status is `cancelled` and `appointments/detail.html` shows a "Patients Waiting for This Slot" card — patient, phone, desired date range, notes, and a prefilled "Book" link — right above the appointment's own details.
+
+Explicitly not done this phase: auto-notify (SMS/email — Phase 3), surfacing matches on a *reschedule*'s vacated slot (only cancellation is handled — a reschedule's old slot is a one-off signal this app has no notification/toast mechanism to carry, unlike a cancellation which the appointment's own current, queryable state already represents), and any UI to mark an entry "fulfilled" (it stays a manual status field with no route setting it yet).
+
+### 47.3 A prefill improvement made along the way
+
+`GET /appointments/new` gained an optional `provider_id` query parameter (prefilling the form's provider select) — needed for the waitlist queue's and detail page's "Book" links to actually preselect the right provider for an entry/slot that specifies one, reusing the exact same `posted.provider_id` template hook the form already checks after a failed submission, so no template change was needed.
+
+### 47.4 Verified
+
+`python3 -m py_compile` on every touched Python file. Local instance via a real browser: added a waitlist entry on the patient tab, confirmed it appears there and in the global queue; cancelled a matching seeded appointment and confirmed the entry (and a second, more specific entry) both correctly surfaced on the detail page; confirmed a "Book" link correctly prefills the New Appointment form; confirmed cancelling a waitlist entry removes it from the active-only global queue. Two new Playwright tests (`test_calendar_feed_hover_data_and_reschedule_conflict` -- expanded Phase 1 coverage for the feed shape and both reschedule paths that Phase 1 shipped without its own test; `test_waitlist_add_view_and_surfaced_on_cancellation`) added to the permanent suite; full suite re-run to confirm no regressions.
+
+### 47.5 Explicitly not done
+
+Phase 3 (automated reminders/confirmations, real auto-notify off the waitlist) and Phase 4 (online self-booking) remain future work, tracked in `BUILD_BACKLOG.md` §5a. No "fulfilled" status automation. No reschedule-vacated-slot matching (cancellation only). No schema change beyond the one new table.
+
+**Version 2.28 change log (relative to v2.27) — Calendar & Appointments UX Overhaul Phase 2 (Waitlist Management):**
+
+| Area | Change |
+| --- | --- |
+| New capability | `WaitlistEntry` model + migration (open-ended provider/type/date-range preferences, each independently nullable). Per-patient waitlist tab and a staff-facing global queue. See §47.2. |
+| New capability | `find_matching_waitlist_entries()` surfaces matching active entries on an appointment's detail page whenever it's cancelled, with a prefilled "Book" link per match. See §47.2. |
+| New capability | `GET /appointments/new` gained an optional `provider_id` prefill query param, reusing the existing `posted.provider_id` template hook. See §47.3. |
+| Updated | `ehr/models/database.py`, `ehr/db/migrations.py`, `ehr/services/scheduling.py`, `ehr/routes/{appointments,patients}.py`, new `ehr/templates/{patients/waitlist_tab,appointments/waitlist}.html`, `ehr/templates/appointments/detail.html`, nav links in `base.html`/`appointments/{list,board}.html`/`patients/_workspace.html`. `tests/test_smoke.py` gained two new tests. |
+| Explicitly not done | Phase 3 (reminders/auto-notify) and Phase 4 (self-booking) -- tracked in `BUILD_BACKLOG.md` §5a. No "fulfilled" status automation. No reschedule-vacated-slot matching. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |

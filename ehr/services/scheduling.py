@@ -286,3 +286,27 @@ def find_open_slots(db, provider_id: int, target_date, duration_minutes: int,
                 slots.append(cursor)
             cursor += slot_step
     return slots
+
+
+def find_matching_waitlist_entries(db, provider_id: int, appointment_type_version_id: int, on_date):
+    """Waitlist Management (Calendar & Appointments UX Overhaul Phase 2 --
+    BUILD_BACKLOG.md 5a). Returns every active WaitlistEntry that could take
+    a slot freed on `on_date` for this provider/type -- a null field on the
+    entry means "no preference," matching anything. Urgent entries first,
+    then oldest-created first (first come, first served within a priority
+    tier). No auto-notify (needs Phase 3's messaging infra): this only
+    powers the "Patients Waiting" list shown to staff when a slot opens up
+    (today: on cancellation -- see ehr/routes/appointments.py's
+    appointment_detail)."""
+    from sqlalchemy import or_, case
+    from ehr.models.database import WaitlistEntry
+    on_date_str = on_date.isoformat() if hasattr(on_date, "isoformat") else on_date
+    return (db.query(WaitlistEntry)
+            .filter(WaitlistEntry.status == "active")
+            .filter(or_(WaitlistEntry.provider_id.is_(None), WaitlistEntry.provider_id == provider_id))
+            .filter(or_(WaitlistEntry.appointment_type_version_id.is_(None),
+                        WaitlistEntry.appointment_type_version_id == appointment_type_version_id))
+            .filter(or_(WaitlistEntry.desired_date_start.is_(None), WaitlistEntry.desired_date_start <= on_date_str))
+            .filter(or_(WaitlistEntry.desired_date_end.is_(None), WaitlistEntry.desired_date_end >= on_date_str))
+            .order_by(case((WaitlistEntry.priority == "urgent", 0), else_=1), WaitlistEntry.created_at)
+            .all())

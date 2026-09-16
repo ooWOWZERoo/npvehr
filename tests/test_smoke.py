@@ -514,3 +514,123 @@ def test_csrf_token_required_on_post(logged_in_page, live_server):
     resp = page.request.post(live_server + "/patients/new",
         form={"first_name": "Correct", "last_name": "Token", "csrf_token": token})
     assert resp.status in (200, 303)
+
+
+def test_calendar_feed_hover_data_and_reschedule_conflict(logged_in_page, live_server):
+    """Calendar & Appointments UX Overhaul Phase 1 (BUILD_BACKLOG.md 5a) --
+    the FullCalendar-driven board (ehr/templates/appointments/board.html).
+    Verifies the JSON feed (ehr/routes/appointments.py's appointments_feed)
+    returns the shape the board's hover cards/event rendering need, that a
+    conflict-free reschedule persists, and that rescheduling onto another
+    appointment's exact slot for the same provider is rejected (409) with
+    _apply_scheduling_rules' own conflict message -- the same check the full
+    edit form uses, reused by the board's drag-and-drop."""
+    page = logged_in_page
+    page.goto(live_server + "/appointments/calendar")
+    assert page.locator(".fc").count() >= 1
+
+    resp = page.request.get(live_server + "/appointments/feed.json?start=2020-01-01&end=2030-01-01")
+    assert resp.status == 200
+    events = resp.json()
+    assert len(events) >= 2
+    sample = events[0]
+    for key in ("id", "title", "start", "end", "color"):
+        assert key in sample
+    props = sample["extendedProps"]
+    for key in ("patientName", "patientPhone", "providerId", "providerName", "typeName", "typeAbbrev",
+                "status", "relationship", "rooms", "hasNotes", "conflictOverridden", "durationMinutes"):
+        assert key in props
+
+    # A stale bookmark with an empty-value filter (the pre-existing bug fixed
+    # in this round) must not 422.
+    resp = page.request.get(live_server + "/appointments/feed.json?provider_id=&start=2020-01-01&end=2030-01-01")
+    assert resp.status == 200
+    resp = page.request.get(live_server + "/appointments/day?date_str=2026-01-01&provider_id=")
+    assert resp.status == 200
+
+    # Reschedule to a conflict-free time -- persists.
+    same_provider = [e for e in events if e["extendedProps"]["providerId"] == sample["extendedProps"]["providerId"]]
+    csrf = page.locator('meta[name="csrf-token"]').get_attribute("content")
+    new_start = sample["start"][:11] + "06:00:00"
+    result = page.evaluate("""
+        async ([id, newStart, csrf]) => {
+            const body = new URLSearchParams();
+            body.set('scheduled_at', newStart);
+            body.set('csrf_token', csrf);
+            const resp = await fetch('/appointments/' + id + '/reschedule', {
+                method: 'POST', headers: {'Accept': 'application/json'}, body,
+            });
+            return {status: resp.status, data: await resp.json()};
+        }
+    """, [sample["id"], new_start, csrf])
+    assert result["status"] == 200 and result["data"]["ok"] is True
+
+    # Reschedule onto another same-provider appointment's exact slot -- 409s.
+    other = [e for e in same_provider if e["id"] != sample["id"]]
+    if other:
+        conflict_result = page.evaluate("""
+            async ([id, newStart, csrf]) => {
+                const body = new URLSearchParams();
+                body.set('scheduled_at', newStart);
+                body.set('csrf_token', csrf);
+                const resp = await fetch('/appointments/' + id + '/reschedule', {
+                    method: 'POST', headers: {'Accept': 'application/json'}, body,
+                });
+                return {status: resp.status, data: await resp.json()};
+            }
+        """, [sample["id"], other[0]["start"], csrf])
+        assert conflict_result["status"] == 409
+        assert conflict_result["data"]["ok"] is False
+        assert "conflict" in conflict_result["data"]["error"].lower()
+
+
+def test_waitlist_add_view_and_surfaced_on_cancellation(logged_in_page, live_server):
+    """Waitlist Management, Phase 2 (BUILD_BACKLOG.md 5a) -- adds a waitlist
+    entry on the patient workspace tab (ehr/templates/patients/waitlist_tab.html),
+    confirms it appears there and in the staff-facing global queue
+    (appointments/waitlist.html), then cancels a matching appointment and
+    confirms the entry surfaces on that appointment's detail page (ehr.services.
+    scheduling.find_matching_waitlist_entries) -- no auto-notify yet, this is
+    purely the staff-visible surfacing Phase 2 ships."""
+    page = logged_in_page
+
+    events = page.request.get(live_server + "/appointments/feed.json?start=2020-01-01&end=2030-01-01").json()
+    target = events[0]
+    provider_id = target["extendedProps"]["providerId"]
+    type_version_id = target["extendedProps"]["appointmentTypeVersionId"]  # may be None -- a legacy, untyped appointment
+
+    page.goto(live_server + "/patients/")
+    page.locator("a", has_text="Johnson").first.click()
+    page.locator(".pw-subnav a[href$='/waitlist']").click()
+    page.select_option('select[name="provider_id"]', str(provider_id))
+    if type_version_id is not None:
+        page.select_option('select[name="appointment_type_version_id"]', str(type_version_id))
+    page.select_option('select[name="priority"]', "urgent")
+    page.fill('input[name="notes"]', "Waiting for an earlier slot")
+    page.locator('button[type="submit"]', has_text="Add to Waitlist").click()
+    page.wait_for_url(re.compile(r"/waitlist$"))
+    page.wait_for_load_state("networkidle")
+    tab_text = page.locator(".card", has_text="Waitlist Entries").inner_text()
+    assert "Waiting for an earlier slot" in tab_text
+    assert "Urgent" in tab_text
+
+    page.goto(live_server + "/appointments/waitlist")
+    assert "Waiting for an earlier slot" in page.locator(".card").inner_text()
+
+    page.goto(live_server + "/appointments/" + str(target["id"]))
+    page.select_option('select[name="status"]', "cancelled")
+    page.locator('form select[name="status"]').evaluate("el => el.form.requestSubmit()")
+    page.wait_for_url(re.compile(r"/appointments/\d+$"))
+    page.wait_for_load_state("networkidle")
+    matches_card = page.locator(".card", has_text="Patients Waiting for This Slot")
+    assert matches_card.is_visible()
+    assert "Waiting for an earlier slot" in matches_card.inner_text()
+
+    # Cancelling the waitlist entry itself removes it from the active queue.
+    page.goto(live_server + "/patients/")
+    page.locator("a", has_text="Johnson").first.click()
+    page.locator(".pw-subnav a[href$='/waitlist']").click()
+    page.locator("form button", has_text="Cancel").first.click()
+    page.wait_for_load_state("networkidle")
+    page.goto(live_server + "/appointments/waitlist")
+    assert "Waiting for an earlier slot" not in page.locator(".card").inner_text()

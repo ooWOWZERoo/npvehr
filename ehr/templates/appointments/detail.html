@@ -9,6 +9,25 @@
   </div>
 </div>
 {% if appt.conflict_overridden %}<div class="alert alert-error">This appointment was booked as an approved overbook: {{ appt.conflict_override_reason }}</div>{% endif %}
+{% if waitlist_matches %}
+<div class="card" style="margin-bottom:1rem;border-left:4px solid var(--primary)">
+  <h3>Patients Waiting for This Slot</h3>
+  <p style="color:var(--ink-muted);font-size:0.85rem;margin-top:-0.5rem">This appointment was cancelled, freeing {{ appt.scheduled_at.strftime('%A, %B %-d') }} with Dr. {{ appt.provider.last_name }}. These patients asked to be notified of an earlier {{ appt.appointment_type_version.display_name if appt.appointment_type_version else '' }} slot:</p>
+  <table class="exam-table">
+    <tr><th>Priority</th><th>Patient</th><th>Date Range</th><th>Notes</th><th></th></tr>
+    {% for e in waitlist_matches %}
+    <tr>
+      <td>{% if e.priority == 'urgent' %}<span style="color:#b91c1c;font-weight:700">Urgent</span>{% else %}Normal{% endif %}</td>
+      <td><a href="/patients/{{ e.patient_id }}">{{ e.patient.last_name }}, {{ e.patient.first_name }}</a>
+        {% if e.patient.phone %}<div style="font-size:0.75rem;color:var(--ink-muted)">{{ e.patient.phone }}</div>{% endif %}</td>
+      <td class="mono-data">{{ e.desired_date_start or '—' }} &ndash; {{ e.desired_date_end or '—' }}</td>
+      <td>{{ e.notes or '—' }}</td>
+      <td><a href="/appointments/new?patient_id={{ e.patient_id }}&provider_id={{ appt.provider_id }}&date={{ appt.scheduled_at.date().isoformat() }}" class="btn btn-sm btn-primary">Book</a></td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endif %}
 <div class="detail-grid">
   <div class="card"><h3>Details</h3><dl class="dl-grid">
     <dt>Patient</dt><dd><a href="/patients/{{ appt.patient_id }}">{{ appt.patient.last_name }}, {{ appt.patient.first_name }}</a></dd>
