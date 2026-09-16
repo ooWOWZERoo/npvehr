@@ -1,0 +1,245 @@
+{% extends "base.html" %}
+{% block title %}Calendar &mdash; New Path Vision EHR{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1 id="boardTitle">Calendar</h1>
+  <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+    <a href="/appointments/calendar" data-view-link="month" class="btn btn-secondary btn-sm{{ ' active' if initial_view == 'dayGridMonth' and not providers_mode }}">Month</a>
+    <a href="/appointments/week" data-view-link="week" class="btn btn-secondary btn-sm{{ ' active' if initial_view == 'timeGridWeek' and not providers_mode }}">Week</a>
+    <a href="/appointments/day" data-view-link="day" class="btn btn-secondary btn-sm{{ ' active' if initial_view == 'timeGridDay' and not providers_mode }}">Day</a>
+    <a href="/appointments/board" data-view-link="board" class="btn btn-secondary btn-sm{{ ' active' if providers_mode }}">Providers</a>
+    <a href="/appointments/new" class="btn btn-primary btn-sm">+ New Appointment</a>
+  </div>
+</div>
+
+<div class="day-toolbar">
+  <button type="button" class="btn btn-secondary btn-sm" id="boardPrev">&larr; Prev</button>
+  <button type="button" class="btn btn-secondary btn-sm" id="boardToday">Today</button>
+  <button type="button" class="btn btn-secondary btn-sm" id="boardNext">Next &rarr;</button>
+  <span id="boardRangeLabel" style="font-weight:600;color:var(--ink);margin:0 var(--space-2)"></span>
+  <select id="filterProvider" {{ 'disabled title="Every provider is already its own column in Providers view"' if providers_mode else '' }}>
+    <option value="">All Providers</option>
+    {% for p in providers %}<option value="{{ p.id }}" {{ 'selected' if provider_id == p.id }}>Dr. {{ p.last_name }}</option>{% endfor %}
+  </select>
+  <select id="filterType"><option value="">All Types</option>
+    {% for t in types %}<option value="{{ t.id }}" {{ 'selected' if appointment_type_version_id == t.id }}>{{ t.display_name }}</option>{% endfor %}</select>
+  <select id="filterRelationship"><option value="">New &amp; Established</option>
+    <option value="new" {{ 'selected' if relationship == 'new' }}>New</option>
+    <option value="established" {{ 'selected' if relationship == 'established' }}>Established</option></select>
+  <select id="filterStatus"><option value="">All Statuses</option>
+    {% for s in statuses %}<option value="{{ s.value }}" {{ 'selected' if status == s.value }}>{{ s.value.replace('_',' ') }}</option>{% endfor %}</select>
+  <select id="filterRoom"><option value="">All Rooms</option>
+    {% for r in rooms %}<option value="{{ r.id }}" {{ 'selected' if room_resource_id == r.id }}>{{ r.display_name }}</option>{% endfor %}</select>
+  <select id="filterNotes"><option value="">Notes: Any</option>
+    <option value="yes" {{ 'selected' if has_notes == 'yes' }}>Has notes</option>
+    <option value="no" {{ 'selected' if has_notes == 'no' }}>No notes</option></select>
+</div>
+
+{% if providers_mode %}
+<div class="board-grid" id="boardGrid">
+  {% for p in providers %}
+  <div class="board-col">
+    <div class="board-col-head">Dr. {{ p.last_name }}</div>
+    <div class="board-col-calendar" data-provider-id="{{ p.id }}"></div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div id="calendar"></div>
+{% endif %}
+
+<div id="apptHoverCard" class="appt-hover-card" hidden></div>
+
+{% include "appointments/_legend.html" %}
+
+<script src="/static/js/vendor/fullcalendar/fullcalendar-6.1.19.min.js"></script>
+<script>
+(function () {
+  var INITIAL_VIEW = {{ initial_view|tojson }};
+  var INITIAL_DATE = {{ initial_date|tojson }};
+  var PROVIDERS_MODE = {{ 'true' if providers_mode else 'false' }};
+
+  function filterParams() {
+    // Omit empty values entirely -- FastAPI's int-typed query params (e.g.
+    // provider_id) reject an empty string with a 422, they don't treat it as
+    // "unset" the way a plain HTML form submission would.
+    var raw = {
+      provider_id: PROVIDERS_MODE ? '' : document.getElementById('filterProvider').value,
+      appointment_type_version_id: document.getElementById('filterType').value,
+      relationship: document.getElementById('filterRelationship').value,
+      status: document.getElementById('filterStatus').value,
+      room_resource_id: document.getElementById('filterRoom').value,
+      has_notes: document.getElementById('filterNotes').value,
+    };
+    var out = {};
+    Object.keys(raw).forEach(function (k) { if (raw[k]) out[k] = raw[k]; });
+    return out;
+  }
+
+  // Hover card: patient/contact/type/status/room/notes quick info on hover,
+  // without leaving the board (spec: "Hover Cards & Quick Info"). Positioned
+  // near the pointer; a single shared element is reused for every event.
+  var hoverCard = document.getElementById('apptHoverCard');
+  function showHoverCard(jsEvent, props) {
+    var lines = [];
+    lines.push('<strong>' + props.patientName + '</strong>');
+    if (props.patientPhone) lines.push('<div>' + props.patientPhone + '</div>');
+    lines.push('<div>' + props.providerName + ' &middot; ' + props.typeName + '</div>');
+    lines.push('<div><span class="badge-relationship ' + props.relationship + '">' +
+      (props.relationship === 'new' ? 'NEW' : 'EST') + '</span> ' +
+      '<span class="badge badge-' + props.status + '">' + props.status.replace('_', ' ') + '</span></div>');
+    if (props.rooms && props.rooms.length) lines.push('<div>Room: ' + props.rooms.join(', ') + '</div>');
+    if (props.hasNotes) lines.push('<div style="color:var(--ink-muted)">Has notes</div>');
+    if (props.conflictOverridden) lines.push('<div class="appt-conflict-flag" style="display:inline-block">OVERBOOK</div>');
+    hoverCard.innerHTML = lines.join('');
+    hoverCard.hidden = false;
+    positionHoverCard(jsEvent);
+  }
+  function positionHoverCard(jsEvent) {
+    var pad = 14;
+    var x = jsEvent.pageX + pad, y = jsEvent.pageY + pad;
+    var maxX = window.scrollX + document.documentElement.clientWidth - 260;
+    if (x > maxX) x = jsEvent.pageX - 260 - pad;
+    hoverCard.style.left = x + 'px';
+    hoverCard.style.top = y + 'px';
+  }
+  function hideHoverCard() { hoverCard.hidden = true; }
+
+  // Compact event rendering: time + patient + type abbreviation, with small
+  // flags for notes/conflict -- full detail lives in the hover card, not
+  // crammed into the block itself.
+  function renderEventContent(arg) {
+    var p = arg.event.extendedProps;
+    var wrap = document.createElement('div');
+    wrap.className = 'fc-appt-event';
+    var time = document.createElement('div');
+    time.className = 'fc-appt-event-time';
+    time.textContent = arg.timeText;
+    var main = document.createElement('div');
+    main.className = 'fc-appt-event-main';
+    main.textContent = p.patientName + ' · ' + p.typeAbbrev;
+    wrap.appendChild(time);
+    wrap.appendChild(main);
+    if (p.hasNotes || p.conflictOverridden) {
+      var flags = document.createElement('div');
+      flags.className = 'fc-appt-event-flags';
+      if (p.conflictOverridden) flags.textContent += '⚠ ';
+      if (p.hasNotes) flags.textContent += '✎';
+      wrap.appendChild(flags);
+    }
+    return { domNodes: [wrap] };
+  }
+
+  function csrfToken() {
+    var meta = document.querySelector('meta[name="csrf-token"]');
+    return meta ? meta.getAttribute('content') : '';
+  }
+
+  // Drag-and-drop / resize reschedule: posts to the same endpoint and the
+  // same conflict-checking logic (_apply_scheduling_rules) the full edit
+  // form already uses. A rejected move (409 -- a real conflict) or any other
+  // failure reverts the drag/resize visually rather than silently
+  // overbooking; nothing is ever force-applied from the board itself.
+  function postReschedule(id, startIso, durationMinutes, revert) {
+    var body = new URLSearchParams();
+    body.set('scheduled_at', startIso);
+    body.set('csrf_token', csrfToken());
+    if (durationMinutes) body.set('duration_minutes', durationMinutes);
+    fetch('/appointments/' + id + '/reschedule', {
+      method: 'POST', headers: { 'Accept': 'application/json' }, body: body,
+    }).then(function (r) { return r.json().then(function (data) { return { status: r.status, data: data }; }); })
+      .then(function (res) {
+        if (!res.data.ok) { alert(res.data.error || 'Could not reschedule.'); revert(); }
+      })
+      .catch(function () { alert('Could not reschedule -- network error.'); revert(); });
+  }
+
+  function baseOptions(providerIdForColumn) {
+    return {
+      initialView: INITIAL_VIEW,
+      initialDate: INITIAL_DATE,
+      headerToolbar: false,
+      height: 'auto',
+      slotMinTime: '07:00:00',
+      slotMaxTime: '19:00:00',
+      nowIndicator: true,
+      editable: true,
+      eventStartEditable: true,
+      eventDurationEditable: true,
+      eventContent: renderEventContent,
+      events: { url: '/appointments/feed.json', extraParams: function () {
+        var f = filterParams();
+        if (providerIdForColumn) f.provider_id = providerIdForColumn;
+        return f;
+      } },
+      eventDidMount: function (info) {
+        info.el.addEventListener('mouseenter', function (e) { showHoverCard(e, info.event.extendedProps); });
+        info.el.addEventListener('mousemove', function (e) { if (!hoverCard.hidden) positionHoverCard(e); });
+        info.el.addEventListener('mouseleave', hideHoverCard);
+      },
+      eventClick: function (info) { window.location = '/appointments/' + info.event.id; },
+      dateClick: function (info) {
+        // Same target regardless of view -- the New Appointment form only
+        // takes a date prefill (staff picks the exact time there), matching
+        // the old month view's day-cell click behavior.
+        window.location = '/appointments/new?date=' + info.dateStr.slice(0, 10);
+      },
+      eventDrop: function (info) {
+        postReschedule(info.event.id, info.event.start.toISOString(), null, info.revert);
+      },
+      eventResize: function (info) {
+        var minutes = Math.round((info.event.end - info.event.start) / 60000);
+        postReschedule(info.event.id, info.event.start.toISOString(), minutes, info.revert);
+      },
+      datesSet: function (info) { onDatesSet(info); },
+    };
+  }
+
+  var calendars = [];
+  if (PROVIDERS_MODE) {
+    document.querySelectorAll('[data-provider-id]').forEach(function (el) {
+      var providerId = el.getAttribute('data-provider-id');
+      var cal = new FullCalendar.Calendar(el, baseOptions(providerId));
+      calendars.push(cal);
+      cal.render();
+    });
+  } else {
+    var el = document.getElementById('calendar');
+    var cal = new FullCalendar.Calendar(el, baseOptions(null));
+    calendars.push(cal);
+    cal.render();
+  }
+
+  var syncing = false;
+  function onDatesSet(info) {
+    document.getElementById('boardRangeLabel').textContent = info.view.title;
+    updateViewLinks(info.view.currentStart);
+    if (syncing || calendars.length < 2) return;
+    syncing = true;
+    calendars.forEach(function (c) { if (c.getDate().getTime() !== info.view.currentStart.getTime()) c.gotoDate(info.view.currentStart); });
+    syncing = false;
+  }
+
+  function updateViewLinks(dt) {
+    var iso = dt.toISOString().slice(0, 10);
+    var monthLink = document.querySelector('[data-view-link="month"]');
+    var weekLink = document.querySelector('[data-view-link="week"]');
+    var dayLink = document.querySelector('[data-view-link="day"]');
+    var boardLink = document.querySelector('[data-view-link="board"]');
+    if (monthLink) monthLink.href = '/appointments/calendar?year=' + dt.getFullYear() + '&month=' + (dt.getMonth() + 1);
+    if (weekLink) weekLink.href = '/appointments/week?date_str=' + iso;
+    if (dayLink) dayLink.href = '/appointments/day?date_str=' + iso;
+    if (boardLink) boardLink.href = '/appointments/board?date_str=' + iso;
+  }
+
+  document.getElementById('boardPrev').addEventListener('click', function () { calendars.forEach(function (c) { c.prev(); }); });
+  document.getElementById('boardNext').addEventListener('click', function () { calendars.forEach(function (c) { c.next(); }); });
+  document.getElementById('boardToday').addEventListener('click', function () { calendars.forEach(function (c) { c.today(); }); });
+
+  ['filterProvider', 'filterType', 'filterRelationship', 'filterStatus', 'filterRoom', 'filterNotes'].forEach(function (id) {
+    var el = document.getElementById(id);
+    if (el) el.addEventListener('change', function () { calendars.forEach(function (c) { c.refetchEvents(); }); });
+  });
+})();
+</script>
+{% endblock %}

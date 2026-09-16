@@ -1,11 +1,13 @@
 import calendar as cal
 from datetime import datetime, date, timedelta
 from fastapi import APIRouter, Depends, Request, Form
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from ehr.models.database import (get_db, Appointment, Patient, Provider, AppointmentStatus, AppointmentType,
-    AppointmentTypeVersion, DiagnosticTest, AppointmentTest, AppointmentAuditEvent, AppointmentResourceReservation, User)
+    AppointmentTypeVersion, DiagnosticTest, AppointmentTest, AppointmentAuditEvent, AppointmentResourceReservation,
+    Resource, User)
 from ehr.services import scheduling as sched
 from ehr.env_info import EHR_ENV
 from ehr.utils import patient_context
@@ -55,6 +57,16 @@ def _all_active_type_versions_for_legend(db: Session):
 
 def _diagnostic_tests(db: Session):
     return db.query(DiagnosticTest).filter(DiagnosticTest.active == True).order_by(DiagnosticTest.display_order).all()
+
+
+def _qi(v):
+    """Converts an optional int-shaped query param to int, treating an empty
+    string the same as absent. A plain `int = None` FastAPI param parameter
+    rejects '' with a 422 -- but an HTML <select> with an empty-value "All"
+    option (e.g. the board's provider/type/room filters) submits exactly that
+    when chosen, so every query param of this shape must go through this
+    first rather than declaring the FastAPI param type as int directly."""
+    return int(v) if v not in (None, "") else None
 
 
 def _audit(db: Session, appointment_id: int, event_type: str, field_name=None, old_value=None,
@@ -238,92 +250,140 @@ def list_appointments(request: Request, patient_id: int = None, db: Session = De
         {"appointments": appts, "context_patient": ctx_patient})
 
 
-@router.get("/calendar", response_class=HTMLResponse)
-def calendar_view(request: Request, year: int = None, month: int = None, patient_id: int = None, db: Session = Depends(get_db)):
-    today = date.today()
-    y = year or today.year
-    m = month or today.month
-    if m < 1: y -= 1; m = 12
-    if m > 12: y += 1; m = 1
-
-    cal.setfirstweekday(cal.SUNDAY)
-    weeks = cal.monthcalendar(y, m)
-
-    start = datetime(y, m, 1)
-    end = datetime(y + 1, 1, 1) if m == 12 else datetime(y, m + 1, 1)
-    appts = (db.query(Appointment)
-             .filter(Appointment.scheduled_at >= start, Appointment.scheduled_at < end)
-             .order_by(Appointment.scheduled_at).all())
-    by_day = {}
-    for a in appts:
-        by_day.setdefault(a.scheduled_at.day, []).append(a)
-
-    days_in_month = cal.monthrange(y, m)[1]
-    day_dates = {d: date(y, m, d).isoformat() for d in range(1, days_in_month + 1)}
-
-    prev_month, prev_year = (12, y - 1) if m == 1 else (m - 1, y)
-    next_month, next_year = (1, y + 1) if m == 12 else (m + 1, y)
-
-    return templates.TemplateResponse(request, "appointments/calendar.html", {
-        "weeks": weeks, "by_day": by_day, "day_dates": day_dates, "year": y, "month": m,
-        "month_name": cal.month_name[m], "today": today,
-        "prev_year": prev_year, "prev_month": prev_month,
-        "next_year": next_year, "next_month": next_month,
+def _board_context(request: Request, db: Session, initial_view: str, initial_date: date, providers_mode: bool,
+                    provider_id=None, appointment_type_version_id=None, relationship=None, status=None,
+                    room_resource_id=None, has_notes=None, patient_id=None):
+    """Shared context for the FullCalendar-driven board (Calendar & Appointments
+    UX Overhaul Phase 1, BUILD_BACKLOG.md 5a) -- all of /calendar, /day, /week,
+    and /board render the same template, differing only in initial_view/date
+    and providers_mode. Appointment data itself is never queried here; the
+    template's own JS fetches it live from /appointments/feed.json, so this
+    context only supplies filter-dropdown options and the initial state to
+    load the page in."""
+    return {
+        "initial_view": initial_view, "initial_date": initial_date.isoformat(), "providers_mode": providers_mode,
+        "providers": db.query(Provider).order_by(Provider.last_name).all(),
+        "rooms": db.query(Resource).filter(Resource.resource_class == "room", Resource.active == True)
+                   .order_by(Resource.display_name).all(),
+        "types": _bookable_type_versions(db), "statuses": list(AppointmentStatus),
+        "provider_id": provider_id, "appointment_type_version_id": appointment_type_version_id,
+        "relationship": relationship, "status": status, "room_resource_id": room_resource_id, "has_notes": has_notes,
         "legend_types": _all_active_type_versions_for_legend(db),
         "context_patient": patient_context(db.query(Patient).filter(Patient.id == patient_id).first()) if patient_id else None,
-    })
+    }
+
+
+@router.get("/calendar", response_class=HTMLResponse)
+def calendar_view(request: Request, year: int = None, month: int = None, provider_id: str = None,
+                   appointment_type_version_id: str = None, relationship: str = None, status: str = None,
+                   room_resource_id: str = None, has_notes: str = None, patient_id: int = None,
+                   db: Session = Depends(get_db)):
+    today = date.today()
+    y, m = year or today.year, month or today.month
+    d = date(y, m, 1)
+    return templates.TemplateResponse(request, "appointments/board.html", _board_context(
+        request, db, "dayGridMonth", d, False, _qi(provider_id), _qi(appointment_type_version_id), relationship,
+        status, _qi(room_resource_id), has_notes, patient_id))
 
 
 @router.get("/day", response_class=HTMLResponse)
-def day_view(request: Request, date_str: str = None, provider_id: int = None,
-             appointment_type_version_id: int = None, relationship: str = None, status: str = None,
-             patient_id: int = None, db: Session = Depends(get_db)):
+def day_view(request: Request, date_str: str = None, provider_id: str = None,
+             appointment_type_version_id: str = None, relationship: str = None, status: str = None,
+             room_resource_id: str = None, has_notes: str = None, patient_id: int = None,
+             db: Session = Depends(get_db)):
     d = date.fromisoformat(date_str) if date_str else date.today()
-    start = datetime(d.year, d.month, d.day)
-    end = start + timedelta(days=1)
-    q = db.query(Appointment).filter(Appointment.scheduled_at >= start, Appointment.scheduled_at < end)
-    if provider_id: q = q.filter(Appointment.provider_id == provider_id)
-    if appointment_type_version_id: q = q.filter(Appointment.appointment_type_version_id == appointment_type_version_id)
-    if relationship: q = q.filter(Appointment.patient_relationship_at_booking == relationship)
-    if status: q = q.filter(Appointment.status == AppointmentStatus(status))
-    appts = q.order_by(Appointment.scheduled_at).all()
-    return templates.TemplateResponse(request, "appointments/day.html", {
-        "day": d, "prev_day": (d - timedelta(days=1)).isoformat(), "next_day": (d + timedelta(days=1)).isoformat(),
-        "appointments": appts, "providers": db.query(Provider).all(), "types": _bookable_type_versions(db),
-        "statuses": list(AppointmentStatus), "provider_id": provider_id,
-        "appointment_type_version_id": appointment_type_version_id, "relationship": relationship, "status": status,
-        "legend_types": _all_active_type_versions_for_legend(db),
-        "context_patient": patient_context(db.query(Patient).filter(Patient.id == patient_id).first()) if patient_id else None,
-    })
+    return templates.TemplateResponse(request, "appointments/board.html", _board_context(
+        request, db, "timeGridDay", d, False, _qi(provider_id), _qi(appointment_type_version_id), relationship,
+        status, _qi(room_resource_id), has_notes, patient_id))
 
 
 @router.get("/week", response_class=HTMLResponse)
-def week_view(request: Request, date_str: str = None, provider_id: int = None,
-              appointment_type_version_id: int = None, relationship: str = None, status: str = None,
-              patient_id: int = None, db: Session = Depends(get_db)):
+def week_view(request: Request, date_str: str = None, provider_id: str = None,
+              appointment_type_version_id: str = None, relationship: str = None, status: str = None,
+              room_resource_id: str = None, has_notes: str = None, patient_id: int = None,
+              db: Session = Depends(get_db)):
     d = date.fromisoformat(date_str) if date_str else date.today()
-    week_start = d - timedelta(days=(d.weekday() + 1) % 7)  # Sunday start, matching month view
-    start = datetime(week_start.year, week_start.month, week_start.day)
-    end = start + timedelta(days=7)
-    q = db.query(Appointment).filter(Appointment.scheduled_at >= start, Appointment.scheduled_at < end)
-    if provider_id: q = q.filter(Appointment.provider_id == provider_id)
-    if appointment_type_version_id: q = q.filter(Appointment.appointment_type_version_id == appointment_type_version_id)
-    if relationship: q = q.filter(Appointment.patient_relationship_at_booking == relationship)
-    if status: q = q.filter(Appointment.status == AppointmentStatus(status))
+    return templates.TemplateResponse(request, "appointments/board.html", _board_context(
+        request, db, "timeGridWeek", d, False, _qi(provider_id), _qi(appointment_type_version_id), relationship,
+        status, _qi(room_resource_id), has_notes, patient_id))
+
+
+@router.get("/board", response_class=HTMLResponse)
+def board_view(request: Request, date_str: str = None, appointment_type_version_id: str = None,
+               relationship: str = None, status: str = None, room_resource_id: str = None,
+               has_notes: str = None, patient_id: int = None, db: Session = Depends(get_db)):
+    """Multi-provider board (spec: 'multi-provider or multi-location grids') --
+    the free-tier workaround for FullCalendar Premium's paid resource-timeline
+    plugin: one free timeGridDay calendar per active provider, laid out in a
+    CSS grid and driven by one shared toolbar, rather than a single calendar
+    with true unified resource columns. See BUILD_BACKLOG.md 5a for the
+    licensing tradeoff this was chosen over."""
+    d = date.fromisoformat(date_str) if date_str else date.today()
+    return templates.TemplateResponse(request, "appointments/board.html", _board_context(
+        request, db, "timeGridDay", d, True, None, _qi(appointment_type_version_id), relationship, status,
+        _qi(room_resource_id), has_notes, patient_id))
+
+
+@router.get("/feed.json")
+def appointments_feed(request: Request, start: str = None, end: str = None, provider_id: str = None,
+                       appointment_type_version_id: str = None, relationship: str = None, status: str = None,
+                       room_resource_id: str = None, has_notes: str = None, db: Session = Depends(get_db)):
+    """JSON events feed for the board's FullCalendar instance(s) (BUILD_BACKLOG.md
+    5a Phase 1). FullCalendar calls this itself with the currently-visible date
+    range every time the user navigates or switches views -- `start`/`end` are
+    its own ISO datetime strings, not something a person types. Route must be
+    registered before GET /{appt_id} (a literal path segment ahead of a
+    parameterized one) or FastAPI would try to parse "feed.json" as an int id."""
+    provider_id, appointment_type_version_id, room_resource_id = (
+        _qi(provider_id), _qi(appointment_type_version_id), _qi(room_resource_id))
+    q = db.query(Appointment)
+    if start:
+        q = q.filter(Appointment.scheduled_at >= datetime.fromisoformat(start[:19]))
+    if end:
+        q = q.filter(Appointment.scheduled_at < datetime.fromisoformat(end[:19]))
+    if provider_id:
+        q = q.filter(Appointment.provider_id == provider_id)
+    if appointment_type_version_id:
+        q = q.filter(Appointment.appointment_type_version_id == appointment_type_version_id)
+    if relationship:
+        q = q.filter(Appointment.patient_relationship_at_booking == relationship)
+    if status:
+        q = q.filter(Appointment.status == AppointmentStatus(status))
+    if has_notes == "yes":
+        q = q.filter(Appointment.notes.isnot(None), Appointment.notes != "")
+    elif has_notes == "no":
+        q = q.filter(or_(Appointment.notes.is_(None), Appointment.notes == ""))
+    if room_resource_id:
+        q = (q.join(AppointmentResourceReservation, AppointmentResourceReservation.appointment_id == Appointment.id)
+             .filter(AppointmentResourceReservation.resource_id == room_resource_id,
+                     AppointmentResourceReservation.active == True))
     appts = q.order_by(Appointment.scheduled_at).all()
-    days = [week_start + timedelta(days=i) for i in range(7)]
-    by_day = {dd.isoformat(): [] for dd in days}
+    events = []
     for a in appts:
-        by_day[a.scheduled_at.date().isoformat()].append(a)
-    return templates.TemplateResponse(request, "appointments/week.html", {
-        "week_start": week_start, "days": days, "by_day": by_day,
-        "prev_week": (week_start - timedelta(days=7)).isoformat(), "next_week": (week_start + timedelta(days=7)).isoformat(),
-        "providers": db.query(Provider).all(), "types": _bookable_type_versions(db), "statuses": list(AppointmentStatus),
-        "provider_id": provider_id, "appointment_type_version_id": appointment_type_version_id,
-        "relationship": relationship, "status": status, "today_iso": date.today().isoformat(),
-        "legend_types": _all_active_type_versions_for_legend(db),
-        "context_patient": patient_context(db.query(Patient).filter(Patient.id == patient_id).first()) if patient_id else None,
-    })
+        rooms = [r.resource.display_name for r in a.resource_reservations
+                 if r.active and r.resource and r.resource.resource_class == "room"]
+        events.append({
+            "id": a.id,
+            "title": f"{a.patient.last_name}, {a.patient.first_name}",
+            "start": a.scheduled_at.isoformat(),
+            "end": (a.scheduled_end_at or a.scheduled_at).isoformat(),
+            "color": a.resolved_color or "#94a3b8",
+            "extendedProps": {
+                "patientName": f"{a.patient.last_name}, {a.patient.first_name}",
+                "patientPhone": a.patient.phone or "",
+                "providerId": a.provider_id,
+                "providerName": f"Dr. {a.provider.last_name}",
+                "typeName": a.appointment_type_version.display_name if a.appointment_type_version else "Unclassified",
+                "typeAbbrev": a.appointment_type_version.calendar_abbreviation if a.appointment_type_version else "?",
+                "status": a.status.value,
+                "relationship": a.patient_relationship_at_booking,
+                "rooms": rooms,
+                "hasNotes": bool(a.notes and a.notes.strip()),
+                "conflictOverridden": a.conflict_overridden,
+                "durationMinutes": a.duration_minutes,
+            },
+        })
+    return events
 
 
 @router.get("/availability", response_class=HTMLResponse)
@@ -505,29 +565,61 @@ def update_appointment(request: Request, appt_id: int, provider_id: int = Form(.
 
 @router.post("/{appt_id}/reschedule", dependencies=[Depends(require_role(*APPOINTMENT_EDIT))])
 def reschedule_appointment(request: Request, appt_id: int, scheduled_at: str = Form(...),
+    duration_minutes: str = Form(""),
     conflict_override: bool = Form(False), conflict_override_reason: str = Form(""),
     csrf_token: str = Form(""), db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Reschedules an existing appointment's time (and, if given, its duration
+    -- an event resize). Reuses _apply_scheduling_rules exactly as the full
+    edit form does, so a drag/resize on the board (BUILD_BACKLOG.md 5a Phase 1)
+    is blocked by the same provider/resource conflict check, with the same
+    override+reason escape hatch, as every other reschedule path in this app.
+    Responds as JSON when the caller sends `Accept: application/json` (the
+    board's own fetch() calls do) so it can revert a rejected drag/resize
+    without a full page navigation; otherwise keeps the original
+    redirect-on-success / plain-text-on-error behavior for any future
+    traditional-form caller."""
     csrf.verify_or_403(request.state.csrf_token, csrf_token)
+    wants_json = "application/json" in (request.headers.get("accept") or "")
+
+    def fail(msg, status_code):
+        if wants_json:
+            return JSONResponse({"ok": False, "error": msg}, status_code=status_code)
+        return HTMLResponse(msg, status_code=status_code if status_code != 409 else 400)
+
     a = db.query(Appointment).filter(Appointment.id == appt_id).first()
-    if not a: return HTMLResponse("Not found", status_code=404)
+    if not a:
+        return fail("Not found", 404)
     version = a.appointment_type_version
     try:
         when = datetime.fromisoformat(scheduled_at)
     except (ValueError, TypeError):
-        return HTMLResponse("Invalid appointment date/time.", status_code=400)
+        return fail("Invalid appointment date/time.", 400)
+
+    duration_override_val = a.duration_minutes if a.duration_overridden else None
+    override_reason_val = a.duration_override_reason
+    if duration_minutes:
+        try:
+            duration_override_val = int(duration_minutes)
+            override_reason_val = "Resized via calendar drag"
+        except ValueError:
+            return fail("Invalid duration.", 400)
+
     old_when = a.scheduled_at
     try:
         _apply_scheduling_rules(db, a, version, a.patient_relationship_at_booking, a.is_follow_up, when,
-            a.provider_id, duration_override=a.duration_minutes if a.duration_overridden else None,
-            override_reason=a.duration_override_reason, conflict_override=conflict_override,
-            conflict_reason=conflict_override_reason or None, exclude_appointment_id=a.id)
+            a.provider_id, duration_override=duration_override_val, override_reason=override_reason_val,
+            conflict_override=conflict_override, conflict_reason=conflict_override_reason or None,
+            exclude_appointment_id=a.id)
     except ValueError as e:
-        return HTMLResponse(str(e), status_code=400)
+        return fail(str(e), 409)
     _sync_resource_reservations(db, a, version)
     _audit(db, a.id, "rescheduled", field_name="scheduled_at", old_value=old_when, new_value=when)
     a.updated_at = datetime.utcnow()
     a.updated_by_user_id = user.id
     db.commit()
+    if wants_json:
+        return JSONResponse({"ok": True, "id": a.id, "scheduled_at": a.scheduled_at.isoformat(),
+            "scheduled_end_at": a.scheduled_end_at.isoformat() if a.scheduled_end_at else None})
     return RedirectResponse(f"/appointments/{appt_id}", status_code=303)
 
 
