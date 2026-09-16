@@ -1,0 +1,57 @@
+{% extends "patients/_workspace.html" %}
+{% block wcontent %}
+<div class="card" style="margin-bottom:1rem">
+  <h2>Add to Waitlist</h2>
+  <form method="post" action="/patients/{{ patient.id }}/waitlist/new">
+    <div class="form-row cols-3">
+      <div class="form-group"><label>Provider</label>
+        <select name="provider_id"><option value="">Any provider</option>
+          {% for p in providers %}<option value="{{ p.id }}">Dr. {{ p.last_name }}</option>{% endfor %}</select>
+      </div>
+      <div class="form-group"><label>Appointment Type</label>
+        <select name="appointment_type_version_id"><option value="">Any type</option>
+          {% for t in types %}<option value="{{ t.id }}">{{ t.display_name }}</option>{% endfor %}</select>
+      </div>
+      <div class="form-group"><label>Priority</label>
+        <select name="priority"><option value="normal">Normal</option><option value="urgent">Urgent</option></select>
+      </div>
+    </div>
+    <div class="form-row cols-2">
+      <div class="form-group"><label>Earliest Date</label><input type="date" name="desired_date_start"></div>
+      <div class="form-group"><label>Latest Date</label><input type="date" name="desired_date_end"></div>
+    </div>
+    <div class="form-group"><label>Notes</label><input type="text" name="notes" placeholder="Prefers mornings; available on short notice"></div>
+    <div class="form-actions"><button type="submit" class="btn btn-primary">Add to Waitlist</button></div>
+  </form>
+</div>
+<div class="card">
+  <h2>Waitlist Entries</h2>
+  {% if not entries %}
+  <p style="color:#64748b">No waitlist entries for this patient.</p>
+  {% else %}
+  <div class="table-responsive">
+  <table class="exam-table">
+    <tr><th>Status</th><th>Provider</th><th>Type</th><th>Date Range</th><th>Priority</th><th>Notes</th><th>Added</th><th></th></tr>
+    {% for e in entries %}
+    <tr{% if e.status != 'active' %} style="opacity:0.6"{% endif %}>
+      <td><span class="badge{% if e.status == 'active' %} badge-scheduled{% elif e.status == 'fulfilled' %} badge-completed{% else %} badge-cancelled{% endif %}">{{ e.status }}</span></td>
+      <td>{{ 'Dr. ' + e.provider.last_name if e.provider else 'Any' }}</td>
+      <td>{{ e.appointment_type_version.display_name if e.appointment_type_version else 'Any' }}</td>
+      <td class="mono-data">{{ e.desired_date_start or '—' }} &ndash; {{ e.desired_date_end or '—' }}</td>
+      <td>{% if e.priority == 'urgent' %}<span style="color:#b91c1c;font-weight:700">Urgent</span>{% else %}Normal{% endif %}</td>
+      <td>{{ e.notes or '—' }}</td>
+      <td class="mono-data">{{ e.created_at.strftime('%Y-%m-%d') if e.created_at else '—' }}</td>
+      <td>
+        {% if e.status == 'active' %}
+        <form method="post" action="/patients/{{ patient.id }}/waitlist/{{ e.id }}/cancel" style="display:inline">
+          <button type="submit" class="btn btn-sm btn-secondary">Cancel</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

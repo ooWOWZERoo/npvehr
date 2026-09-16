@@ -7,7 +7,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from ehr.models.database import (get_db, Appointment, Patient, Provider, AppointmentStatus, AppointmentType,
     AppointmentTypeVersion, DiagnosticTest, AppointmentTest, AppointmentAuditEvent, AppointmentResourceReservation,
-    Resource, User)
+    Resource, WaitlistEntry, User)
 from ehr.services import scheduling as sched
 from ehr.env_info import EHR_ENV
 from ehr.utils import patient_context
@@ -373,6 +373,7 @@ def appointments_feed(request: Request, start: str = None, end: str = None, prov
                 "patientPhone": a.patient.phone or "",
                 "providerId": a.provider_id,
                 "providerName": f"Dr. {a.provider.last_name}",
+                "appointmentTypeVersionId": a.appointment_type_version_id,
                 "typeName": a.appointment_type_version.display_name if a.appointment_type_version else "Unclassified",
                 "typeAbbrev": a.appointment_type_version.calendar_abbreviation if a.appointment_type_version else "?",
                 "status": a.status.value,
@@ -418,10 +419,30 @@ def availability(request: Request, provider_id: int = None, appointment_type_ver
         "target_date": target_date, "slots": slots, "version": version, "error": error})
 
 
+@router.get("/waitlist", response_class=HTMLResponse)
+def staff_waitlist_queue(request: Request, db: Session = Depends(get_db)):
+    """Staff-facing waitlist queue (Calendar & Appointments UX Overhaul Phase
+    2 -- BUILD_BACKLOG.md 5a): every active entry across all patients, urgent
+    first, oldest-first within a priority tier (same ordering
+    find_matching_waitlist_entries uses for a specific freed slot). Adding an
+    entry stays per-patient (patients/{id}/waitlist); this is the front-desk
+    view for working the queue as a whole."""
+    from sqlalchemy import case
+    entries = (db.query(WaitlistEntry).filter(WaitlistEntry.status == "active")
+               .order_by(case((WaitlistEntry.priority == "urgent", 0), else_=1), WaitlistEntry.created_at).all())
+    return templates.TemplateResponse(request, "appointments/waitlist.html", {"entries": entries})
+
+
 @router.get("/new", response_class=HTMLResponse)
-def new_appointment_form(request: Request, patient_id: int = None, date: str = None, db: Session = Depends(get_db)):
+def new_appointment_form(request: Request, patient_id: int = None, date: str = None, provider_id: int = None,
+                          db: Session = Depends(get_db)):
+    # provider_id here is a prefill only (e.g. the Waitlist queue's "Book"
+    # link for an entry with a specific provider preference) -- reuses the
+    # same `posted.provider_id` template hook the form already checks after
+    # a failed submission, so no template change is needed for this to work.
+    posted = {"provider_id": provider_id} if provider_id else None
     return templates.TemplateResponse(request, "appointments/form.html",
-        _form_context(db, patient_id=patient_id, prefill_date=date))
+        _form_context(db, patient_id=patient_id, prefill_date=date, posted=posted))
 
 
 @router.post("/new", response_class=HTMLResponse, dependencies=[Depends(require_role(*APPOINTMENT_EDIT))])
@@ -492,9 +513,17 @@ def appointment_detail(request: Request, appt_id: int, db: Session = Depends(get
     if not a: return HTMLResponse("Not found", status_code=404)
     audit = (db.query(AppointmentAuditEvent).filter(AppointmentAuditEvent.appointment_id == appt_id)
              .order_by(AppointmentAuditEvent.occurred_at.desc()).all())
+    # Waitlist Management (BUILD_BACKLOG.md 5a Phase 2): a cancelled appointment
+    # frees its slot, so surface any active waitlist entries that match it
+    # (same provider/type, desired date range covers this date) for staff to
+    # call. No auto-notify -- that needs Phase 3's messaging infra.
+    waitlist_matches = []
+    if a.status == AppointmentStatus.cancelled:
+        waitlist_matches = sched.find_matching_waitlist_entries(
+            db, a.provider_id, a.appointment_type_version_id, a.scheduled_at.date())
     return templates.TemplateResponse(request, "appointments/detail.html",
         {"appt": a, "statuses": list(AppointmentStatus), "audit_events": audit,
-         "context_patient": patient_context(a.patient)})
+         "waitlist_matches": waitlist_matches, "context_patient": patient_context(a.patient)})
 
 
 @router.get("/{appt_id}/edit", response_class=HTMLResponse)

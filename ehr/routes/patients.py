@@ -6,7 +6,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from ehr.models.database import (get_db, Patient, Appointment, EyeExam, Prescription, AppointmentStatus,
-    PatientDocument, Problem, ProblemAddendum)
+    PatientDocument, Problem, ProblemAddendum, WaitlistEntry, Provider, AppointmentTypeVersion, AppointmentType)
 from ehr.env_info import EHR_ENV
 from ehr.utils import patient_context, compute_age, display_name
 from ehr.auth.permissions import require_role, PATIENT_EDIT, ROLE_LABELS
@@ -567,6 +567,58 @@ async def resolve_problem(request: Request, patient_id: int, problem_id: int, db
         problem.status = "Resolved"
         db.commit()
     return RedirectResponse(f"/patients/{patient_id}/problems", status_code=303)
+
+
+@router.get("/{patient_id}/waitlist", response_class=HTMLResponse)
+def patient_waitlist(request: Request, patient_id: int, db: Session = Depends(get_db)):
+    """Waitlist Management (Calendar & Appointments UX Overhaul Phase 2 --
+    BUILD_BACKLOG.md 5a). A patient's standing requests for an earlier slot;
+    active entries first, then fulfilled/cancelled history. See
+    ehr.services.scheduling.find_matching_waitlist_entries for how these
+    surface to staff when a matching slot opens up (today: on cancellation)."""
+    p = _get_patient_or_404(db, patient_id)
+    if not p: return HTMLResponse("Not found", status_code=404)
+    ctx = _workspace_ctx(db, p, "waitlist")
+    entries = (db.query(WaitlistEntry).filter(WaitlistEntry.patient_id == patient_id)
+               .order_by(WaitlistEntry.status, WaitlistEntry.created_at.desc()).all())
+    ctx["entries"] = entries
+    ctx["providers"] = db.query(Provider).order_by(Provider.last_name).all()
+    ctx["types"] = (db.query(AppointmentTypeVersion)
+                     .join(AppointmentType, AppointmentType.id == AppointmentTypeVersion.appointment_type_id)
+                     .filter(AppointmentTypeVersion.active == True, AppointmentType.is_system_seeded == False)
+                     .order_by(AppointmentTypeVersion.display_order).all())
+    return templates.TemplateResponse(request, "patients/waitlist_tab.html", ctx)
+
+
+@router.post("/{patient_id}/waitlist/new", dependencies=[Depends(require_role(*PATIENT_EDIT))])
+async def create_waitlist_entry(request: Request, patient_id: int, db: Session = Depends(get_db)):
+    p = _get_patient_or_404(db, patient_id)
+    if not p: return HTMLResponse("Not found", status_code=404)
+    form = await request.form()
+    csrf.verify_or_403(request.state.csrf_token, form.get("csrf_token"))
+    db.add(WaitlistEntry(
+        patient_id=patient_id,
+        provider_id=int(form["provider_id"]) if form.get("provider_id") else None,
+        appointment_type_version_id=int(form["appointment_type_version_id"]) if form.get("appointment_type_version_id") else None,
+        desired_date_start=form.get("desired_date_start") or None,
+        desired_date_end=form.get("desired_date_end") or None,
+        priority=form.get("priority") or "normal",
+        notes=form.get("notes") or None,
+        created_by_user_id=request.state.user.id))
+    db.commit()
+    return RedirectResponse(f"/patients/{patient_id}/waitlist", status_code=303)
+
+
+@router.post("/{patient_id}/waitlist/{entry_id}/cancel", dependencies=[Depends(require_role(*PATIENT_EDIT))])
+async def cancel_waitlist_entry(request: Request, patient_id: int, entry_id: int, db: Session = Depends(get_db)):
+    form = await request.form()
+    csrf.verify_or_403(request.state.csrf_token, form.get("csrf_token"))
+    entry = db.query(WaitlistEntry).filter(WaitlistEntry.id == entry_id, WaitlistEntry.patient_id == patient_id).first()
+    if entry and entry.status == "active":
+        entry.status = "cancelled"
+        entry.cancelled_at = datetime.utcnow()
+        db.commit()
+    return RedirectResponse(f"/patients/{patient_id}/waitlist", status_code=303)
 
 
 @router.get("/{patient_id}/orders/eyeglass", response_class=HTMLResponse)

@@ -455,6 +455,44 @@ class PracticeClosure(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class WaitlistEntry(Base):
+    """Waitlist Management (Calendar & Appointments UX Overhaul Phase 2 --
+    BUILD_BACKLOG.md 5a). A patient's standing request for an earlier slot
+    than what's currently bookable, with an open-ended "any provider"/"any
+    type"/"any date" shape (each of provider_id/appointment_type_version_id/
+    desired_date_start/desired_date_end is independently nullable -- a null
+    field means "no preference," not "unset"). No auto-notify yet (needs
+    Phase 3's SMS/email infra); this phase only surfaces matching entries to
+    staff when a matching slot actually opens up (a cancellation), via
+    ehr.services.scheduling.find_matching_waitlist_entries."""
+    __tablename__ = "waitlist_entries"
+    id = Column(Integer, primary_key=True, index=True)
+    patient_id = Column(Integer, ForeignKey("patients.id"), nullable=False)
+    provider_id = Column(Integer, ForeignKey("providers.id"))  # null = any provider
+    appointment_type_version_id = Column(Integer, ForeignKey("appointment_type_versions.id"))  # null = any type
+    desired_date_start = Column(String)  # 'YYYY-MM-DD', null = no earliest bound
+    desired_date_end = Column(String)    # 'YYYY-MM-DD', null = no latest bound
+    priority = Column(String, default="normal")  # normal | urgent
+    notes = Column(Text)
+    status = Column(String, default="active")  # active | fulfilled | cancelled
+    created_at = Column(DateTime, default=datetime.utcnow)
+    created_by_user_id = Column(Integer, ForeignKey("users.id"))
+    fulfilled_at = Column(DateTime)
+    fulfilled_appointment_id = Column(Integer, ForeignKey("appointments.id"))
+    cancelled_at = Column(DateTime)
+
+    patient = relationship("Patient")
+    provider = relationship("Provider")
+    appointment_type_version = relationship("AppointmentTypeVersion")
+    created_by = relationship("User")
+    fulfilled_appointment = relationship("Appointment")
+
+    __table_args__ = (
+        Index("ix_waitlist_status_provider", "status", "provider_id"),
+        Index("ix_waitlist_status_type", "status", "appointment_type_version_id"),
+    )
+
+
 class DailyClosing(Base):
     """Store Operations > Daily Closing reconciliation entries. One row per
     payment type per posting date. `calculated_amount` is always 0.0 for now --
