@@ -6,8 +6,18 @@
   <a href="/portal/appointments" class="btn btn-secondary btn-sm">Back</a>
 </div>
 <div class="card">
-  <p style="color:var(--ink-muted);font-size:0.85rem">Currently scheduled for {{ appt.scheduled_at.strftime('%B %-d, %Y at %-I:%M %p') }} with Dr. {{ appt.provider.last_name }} ({{ appt.appointment_type_version.display_name if appt.appointment_type_version else '' }}). Choose a new time below &mdash; the provider and appointment type stay the same.</p>
-  <form method="get" style="display:flex;gap:0.5rem;align-items:flex-end;margin-top:1rem">
+  <p style="color:var(--ink-muted);font-size:0.85rem">Currently scheduled for {{ appt.scheduled_at.strftime('%B %-d, %Y at %-I:%M %p') }} with Dr. {{ appt.provider.last_name }} ({{ appt.appointment_type_version.display_name if appt.appointment_type_version else '' }}). Choose a new provider, type, and/or time below.</p>
+  <form method="get" style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:flex-end;margin-top:1rem">
+    <div class="form-group" style="margin:0"><label>Provider</label>
+      <select name="provider_id" onchange="this.form.submit()">
+        {% for p in providers %}<option value="{{ p.id }}" {{ 'selected' if provider_id == p.id }}>Dr. {{ p.last_name }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="form-group" style="margin:0"><label>Reason for Visit</label>
+      <select name="appointment_type_version_id" onchange="this.form.submit()">
+        {% for t in types %}<option value="{{ t.id }}" {{ 'selected' if appointment_type_version_id == t.id }}>{{ t.display_name }}</option>{% endfor %}
+      </select>
+    </div>
     <div class="form-group" style="margin:0"><label>Date</label>
       <input type="date" name="date_str" value="{{ target_date.isoformat() }}" onchange="this.form.submit()">
     </div>
@@ -23,6 +33,8 @@
   <div style="display:flex;flex-wrap:wrap;gap:0.5rem">
     {% for slot in slots %}
     <form method="post" action="/portal/appointments/{{ appt.id }}/reschedule/confirm" style="margin:0">
+      <input type="hidden" name="provider_id" value="{{ provider_id }}">
+      <input type="hidden" name="appointment_type_version_id" value="{{ appointment_type_version_id }}">
       <input type="hidden" name="scheduled_at" value="{{ slot.isoformat() }}">
       <button type="submit" class="btn btn-secondary btn-sm">{{ slot.strftime('%-I:%M %p') }}</button>
     </form>

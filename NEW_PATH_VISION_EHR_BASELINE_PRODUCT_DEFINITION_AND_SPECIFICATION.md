@@ -3374,3 +3374,43 @@ No auto-booking or auto-hold of the freed slot for a notified patient -- the not
 | Bug fix | `patients/form.html` wrote the literal string `"None"` into any optional field left blank on a resubmit, due to a `{{ x if patient else '' }}` guard that doesn't cover `x` itself being `None`. Fixed across every vulnerable field. See §50.3. |
 | Updated | `ehr/models/database.py`, `ehr/db/migrations.py`, `ehr/services/notifications.py`, `ehr/routes/{appointments,portal}.py`, `ehr/templates/{appointments/detail,appointments/waitlist,patients/form}.html`. `tests/test_smoke.py` gained one new test. |
 | Explicitly not done | No auto-booking/auto-hold of the freed slot. No "fulfilled" automation. No reschedule-vacated-slot notification (cancellation only). No rate-limiting/batching. This closes the last `BUILD_BACKLOG.md` §5a Phase 2/3 follow-up; the Phase 3 real-vendor swap and Phase 4 portal follow-ups remain tracked separately. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |
+
+## 51. Phase 4 Portal Follow-Ups (v2.32)
+
+### 51.1 Origin
+
+Of the follow-ups tracked against the patient self-service portal (Phase 4, §49.4), this round explicitly built five: reschedule provider/type change, a configurable self-service cutoff, login-link rate-limiting, waitlist self-service, and a patient-facing clinical data view. Explicitly deferred by the same decision: a real email vendor (still Phase 3's mock, tracked separately) and patient self-registration (a bigger, separately-scoped identity-verification question).
+
+The clinical data view in particular needed its own scoping pass before building, given it's new PHI exposure on a surface staff aren't in the loop for: confirmed to include visit summaries, prescriptions, and documents (not full raw exam detail -- vision/IOP/slit-lamp findings etc. stay staff-only), with every view logged for staff audit visibility.
+
+### 51.2 What changed
+
+**Reschedule provider/type change**: `GET`/`POST /portal/appointments/{id}/reschedule[/confirm]` now accept `provider_id`/`appointment_type_version_id` (defaulting to the appointment's current ones), reusing the exact same eligibility/duration/conflict checks `POST /portal/book/confirm` already applies to a new booking -- a patient can move an appointment to a different provider or type online, not just a different time, still under the same conflict-rule engine and cutoff window.
+
+**Configurable self-service cutoff**: new `PortalSettings` singleton (migration `030_portal_settings_and_access_audit`, one row, `id=1`) replaces the hardcoded `PORTAL_SELF_SERVICE_CUTOFF_HOURS` constant. Staff adjust it at `GET`/`POST /admin/scheduling/portal-settings` (new page, linked from the admin scheduling nav); every cutoff check in `ehr/routes/portal.py` now reads `PortalSettings.self_service_cutoff_hours` instead.
+
+**Login-link rate limiting**: `POST /portal/login` now caps token minting at `LOGIN_LINK_RATE_LIMIT_COUNT` (3) per matched patient within `LOGIN_LINK_RATE_LIMIT_WINDOW` (15 minutes), counting existing `PatientPortalLoginToken` rows rather than adding new schema. A rate-limited request silently mints no new token but returns the identical "check your email" response either way, preserving the existing anti-enumeration posture.
+
+**Waitlist self-service**: `GET/POST /portal/waitlist`, `POST /portal/waitlist/{id}/cancel` -- a patient can join or cancel their own `WaitlistEntry` rows, reusing the exact model and matching logic (`find_matching_waitlist_entries`) staff already use via `patients/waitlist_tab.html`. A patient-created entry always starts `priority="normal"` -- urgent/normal triage stays a staff judgment call, not something a patient sets themselves.
+
+**Patient-facing clinical data view** (`GET /portal/records[/visits[/{id}]|/prescriptions|/documents[/{id}]]`): a read-only summary of the logged-in patient's own visits (date, provider, chief complaint, assessment/plan, follow-up -- not the full raw exam), prescriptions (actual Rx values), and documents (reusing the same secure per-patient download proxy pattern as the staff `correspondence/documents` route, with the same ownership check returning 404 on any patient_id mismatch). New `PortalAccessAuditEvent` model logs every visit-summary view, prescriptions-list view, and document view/download (`patient_id`, `resource_type`, `resource_id`, `viewed_at`) for staff visibility into when a patient looked at their own data.
+
+### 51.3 Verified
+
+`python3 -m py_compile` on every touched Python file. Fresh-database boot and idempotent re-run against an already-migrated database. Manual end-to-end checks via a live instance: the portal settings page round-trips a new cutoff value and every cutoff check picks it up immediately; a self-service reschedule onto a different provider succeeds and the new provider shows on the appointments list; the login-link rate limiter silently stops minting new tokens after 3 requests within the window while still returning an identical response; waitlist join/cancel works and is ownership-scoped; the clinical data view's ownership checks return 404 (not another patient's data) for a mismatched exam or document id, and each qualifying view is recorded in `PortalAccessAuditEvent`. One new Playwright test (`test_portal_phase4_followups`) added to the permanent suite; full suite (47 tests) re-run to confirm no regressions.
+
+### 51.4 Explicitly not done
+
+No real email vendor (still Phase 3's mock/logged send -- tracked separately). No patient self-registration (the portal still only authenticates existing chart-matched emails; creating a brand-new chart from the portal needs its own identity-verification design). No rate-limiting on the clinical-data-view or waitlist routes themselves (only the login-link endpoint). No edit/delete of a patient-created waitlist entry's fields after creation (only cancel). No staff-facing UI for the new `PortalAccessAuditEvent` log yet (recorded, not yet surfaced on a dedicated audit page -- a natural next step if this proves useful). No full clinical chart access (vision/IOP/slit-lamp/fundus findings, diagnostic test results) -- visit summaries stay a patient-friendly subset.
+
+**Version 2.32 change log (relative to v2.31) — Phase 4 Portal Follow-Ups:**
+
+| Area | Change |
+| --- | --- |
+| New capability | Self-service reschedule can change provider/appointment type, not just time (`ehr/routes/portal.py`). See §51.2. |
+| New capability | Configurable self-service cutoff: new `PortalSettings` singleton + `admin/scheduling/portal_settings.html` staff page, migration `030_portal_settings_and_access_audit`. See §51.2. |
+| New capability | Login-link request rate limiting (3 per 15 min per matched patient), no new schema -- counts existing `PatientPortalLoginToken` rows. See §51.2. |
+| New capability | Waitlist self-service (`/portal/waitlist`), reusing the existing `WaitlistEntry` model and matching logic. See §51.2. |
+| New capability | Patient-facing clinical data view (`/portal/records/*`): visit summaries, prescriptions, documents -- each view logged to new `PortalAccessAuditEvent` (same migration `030_portal_settings_and_access_audit`). See §51.2. |
+| Updated | `ehr/models/database.py`, `ehr/db/migrations.py`, `ehr/routes/{portal,admin_scheduling}.py`, `ehr/templates/admin/scheduling/{_nav,portal_settings}.html`, `ehr/templates/portal/{_base,reschedule,waitlist,records_home,records_visits,records_visit_detail,records_prescriptions,records_documents}.html`. `tests/test_smoke.py` gained one new test. |
+| Explicitly not done | No real email vendor. No patient self-registration. No rate-limiting beyond the login-link endpoint. No edit of a waitlist entry after creation. No staff-facing audit page for `PortalAccessAuditEvent` yet. No full clinical chart access via the portal. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |

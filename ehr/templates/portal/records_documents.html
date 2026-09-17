@@ -1,0 +1,25 @@
+{% extends "portal/_base.html" %}
+{% block title %}Documents &mdash; Patient Portal{% endblock %}
+{% block portal_content %}
+<div class="page-header">
+  <h1>Documents</h1>
+  <a href="/portal/records" class="btn btn-secondary btn-sm">Back</a>
+</div>
+<div class="card">
+  {% if not documents %}
+  <p style="color:var(--ink-muted)">No documents on file yet.</p>
+  {% else %}
+  <table class="exam-table">
+    <tr><th>Category</th><th>Name</th><th>Uploaded</th><th></th></tr>
+    {% for d in documents %}
+    <tr>
+      <td>{{ d.category or '—' }}</td>
+      <td>{{ d.description or d.original_filename }}</td>
+      <td class="mono-data">{{ d.uploaded_at.strftime('%Y-%m-%d') if d.uploaded_at else '—' }}</td>
+      <td><a href="/portal/records/documents/{{ d.id }}" target="_blank" class="btn btn-sm btn-secondary">View</a></td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+</div>
+{% endblock %}

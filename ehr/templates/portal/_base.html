@@ -25,9 +25,15 @@
 <body class="portal-body">
   <div class="portal-topbar">
     <span class="portal-brand">New Path Vision &mdash; Patient Portal</span>
-    <form method="post" action="/portal/logout" style="margin:0">
-      <button type="submit" class="btn btn-secondary btn-sm">Sign Out</button>
-    </form>
+    <nav style="display:flex;gap:1rem;align-items:center;font-size:0.85rem">
+      <a href="/portal/">Home</a>
+      <a href="/portal/appointments">Appointments</a>
+      <a href="/portal/waitlist">Waitlist</a>
+      <a href="/portal/records">My Records</a>
+      <form method="post" action="/portal/logout" style="margin:0">
+        <button type="submit" class="btn btn-secondary btn-sm">Sign Out</button>
+      </form>
+    </nav>
   </div>
   <div class="portal-main">
     {% block portal_content %}{% endblock %}

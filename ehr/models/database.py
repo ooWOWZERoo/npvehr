@@ -558,6 +558,41 @@ class WaitlistNotification(Base):
     )
 
 
+class PortalSettings(Base):
+    """Singleton (one row, id=1) practice-wide configuration for the patient
+    portal (BUILD_BACKLOG.md 5a, Phase 4 follow-ups). Just the self-service
+    cutoff window for now -- a KV-style generic settings table was considered
+    and rejected in favor of this app's usual preference for explicit typed
+    columns over a generic store."""
+    __tablename__ = "portal_settings"
+    id = Column(Integer, primary_key=True)
+    self_service_cutoff_hours = Column(Integer, default=24, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow)
+    updated_by_user_id = Column(Integer, ForeignKey("users.id"))
+
+
+class PortalAccessAuditEvent(Base):
+    """Audit trail of a patient viewing their own clinical data through the
+    portal (BUILD_BACKLOG.md 5a, Phase 4's patient-facing clinical data view
+    follow-up) -- one row per view, so staff can see when a patient looked
+    at a visit summary, prescription list, or document. Deliberately a
+    separate, simpler model from the staff-facing AppointmentAuditEvent/
+    AppointmentTypeAuditEvent (which track *changes*, not views, and are
+    keyed to a specific staff user rather than a patient)."""
+    __tablename__ = "portal_access_audit_events"
+    id = Column(Integer, primary_key=True, index=True)
+    patient_id = Column(Integer, ForeignKey("patients.id"), nullable=False)
+    resource_type = Column(String, nullable=False)  # 'visit_summary' | 'prescriptions' | 'document'
+    resource_id = Column(Integer)  # nullable -- e.g. null for the prescriptions list view as a whole
+    viewed_at = Column(DateTime, default=datetime.utcnow)
+
+    patient = relationship("Patient")
+
+    __table_args__ = (
+        Index("ix_portal_access_patient_viewed", "patient_id", "viewed_at"),
+    )
+
+
 class DailyClosing(Base):
     """Store Operations > Daily Closing reconciliation entries. One row per
     payment type per posting date. `calculated_amount` is always 0.0 for now --

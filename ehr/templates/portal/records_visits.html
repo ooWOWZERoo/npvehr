@@ -1,0 +1,25 @@
+{% extends "portal/_base.html" %}
+{% block title %}Visit Summaries &mdash; Patient Portal{% endblock %}
+{% block portal_content %}
+<div class="page-header">
+  <h1>Visit Summaries</h1>
+  <a href="/portal/records" class="btn btn-secondary btn-sm">Back</a>
+</div>
+<div class="card">
+  {% if not exams %}
+  <p style="color:var(--ink-muted)">No visits on file yet.</p>
+  {% else %}
+  <table class="exam-table">
+    <tr><th>Date</th><th>Provider</th><th>Reason for Visit</th><th></th></tr>
+    {% for e in exams %}
+    <tr>
+      <td class="mono-data">{{ e.exam_date }}</td>
+      <td>Dr. {{ e.provider.last_name }}</td>
+      <td>{{ e.chief_complaint or '—' }}</td>
+      <td><a href="/portal/records/visits/{{ e.id }}" class="btn btn-sm btn-secondary">View Summary</a></td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+</div>
+{% endblock %}

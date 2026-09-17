@@ -1,0 +1,19 @@
+{% extends "portal/_base.html" %}
+{% block title %}Visit Summary &mdash; Patient Portal{% endblock %}
+{% block portal_content %}
+<div class="page-header">
+  <h1>Visit Summary</h1>
+  <a href="/portal/records/visits" class="btn btn-secondary btn-sm">Back</a>
+</div>
+<div class="card">
+  <dl class="dl-grid">
+    <dt>Date</dt><dd class="mono-data">{{ exam.exam_date }}</dd>
+    <dt>Provider</dt><dd>Dr. {{ exam.provider.last_name }}</dd>
+    <dt>Reason for Visit</dt><dd>{{ exam.chief_complaint or '—' }}</dd>
+    <dt>Assessment</dt><dd>{{ exam.assessment or '—' }}</dd>
+    <dt>Plan</dt><dd>{{ exam.plan or '—' }}</dd>
+    {% if exam.follow_up_weeks %}<dt>Follow-Up</dt><dd>{{ exam.follow_up_weeks }} week{{ 's' if exam.follow_up_weeks != 1 }}</dd>{% endif %}
+  </dl>
+  <p style="color:var(--ink-muted);font-size:0.8rem;margin-top:1rem">This is a summary, not your full clinical record. Contact the office with any questions about this visit.</p>
+</div>
+{% endblock %}

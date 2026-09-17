@@ -1,0 +1,31 @@
+{% extends "portal/_base.html" %}
+{% block title %}Prescriptions &mdash; Patient Portal{% endblock %}
+{% block portal_content %}
+<div class="page-header">
+  <h1>Prescriptions</h1>
+  <a href="/portal/records" class="btn btn-secondary btn-sm">Back</a>
+</div>
+{% if not prescriptions %}
+<div class="card">
+  <p style="color:var(--ink-muted)">No prescriptions on file yet.</p>
+</div>
+{% else %}
+  {% for rx in prescriptions %}
+  <div class="card" style="margin-bottom:1rem">
+    <h3>{{ rx.rx_type|capitalize }} &mdash; {{ rx.issue_date }}{% if rx.expiry_date %} (expires {{ rx.expiry_date }}){% endif %}</h3>
+    <p style="color:var(--ink-muted);font-size:0.85rem;margin-top:-0.5rem">Dr. {{ rx.provider.last_name }}</p>
+    <table class="exam-table">
+      <tr><th></th><th>Sphere</th><th>Cylinder</th><th>Axis</th><th>Add</th><th>Prism/Base</th></tr>
+      <tr><td>OD</td><td class="mono-data">{{ rx.od_sphere if rx.od_sphere is not none else '—' }}</td><td class="mono-data">{{ rx.od_cylinder if rx.od_cylinder is not none else '—' }}</td><td class="mono-data">{{ rx.od_axis if rx.od_axis is not none else '—' }}</td><td class="mono-data">{{ rx.od_add if rx.od_add is not none else '—' }}</td><td class="mono-data">{{ (rx.od_prism ~ ' ' ~ (rx.od_base or '')) if rx.od_prism is not none else '—' }}</td></tr>
+      <tr><td>OS</td><td class="mono-data">{{ rx.os_sphere if rx.os_sphere is not none else '—' }}</td><td class="mono-data">{{ rx.os_cylinder if rx.os_cylinder is not none else '—' }}</td><td class="mono-data">{{ rx.os_axis if rx.os_axis is not none else '—' }}</td><td class="mono-data">{{ rx.os_add if rx.os_add is not none else '—' }}</td><td class="mono-data">{{ (rx.os_prism ~ ' ' ~ (rx.os_base or '')) if rx.os_prism is not none else '—' }}</td></tr>
+    </table>
+    {% if rx.lens_type or rx.lens_material or rx.lens_treatments %}
+    <p style="font-size:0.85rem;margin-top:0.5rem">
+      {% if rx.lens_type %}{{ rx.lens_type }}{% endif %}{% if rx.lens_material %} &middot; {{ rx.lens_material }}{% endif %}{% if rx.lens_treatments %} &middot; {{ rx.lens_treatments }}{% endif %}
+    </p>
+    {% endif %}
+    {% if rx.notes %}<p style="font-size:0.85rem;color:var(--ink-muted)">{{ rx.notes }}</p>{% endif %}
+  </div>
+  {% endfor %}
+{% endif %}
+{% endblock %}

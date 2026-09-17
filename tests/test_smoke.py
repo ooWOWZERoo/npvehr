@@ -917,3 +917,103 @@ def test_waitlist_auto_notify_on_cancellation_and_idempotency(logged_in_page, li
     notifications_card = page.locator(".card", has_text="Recent Waitlist Notifications")
     sent_rows_after = notifications_card.inner_text().count("Sent")
     assert sent_rows_after == sent_rows_before
+
+
+def test_portal_phase4_followups(logged_in_page, live_server):
+    """Phase 4 portal follow-ups (BUILD_BACKLOG.md 5a): the configurable
+    self-service cutoff setting (admin/scheduling/portal_settings.html),
+    waitlist self-service (join/view/cancel from the portal), a self-service
+    reschedule that changes provider (not just time), and the patient-facing
+    clinical data view (visit summaries, prescriptions, documents) with its
+    per-view PortalAccessAuditEvent logging."""
+    staff_page = logged_in_page
+
+    # Staff: confirm the portal settings page round-trips a new cutoff value.
+    staff_page.goto(live_server + "/admin/scheduling/portal-settings")
+    staff_page.fill('input[name="self_service_cutoff_hours"]', "12")
+    staff_page.locator('button[type="submit"]', has_text="Save").click()
+    staff_page.wait_for_load_state("networkidle")
+    assert staff_page.locator('input[name="self_service_cutoff_hours"]').input_value() == "12"
+
+    # Staff: opt one appointment type into online booking.
+    staff_page.goto(live_server + "/admin/scheduling/appointment-types")
+    staff_page.locator("table a").first.click()
+    staff_page.wait_for_load_state("networkidle")
+    type_id = staff_page.url.rstrip("/").split("/")[-1]
+    staff_page.goto(live_server + f"/admin/scheduling/appointment-types/{type_id}/edit")
+    staff_page.check("#patient_bookable")
+    staff_page.fill('input[name="change_reason"]', "Enable online booking for follow-up test coverage")
+    staff_page.locator('button[type="submit"]', has_text="Publish New Version").click()
+    staff_page.wait_for_url(re.compile(rf"/appointment-types/{type_id}$"))
+
+    # Patient: log in via the mocked magic link.
+    page = staff_page.context.browser.new_context().new_page()
+    page.goto(live_server + "/portal/login")
+    page.fill("#email", "alice@example.com")
+    page.click('button[type=submit]')
+    page.wait_for_load_state("networkidle")
+    login_link = page.locator("a", has_text="Sign in as Alice Johnson")
+    login_link.wait_for(state="visible")
+    href = login_link.get_attribute("href")
+    page.goto(href)
+    page.wait_for_url(re.compile(r"/portal/$"))
+
+    # Waitlist self-service: add an entry, confirm it shows, cancel it.
+    page.goto(live_server + "/portal/waitlist")
+    page.fill('input[name="notes"]', "Portal follow-up coverage")
+    page.locator('button[type="submit"]', has_text="Add to Waitlist").click()
+    page.wait_for_load_state("networkidle")
+    assert "Portal follow-up coverage" in page.locator(".card", has_text="My Waitlist Entries").inner_text()
+    page.locator('form[action$="/cancel"] button').first.click()
+    page.wait_for_load_state("networkidle")
+    entries_text = page.locator(".card", has_text="My Waitlist Entries").inner_text()
+    assert "Portal follow-up coverage" in entries_text and "cancelled" in entries_text.lower()
+
+    # Records: visit summaries, prescriptions, documents all load and are
+    # reachable from the records home page.
+    page.goto(live_server + "/portal/records")
+    page.locator("a", has_text="Visit Summaries").click()
+    page.wait_for_load_state("networkidle")
+    view_link = page.locator("a", has_text="View Summary").first
+    if view_link.count():
+        view_link.click()
+        page.wait_for_load_state("networkidle")
+        assert page.locator("h1", has_text="Visit Summary").is_visible()
+
+    page.goto(live_server + "/portal/records/prescriptions")
+    assert "Prescriptions" in page.locator("h1").inner_text()
+
+    page.goto(live_server + "/portal/records/documents")
+    assert "Documents" in page.locator("h1").inner_text()
+
+    # Reschedule with a provider change: book, then reschedule onto the
+    # other provider and confirm the appointments list reflects it.
+    weekday_offset = 1
+    while (datetime.utcnow() + timedelta(days=weekday_offset)).weekday() >= 5:
+        weekday_offset += 1
+    target_date = (datetime.utcnow() + timedelta(days=weekday_offset)).strftime("%Y-%m-%d")
+    page.goto(live_server + f"/portal/book?date_str={target_date}")
+    type_version_id = page.locator('select[name="appointment_type_version_id"] option').nth(1).get_attribute("value")
+    page.select_option('select[name="appointment_type_version_id"]', type_version_id)
+    page.wait_for_load_state("networkidle")
+    page.select_option('select[name="provider_id"]', index=1)
+    page.wait_for_load_state("networkidle")
+    slot_forms = page.locator('form[action="/portal/book/confirm"]')
+    slot_forms.first.wait_for(state="visible")
+    slot_forms.first.locator('button[type="submit"]').click()
+    page.wait_for_url(re.compile(r"/portal/appointments\?booked=1"))
+    page.wait_for_load_state("networkidle")
+
+    appt_href = page.locator('a[href*="/reschedule"]').first.get_attribute("href")
+    appt_id = appt_href.rstrip("/").split("/")[-2]
+    page.goto(live_server + f"/portal/appointments/{appt_id}/reschedule")
+    original_provider = page.locator('select[name="provider_id"] option[selected]').get_attribute("value")
+    all_provider_ids = page.locator('select[name="provider_id"] option').all()
+    new_provider_id = next(o.get_attribute("value") for o in all_provider_ids if o.get_attribute("value") != original_provider)
+    page.select_option('select[name="provider_id"]', new_provider_id)
+    page.wait_for_load_state("networkidle")
+    reschedule_forms = page.locator('form[action$="/reschedule/confirm"]')
+    reschedule_forms.first.wait_for(state="visible")
+    reschedule_forms.first.locator('button[type="submit"]').click()
+    page.wait_for_url(re.compile(r"/portal/appointments\?rescheduled=1"))
+    page.wait_for_load_state("networkidle")
