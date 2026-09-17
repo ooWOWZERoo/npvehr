@@ -1,6 +1,6 @@
 # New Path Vision EHR — Master Build Backlog
 
-**Status:** Living tracking document. **Baseline as of:** spec v2.32 / research doc v2.24 (2026-09-17).
+**Status:** Living tracking document. **Baseline as of:** spec v2.33 / research doc v2.24 (2026-09-17).
 
 ## Purpose and how to use this document
 
@@ -35,7 +35,8 @@ This consolidates every outstanding build item, investigation, and test scattere
 - [x] **Calendar & Appointments UX Overhaul, Phase 3 (Automated Confirmations & Reminders)** — mock-only send interface, patient opt-in fields (default off), booking-time confirmation, `CRON_SECRET`-gated hourly reminder scan, staff-facing audit log. **Done, v2.29** — see §5a, baseline spec §48.
 - [x] **Calendar & Appointments UX Overhaul, Phase 4 (Online Patient Self-Booking)** — a second, patient-facing application surface with its own passwordless magic-link auth; self-service book/cancel/reschedule reusing the staff conflict-rule engine; per-type `patient_bookable` opt-in for staff. **Done, v2.30** — see §5a, baseline spec §49. This closes out the 4-phase Calendar & Appointments UX Overhaul roadmap.
 - [x] **Waitlist auto-notify** — the last deferred item from Phase 2/3: cancelling an appointment now auto-notifies every matching waitlist entry (mock send, opt-in gated), with staff-visible audit trail. **Done, v2.31** — see §5a, baseline spec §50.
-- [x] **Phase 4 portal follow-ups (round 1)** — reschedule provider/type change, configurable self-service cutoff, login-link rate-limiting, waitlist self-service, and a patient-facing clinical data view (visit summaries, prescriptions, documents, each view audited). **Done, v2.32** — see §5a, baseline spec §51. Pick up the Phase 3 real-vendor follow-up, patient self-registration, or another item from the sections below.
+- [x] **Phase 4 portal follow-ups (round 1)** — reschedule provider/type change, configurable self-service cutoff, login-link rate-limiting, waitlist self-service, and a patient-facing clinical data view (visit summaries, prescriptions, documents, each view audited). **Done, v2.32** — see §5a, baseline spec §51.
+- [x] **Scheduling slot/duration reconciliation** — user question prompted a rethink of how appointment durations relate to offered start times. Configurable slot granularity (practice default + per-provider override) filtering an always-fine-grained, always-correct conflict check -- never lets a longer exam get squeezed into a shorter gap, matching the scenario asked about. Also fixed a real bug found along the way: `find_open_slots` never checked room/resource conflicts, only provider availability, so a slot could be offered that then failed at actual booking. **Done, v2.33** — see baseline spec §52. Pick up the Phase 3 real-vendor follow-up, patient self-registration, the `publish_new_version` resource-requirements gap (§6 below), or another item from the sections below.
 
 ---
 
@@ -99,6 +100,7 @@ The foundational, largest-scope item underlying much of the above — deliberate
 - [~] Visual **Resource Schedule grid view** — subsumed by the Calendar & Appointments UX Overhaul below (Phase 1's board view covers per-provider scheduling; a dedicated non-provider Resource grid, e.g. rooms/lanes/devices as their own board, is still open)
 - [ ] Room/lane/device resource conflict enforcement extended to a resource-picker UI on the booking form itself (today, resource assignment is automatic based on type requirements — no manual override UI, §31.3)
 - [ ] Calendar click-to-create does not itself pre-check availability before opening the form (§18.2 item 7, still open per that item's own note)
+- [ ] **`publish_new_version` doesn't carry resource requirements forward** (found while verifying the slot/duration reconciliation round, baseline spec §52.4): it carries a type's color rules onto a newly published version but leaves `AppointmentTypeResourceRequirement` rows attached to the now-inactive previous version, so republishing a type that needs a room/resource silently drops that requirement. Needs its own decision before fixing: should every republish always carry resource requirements forward (mirroring color rules), or is there a legitimate workflow for changing them at publish time that a blanket carry-forward would break?
 
 ---
 

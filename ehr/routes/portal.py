@@ -209,7 +209,7 @@ def _slot_search_context(db: Session, provider_id, appointment_type_version_id, 
             else:
                 duration_minutes = sched.compute_duration_minutes(version, relationship)
                 slots = sched.find_open_slots(db, provider_id, target_date, duration_minutes,
-                                               exclude_appointment_id=exclude_appointment_id)
+                                               version=version, exclude_appointment_id=exclude_appointment_id)
     return {"providers": providers, "types": types, "provider_id": provider_id,
             "appointment_type_version_id": appointment_type_version_id, "target_date": target_date,
             "slots": slots, "version": version, "error": error}

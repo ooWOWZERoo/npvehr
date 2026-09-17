@@ -1015,6 +1015,32 @@ def migration_030_portal_settings_and_access_audit(conn):
         "CREATE INDEX IF NOT EXISTS ix_portal_access_patient_viewed "
         "ON portal_access_audit_events (patient_id, viewed_at)"))
 
+def migration_031_slot_granularity(conn):
+    """Scheduling slot/duration reconciliation: a configurable "offered
+    start-time granularity" (models.database.SchedulingSettings, a singleton
+    row seeded here) with an optional per-provider override
+    (Provider.slot_granularity_minutes). Defaults to 5 minutes so behavior
+    is unchanged for every existing deployment until an admin explicitly
+    sets it coarser -- see ehr.services.scheduling.find_open_slots, which
+    still always does its conflict math at 5-minute resolution regardless
+    of this setting; this only narrows which of those safe times are
+    actually offered."""
+    if _table_exists(conn, "providers"):
+        _add_column_if_missing(conn, "providers", "slot_granularity_minutes", "INTEGER")
+    conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS scheduling_settings (
+            id INTEGER PRIMARY KEY,
+            default_slot_granularity_minutes INTEGER NOT NULL,
+            updated_at TIMESTAMP,
+            updated_by_user_id INTEGER
+        )
+    """))
+    existing = conn.execute(text("SELECT id FROM scheduling_settings WHERE id = 1")).fetchone()
+    if not existing:
+        conn.execute(text(
+            "INSERT INTO scheduling_settings (id, default_slot_granularity_minutes, updated_at) "
+            "VALUES (1, 5, :ts)"), {"ts": datetime.utcnow().isoformat()})
+
 # Ordered list of (id, function). Adding new migrations: append, never edit past entries.
 COLUMN_MIGRATIONS = [
     ("001_appointment_columns", migration_001_appointment_columns),
@@ -1042,6 +1068,7 @@ COLUMN_MIGRATIONS = [
     ("028_patient_portal", migration_028_patient_portal),
     ("029_waitlist_notifications", migration_029_waitlist_notifications),
     ("030_portal_settings_and_access_audit", migration_030_portal_settings_and_access_audit),
+    ("031_slot_granularity", migration_031_slot_granularity),
 ]
 POST_CREATE_ALL_MIGRATIONS = [
     ("002_seed_appointment_types", migration_002_seed_appointment_types),

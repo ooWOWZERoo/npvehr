@@ -166,6 +166,15 @@ class Provider(Base):
     license_number = Column(String)
     npi = Column(String)
     specialty = Column(String, default="Optometry")
+    # Scheduling slot granularity/reconciliation follow-up: which start-time
+    # increments (5/10/15/20/30/60 min) this provider's open-slot search
+    # offers to staff and patients -- null means "use the practice-wide
+    # SchedulingSettings.default_slot_granularity_minutes." This is purely a
+    # display/offering filter on top of find_open_slots' always-fine-grained
+    # (5-minute) conflict math -- it never lets a coarser granularity hide a
+    # real conflict or offer an unsafe time; see ehr.services.scheduling.
+    # get_effective_slot_granularity.
+    slot_granularity_minutes = Column(Integer)
     appointments = relationship("Appointment", back_populates="provider")
     eye_exams = relationship("EyeExam", back_populates="provider")
     prescriptions = relationship("Prescription", back_populates="provider")
@@ -567,6 +576,21 @@ class PortalSettings(Base):
     __tablename__ = "portal_settings"
     id = Column(Integer, primary_key=True)
     self_service_cutoff_hours = Column(Integer, default=24, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow)
+    updated_by_user_id = Column(Integer, ForeignKey("users.id"))
+
+
+class SchedulingSettings(Base):
+    """Singleton (one row, id=1) practice-wide scheduling configuration.
+    Currently just the default slot granularity (BUILD_BACKLOG.md's
+    slot/duration reconciliation follow-up) -- how finely start times are
+    offered on the calendar and in availability search, on top of the
+    always-fine-grained (5-minute) conflict-checking math in
+    ehr.services.scheduling.find_open_slots. A provider with its own
+    Provider.slot_granularity_minutes set overrides this default."""
+    __tablename__ = "scheduling_settings"
+    id = Column(Integer, primary_key=True)
+    default_slot_granularity_minutes = Column(Integer, default=5, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow)
     updated_by_user_id = Column(Integer, ForeignKey("users.id"))
 
