@@ -7,7 +7,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from ehr.models.database import (get_db, Appointment, Patient, Provider, AppointmentStatus, AppointmentType,
     AppointmentTypeVersion, DiagnosticTest, AppointmentTest, AppointmentAuditEvent, AppointmentResourceReservation,
-    Resource, WaitlistEntry, User, AppointmentReminder)
+    Resource, WaitlistEntry, User, AppointmentReminder, WaitlistNotification)
 from ehr.services import scheduling as sched
 from ehr.services import notifications as notify
 from ehr.env_info import EHR_ENV, CRON_SECRET
@@ -473,7 +473,13 @@ def staff_waitlist_queue(request: Request, db: Session = Depends(get_db)):
     from sqlalchemy import case
     entries = (db.query(WaitlistEntry).filter(WaitlistEntry.status == "active")
                .order_by(case((WaitlistEntry.priority == "urgent", 0), else_=1), WaitlistEntry.created_at).all())
-    return templates.TemplateResponse(request, "appointments/waitlist.html", {"entries": entries})
+    # Waitlist auto-notify audit trail (BUILD_BACKLOG.md 5a follow-up): recent
+    # attempted sends, newest first, so staff can see the queue is actually
+    # being worked automatically, not just sitting there.
+    notifications = (db.query(WaitlistNotification)
+                      .order_by(WaitlistNotification.created_at.desc()).limit(50).all())
+    return templates.TemplateResponse(request, "appointments/waitlist.html",
+        {"entries": entries, "notifications": notifications})
 
 
 @router.get("/reminders", response_class=HTMLResponse)
@@ -571,14 +577,25 @@ def appointment_detail(request: Request, appt_id: int, db: Session = Depends(get
     # Waitlist Management (BUILD_BACKLOG.md 5a Phase 2): a cancelled appointment
     # frees its slot, so surface any active waitlist entries that match it
     # (same provider/type, desired date range covers this date) for staff to
-    # call. No auto-notify -- that needs Phase 3's messaging infra.
+    # call. Each match is auto-notified once (BUILD_BACKLOG.md 5a's waitlist
+    # auto-notify follow-up, wired into every place an appointment is
+    # cancelled -- see ehr.services.notifications.send_waitlist_opening_notices);
+    # notified_entry_ids lets this page show which matches already got a
+    # notice sent, so staff know a manual call isn't the only thing that happened.
     waitlist_matches = []
+    notified_entry_ids = set()
     if a.status == AppointmentStatus.cancelled:
         waitlist_matches = sched.find_matching_waitlist_entries(
             db, a.provider_id, a.appointment_type_version_id, a.scheduled_at.date())
+        if waitlist_matches:
+            notified_entry_ids = {row.waitlist_entry_id for row in
+                db.query(WaitlistNotification.waitlist_entry_id)
+                .filter(WaitlistNotification.appointment_id == a.id, WaitlistNotification.status == "sent")
+                .all()}
     return templates.TemplateResponse(request, "appointments/detail.html",
         {"appt": a, "statuses": list(AppointmentStatus), "audit_events": audit,
-         "waitlist_matches": waitlist_matches, "context_patient": patient_context(a.patient)})
+         "waitlist_matches": waitlist_matches, "notified_entry_ids": notified_entry_ids,
+         "context_patient": patient_context(a.patient)})
 
 
 @router.get("/{appt_id}/edit", response_class=HTMLResponse)
@@ -633,6 +650,7 @@ def update_appointment(request: Request, appt_id: int, provider_id: int = Form(.
     _sync_resource_reservations(db, a, version)
     db.flush()
     _recolor(a, version)
+    old_status = a.status
     if status:
         a.status = AppointmentStatus(status)
     if old_when != when:
@@ -644,6 +662,8 @@ def update_appointment(request: Request, appt_id: int, provider_id: int = Form(.
     a.updated_at = datetime.utcnow()
     a.updated_by_user_id = user.id
     db.commit()
+    if old_status != AppointmentStatus.cancelled and a.status == AppointmentStatus.cancelled:
+        notify.send_waitlist_opening_notices(db, a)
     return RedirectResponse(f"/appointments/{a.id}", status_code=303)
 
 
@@ -724,4 +744,6 @@ def update_status(request: Request, appt_id: int, status: str = Form(...), csrf_
     _audit(db, a.id, "status_changed", field_name="status",
            old_value=old_status.value if old_status else None, new_value=new_status.value)
     db.commit()
+    if old_status != AppointmentStatus.cancelled and new_status == AppointmentStatus.cancelled:
+        notify.send_waitlist_opening_notices(db, a)
     return RedirectResponse(f"/appointments/{appt_id}", status_code=303)

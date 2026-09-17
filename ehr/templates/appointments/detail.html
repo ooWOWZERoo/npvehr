@@ -12,9 +12,9 @@
 {% if waitlist_matches %}
 <div class="card" style="margin-bottom:1rem;border-left:4px solid var(--primary)">
   <h3>Patients Waiting for This Slot</h3>
-  <p style="color:var(--ink-muted);font-size:0.85rem;margin-top:-0.5rem">This appointment was cancelled, freeing {{ appt.scheduled_at.strftime('%A, %B %-d') }} with Dr. {{ appt.provider.last_name }}. These patients asked to be notified of an earlier {{ appt.appointment_type_version.display_name if appt.appointment_type_version else '' }} slot:</p>
+  <p style="color:var(--ink-muted);font-size:0.85rem;margin-top:-0.5rem">This appointment was cancelled, freeing {{ appt.scheduled_at.strftime('%A, %B %-d') }} with Dr. {{ appt.provider.last_name }}. These patients asked to be notified of an earlier {{ appt.appointment_type_version.display_name if appt.appointment_type_version else '' }} slot -- each has already been auto-notified (mock send, BUILD_BACKLOG.md 5a) on any channel they've opted into:</p>
   <table class="exam-table">
-    <tr><th>Priority</th><th>Patient</th><th>Date Range</th><th>Notes</th><th></th></tr>
+    <tr><th>Priority</th><th>Patient</th><th>Date Range</th><th>Notes</th><th>Notified</th><th></th></tr>
     {% for e in waitlist_matches %}
     <tr>
       <td>{% if e.priority == 'urgent' %}<span style="color:#b91c1c;font-weight:700">Urgent</span>{% else %}Normal{% endif %}</td>
@@ -22,6 +22,7 @@
         {% if e.patient.phone %}<div style="font-size:0.75rem;color:var(--ink-muted)">{{ e.patient.phone }}</div>{% endif %}</td>
       <td class="mono-data">{{ e.desired_date_start or '—' }} &ndash; {{ e.desired_date_end or '—' }}</td>
       <td>{{ e.notes or '—' }}</td>
+      <td>{% if e.id in notified_entry_ids %}<span style="color:#166534;font-weight:600">Yes</span>{% else %}<span style="color:var(--ink-muted)">No</span>{% endif %}</td>
       <td><a href="/appointments/new?patient_id={{ e.patient_id }}&provider_id={{ appt.provider_id }}&date={{ appt.scheduled_at.date().isoformat() }}" class="btn btn-sm btn-primary">Book</a></td>
     </tr>
     {% endfor %}

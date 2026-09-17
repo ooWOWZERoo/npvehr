@@ -528,6 +528,36 @@ class AppointmentReminder(Base):
     )
 
 
+class WaitlistNotification(Base):
+    """Waitlist auto-notify (BUILD_BACKLOG.md 5a, the deferred follow-up from
+    Phase 2/3): one row per attempted (mock) send to a waitlisted patient
+    when a matching slot opens up (an appointment is cancelled). A separate
+    table from AppointmentReminder rather than reusing it -- one freed
+    appointment can match several different waitlist entries/patients, and
+    AppointmentReminder's dedup key (appointment_id, channel, kind) has no
+    room to distinguish which patient a row is for; this table's dedup key
+    is (waitlist_entry_id, appointment_id, channel) instead, so the same
+    entry is never notified twice about the same freed slot, but can still
+    be notified about a different one later."""
+    __tablename__ = "waitlist_notifications"
+    id = Column(Integer, primary_key=True, index=True)
+    waitlist_entry_id = Column(Integer, ForeignKey("waitlist_entries.id"), nullable=False)
+    appointment_id = Column(Integer, ForeignKey("appointments.id"), nullable=False)  # the freed appointment
+    channel = Column(String, nullable=False)  # 'sms' | 'email'
+    status = Column(String, nullable=False)  # 'sent' | 'skipped_no_opt_in' | 'failed'
+    recipient = Column(String)
+    message_body = Column(Text)
+    sent_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    waitlist_entry = relationship("WaitlistEntry")
+    appointment = relationship("Appointment")
+
+    __table_args__ = (
+        Index("ix_waitlist_notif_entry_appt_channel", "waitlist_entry_id", "appointment_id", "channel"),
+    )
+
+
 class DailyClosing(Base):
     """Store Operations > Daily Closing reconciliation entries. One row per
     payment type per posting date. `calculated_amount` is always 0.0 for now --

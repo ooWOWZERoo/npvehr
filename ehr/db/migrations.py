@@ -962,6 +962,28 @@ def migration_028_patient_portal(conn):
         "CREATE INDEX IF NOT EXISTS ix_portal_sessions_patient_revoked "
         "ON patient_portal_sessions (patient_id, revoked)"))
 
+def migration_029_waitlist_notifications(conn):
+    """Waitlist auto-notify (BUILD_BACKLOG.md 5a, deferred follow-up from
+    Phase 2/3). See models.database.WaitlistNotification -- a separate table
+    from appointment_reminders since one freed appointment can notify
+    several different waitlist entries/patients."""
+    conn.execute(text(f"""
+        CREATE TABLE IF NOT EXISTS waitlist_notifications (
+            id {_pk_ddl(conn)},
+            waitlist_entry_id INTEGER NOT NULL,
+            appointment_id INTEGER NOT NULL,
+            channel VARCHAR NOT NULL,
+            status VARCHAR NOT NULL,
+            recipient VARCHAR,
+            message_body TEXT,
+            sent_at TIMESTAMP,
+            created_at TIMESTAMP
+        )
+    """))
+    conn.execute(text(
+        "CREATE INDEX IF NOT EXISTS ix_waitlist_notif_entry_appt_channel "
+        "ON waitlist_notifications (waitlist_entry_id, appointment_id, channel)"))
+
 # Ordered list of (id, function). Adding new migrations: append, never edit past entries.
 COLUMN_MIGRATIONS = [
     ("001_appointment_columns", migration_001_appointment_columns),
@@ -987,6 +1009,7 @@ COLUMN_MIGRATIONS = [
     ("026_create_waitlist_entries", migration_026_create_waitlist_entries),
     ("027_reminders_and_opt_in", migration_027_reminders_and_opt_in),
     ("028_patient_portal", migration_028_patient_portal),
+    ("029_waitlist_notifications", migration_029_waitlist_notifications),
 ]
 POST_CREATE_ALL_MIGRATIONS = [
     ("002_seed_appointment_types", migration_002_seed_appointment_types),

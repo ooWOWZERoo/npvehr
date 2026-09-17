@@ -17,7 +17,7 @@ the reminder cron idempotent.
 from datetime import datetime
 from sqlalchemy.orm import Session
 
-from ehr.models.database import Appointment, AppointmentReminder
+from ehr.models.database import Appointment, AppointmentReminder, WaitlistNotification
 
 
 def _mock_send(channel: str, recipient: str, message: str) -> bool:
@@ -84,6 +84,68 @@ def send_appointment_notice(db: Session, appointment: Appointment, kind: str) ->
         ok = _mock_send(channel, recipient, message)
         results.append(_record(db, appointment, channel, kind,
                                 "sent" if ok else "failed", recipient, message))
+    return results
+
+
+def _waitlist_already_attempted(db: Session, waitlist_entry_id: int, appointment_id: int, channel: str) -> bool:
+    """Same not-just-'sent' dedup rule as _already_attempted, keyed on
+    (waitlist_entry_id, appointment_id, channel) instead -- a given entry is
+    never notified twice about the same freed slot, but can still be
+    notified about a *different* one later."""
+    return (db.query(WaitlistNotification)
+            .filter(WaitlistNotification.waitlist_entry_id == waitlist_entry_id,
+                    WaitlistNotification.appointment_id == appointment_id,
+                    WaitlistNotification.channel == channel)
+            .first() is not None)
+
+
+def _record_waitlist(db: Session, waitlist_entry_id: int, appointment_id: int, channel: str,
+                      status: str, recipient: str, message_body: str) -> WaitlistNotification:
+    row = WaitlistNotification(waitlist_entry_id=waitlist_entry_id, appointment_id=appointment_id,
+        channel=channel, status=status, recipient=recipient, message_body=message_body,
+        sent_at=datetime.utcnow())
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def send_waitlist_opening_notices(db: Session, freed_appointment: Appointment) -> list[WaitlistNotification]:
+    """Waitlist auto-notify (BUILD_BACKLOG.md 5a, the deferred follow-up from
+    Phase 2/3): called right when an appointment transitions to cancelled.
+    Finds every active WaitlistEntry that matches the slot this appointment
+    just freed (ehr.services.scheduling.find_matching_waitlist_entries -- the
+    exact same matching logic that already surfaces these entries to staff
+    on the appointment detail page) and sends each one a (mock) notice per
+    opted-in channel, same gating and same mock-only posture as
+    send_appointment_notice above. Idempotent per (waitlist_entry, freed
+    appointment, channel)."""
+    from ehr.services import scheduling as sched  # local import avoids a cycle (scheduling doesn't import this module)
+
+    matches = sched.find_matching_waitlist_entries(
+        db, freed_appointment.provider_id, freed_appointment.appointment_type_version_id,
+        freed_appointment.scheduled_at.date())
+    provider = freed_appointment.provider
+    when = freed_appointment.scheduled_at.strftime("%A, %B %-d at %-I:%M %p")
+    results = []
+
+    for entry in matches:
+        patient = entry.patient
+        message = (f"Hi {patient.first_name}, a slot just opened up with Dr. {provider.last_name} "
+                    f"on {when}. Call the office if you'd like to grab it.")
+        for channel, opted_in, recipient in (
+            ("sms", patient.sms_opt_in, patient.phone),
+            ("email", patient.email_opt_in, patient.email),
+        ):
+            if _waitlist_already_attempted(db, entry.id, freed_appointment.id, channel):
+                continue
+            if not opted_in or not recipient:
+                results.append(_record_waitlist(db, entry.id, freed_appointment.id, channel,
+                                                  "skipped_no_opt_in", recipient or "", message))
+                continue
+            ok = _mock_send(channel, recipient, message)
+            results.append(_record_waitlist(db, entry.id, freed_appointment.id, channel,
+                                              "sent" if ok else "failed", recipient, message))
     return results
 
 

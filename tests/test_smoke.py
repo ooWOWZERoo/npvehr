@@ -616,7 +616,7 @@ def test_waitlist_add_view_and_surfaced_on_cancellation(logged_in_page, live_ser
     assert "Urgent" in tab_text
 
     page.goto(live_server + "/appointments/waitlist")
-    assert "Waiting for an earlier slot" in page.locator(".card").inner_text()
+    assert "Waiting for an earlier slot" in page.locator(".card").first.inner_text()
 
     page.goto(live_server + "/appointments/" + str(target["id"]))
     page.select_option('select[name="status"]', "cancelled")
@@ -634,7 +634,7 @@ def test_waitlist_add_view_and_surfaced_on_cancellation(logged_in_page, live_ser
     page.locator("form button", has_text="Cancel").first.click()
     page.wait_for_load_state("networkidle")
     page.goto(live_server + "/appointments/waitlist")
-    assert "Waiting for an earlier slot" not in page.locator(".card").inner_text()
+    assert "Waiting for an earlier slot" not in page.locator(".card").first.inner_text()
 
 
 def test_reminders_opt_in_gating_and_cron_scan(logged_in_page, live_server):
@@ -832,3 +832,88 @@ def test_patient_portal_book_reschedule_cancel_and_isolation(logged_in_page, liv
     patient_page.wait_for_load_state("networkidle")
 
     patient_ctx.close()
+
+
+def test_waitlist_auto_notify_on_cancellation_and_idempotency(logged_in_page, live_server):
+    """Waitlist auto-notify (BUILD_BACKLOG.md 5a, the deferred follow-up from
+    Phase 2/3) -- cancelling an appointment automatically sends a (mock)
+    notice to every matching active waitlist entry on any channel its
+    patient has opted into (ehr.services.notifications.
+    send_waitlist_opening_notices), recorded in the new WaitlistNotification
+    table. Covers: the send fires on cancellation and is reflected on both
+    the appointment detail page's "Patients Waiting for This Slot" card
+    (a "Notified: Yes" column) and the staff waitlist queue's own audit log;
+    and it's idempotent -- rescheduling an appointment back to scheduled and
+    cancelling it again does not send (or log) a second notice for the same
+    waitlist entry."""
+    page = logged_in_page
+
+    # Opt Carol Davis in for email, then add a waitlist entry for her.
+    page.goto(live_server + "/patients/")
+    page.locator("a", has_text="Davis").first.click()
+    page.wait_for_load_state("networkidle")
+    patient_url = page.url
+    carol_id = patient_url.rstrip("/").split("/")[-1]
+    page.goto(live_server + f"/patients/{carol_id}/edit")
+    page.check("#email_opt_in")
+    page.locator('button[type="submit"]', has_text="Save Changes").click()
+    page.wait_for_url(re.compile(rf"/patients/{carol_id}$"))
+    page.wait_for_load_state("networkidle")
+
+    # Book a fresh appointment (for a different patient) to cancel later --
+    # controls the exact provider/type so the waitlist entry below can match
+    # it precisely, rather than relying on whatever a legacy seed
+    # appointment happens to carry.
+    page.goto(live_server + "/appointments/new")
+    page.select_option('select[name="provider_id"]', index=0)
+    page.select_option('select[name="appointment_type_version_id"]', index=0)
+    provider_id = page.eval_on_selector('select[name="provider_id"]', "el => el.value")
+    type_version_id = page.eval_on_selector('select[name="appointment_type_version_id"]', "el => el.value")
+    when = (datetime.utcnow() + timedelta(days=2)).replace(hour=14, minute=0, second=0,
+                                                             microsecond=0).strftime("%Y-%m-%dT%H:%M")
+    page.fill("#scheduled_at", when)
+    page.locator('button[type="submit"]', has_text="Schedule Appointment").click()
+    page.wait_for_url(re.compile(r"/appointments/\d+$"))
+    appt_id = page.url.rstrip("/").split("/")[-1]
+
+    page.goto(live_server + f"/patients/{carol_id}/waitlist")
+    page.select_option('select[name="provider_id"]', provider_id)
+    page.select_option('select[name="appointment_type_version_id"]', type_version_id)
+    page.fill('input[name="notes"]', "Auto-notify coverage")
+    page.locator('button[type="submit"]', has_text="Add to Waitlist").click()
+    page.wait_for_url(re.compile(r"/waitlist$"))
+    page.wait_for_load_state("networkidle")
+
+    # Cancel the booked appointment -- this should fire the auto-notify.
+    page.goto(live_server + f"/appointments/{appt_id}")
+    page.select_option('select[name="status"]', "cancelled")
+    page.locator('form select[name="status"]').evaluate("el => el.form.requestSubmit()")
+    page.wait_for_url(re.compile(rf"/appointments/{appt_id}$"))
+    page.wait_for_load_state("networkidle")
+    matches_card = page.locator(".card", has_text="Patients Waiting for This Slot")
+    assert matches_card.is_visible()
+    assert "Auto-notify coverage" in matches_card.inner_text()
+    assert "Yes" in matches_card.inner_text()
+
+    page.goto(live_server + "/appointments/waitlist")
+    notifications_card = page.locator(".card", has_text="Recent Waitlist Notifications")
+    assert "Davis" in notifications_card.inner_text()
+    assert "Sent" in notifications_card.inner_text()
+    sent_rows_before = notifications_card.inner_text().count("Sent")
+
+    # Idempotency: reschedule back to 'scheduled' then cancel again --
+    # no second notice for the same waitlist entry+appointment+channel.
+    page.goto(live_server + f"/appointments/{appt_id}")
+    page.select_option('select[name="status"]', "scheduled")
+    page.locator('form select[name="status"]').evaluate("el => el.form.requestSubmit()")
+    page.wait_for_url(re.compile(rf"/appointments/{appt_id}$"))
+    page.wait_for_load_state("networkidle")
+    page.select_option('select[name="status"]', "cancelled")
+    page.locator('form select[name="status"]').evaluate("el => el.form.requestSubmit()")
+    page.wait_for_url(re.compile(rf"/appointments/{appt_id}$"))
+    page.wait_for_load_state("networkidle")
+
+    page.goto(live_server + "/appointments/waitlist")
+    notifications_card = page.locator(".card", has_text="Recent Waitlist Notifications")
+    sent_rows_after = notifications_card.inner_text().count("Sent")
+    assert sent_rows_after == sent_rows_before

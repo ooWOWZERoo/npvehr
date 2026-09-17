@@ -264,6 +264,7 @@ def portal_cancel_appointment(request: Request, appt_id: int, csrf_token: str = 
     _audit(db, appt.id, "status_changed", field_name="status", old_value="scheduled", new_value="cancelled",
            reason="Cancelled via patient portal")
     db.commit()
+    notify.send_waitlist_opening_notices(db, appt)
     return RedirectResponse("/portal/appointments?cancelled=1", status_code=303)
 
 
