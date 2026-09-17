@@ -141,6 +141,7 @@ def create_patient(request: Request,
     allergies: str = Form(""), medical_history: str = Form(""),
     ocular_history: str = Form(""), family_ocular_history: str = Form(""),
     balance_due: str = Form(""),
+    sms_opt_in: bool = Form(False), email_opt_in: bool = Form(False),
     photo: UploadFile = File(None),
     csrf_token: str = Form(""),
     db: Session = Depends(get_db)):
@@ -153,7 +154,8 @@ def create_patient(request: Request,
             insurance_provider=insurance_provider, insurance_id=insurance_id,
             emergency_contact_name=emergency_contact_name, emergency_contact_phone=emergency_contact_phone,
             allergies=allergies, medical_history=medical_history, ocular_history=ocular_history,
-            family_ocular_history=family_ocular_history, balance_due=_parse_balance(balance_due))
+            family_ocular_history=family_ocular_history, balance_due=_parse_balance(balance_due),
+            sms_opt_in=sms_opt_in, email_opt_in=email_opt_in)
         return templates.TemplateResponse(request, "patients/form.html", {
             "patient": pending,
             "error": f"MRN \"{mrn.strip()}\" is already assigned to {display_name(conflict)} (patient #{conflict.id}). Each patient needs a unique MRN.",
@@ -167,7 +169,8 @@ def create_patient(request: Request,
         emergency_contact_phone=emergency_contact_phone, allergies=allergies,
         medical_history=medical_history, ocular_history=ocular_history,
         family_ocular_history=family_ocular_history, photo_path=photo_path,
-        balance_due=_parse_balance(balance_due))
+        balance_due=_parse_balance(balance_due),
+        sms_opt_in=sms_opt_in, email_opt_in=email_opt_in)
     db.add(p); db.commit(); db.refresh(p)
     return RedirectResponse(f"/patients/{p.id}", status_code=303)
 
@@ -261,6 +264,7 @@ def update_patient(request: Request, patient_id: int,
     allergies: str = Form(""), medical_history: str = Form(""),
     ocular_history: str = Form(""), family_ocular_history: str = Form(""),
     balance_due: str = Form(""),
+    sms_opt_in: bool = Form(False), email_opt_in: bool = Form(False),
     photo: UploadFile = File(None),
     csrf_token: str = Form(""),
     db: Session = Depends(get_db)):
@@ -276,6 +280,7 @@ def update_patient(request: Request, patient_id: int,
             emergency_contact_name=emergency_contact_name, emergency_contact_phone=emergency_contact_phone,
             allergies=allergies, medical_history=medical_history, ocular_history=ocular_history,
             family_ocular_history=family_ocular_history, balance_due=_parse_balance(balance_due),
+            sms_opt_in=sms_opt_in, email_opt_in=email_opt_in,
             photo_path=p.photo_path)
         return templates.TemplateResponse(request, "patients/form.html", {
             "patient": pending,
@@ -290,6 +295,7 @@ def update_patient(request: Request, patient_id: int,
     p.allergies=allergies; p.medical_history=medical_history
     p.ocular_history=ocular_history; p.family_ocular_history=family_ocular_history
     p.balance_due = _parse_balance(balance_due)
+    p.sms_opt_in = sms_opt_in; p.email_opt_in = email_opt_in
     new_photo_path = _save_photo(photo)
     if new_photo_path:
         old_photo_path = p.photo_path

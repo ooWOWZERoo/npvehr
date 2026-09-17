@@ -67,6 +67,13 @@ class Patient(Base):
     # real but hand-maintained number (positive = patient owes money, negative = credit/
     # overpayment on file, 0/None = even) rather than anything computed from transactions.
     balance_due = Column(Float)
+    # Automated Confirmations & Reminders (Calendar & Appointments UX Overhaul
+    # Phase 3, BUILD_BACKLOG.md 5a). Explicit opt-in, default OFF -- a reminder
+    # must never be sent to a patient on a channel they haven't affirmatively
+    # opted into, even though the sends themselves are mocked/logged only this
+    # round (no real SMS/email vendor wired up yet).
+    sms_opt_in = Column(Boolean, default=False, nullable=False)
+    email_opt_in = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     appointments = relationship("Appointment", back_populates="patient", cascade="all, delete-orphan")
     eye_exams = relationship("EyeExam", back_populates="patient", cascade="all, delete-orphan")
@@ -490,6 +497,34 @@ class WaitlistEntry(Base):
     __table_args__ = (
         Index("ix_waitlist_status_provider", "status", "provider_id"),
         Index("ix_waitlist_status_type", "status", "appointment_type_version_id"),
+    )
+
+
+class AppointmentReminder(Base):
+    """Automated Confirmations & Reminders (Calendar & Appointments UX
+    Overhaul Phase 3, BUILD_BACKLOG.md 5a). One row per attempted send --
+    both a staff-visible audit trail and the mechanism that makes the
+    reminder cron idempotent (never re-send the same appointment+channel+kind
+    twice, see ehr.services.notifications). `status` reflects the *send
+    attempt* outcome (sent/skipped_no_opt_in/failed), not delivery -- there is
+    no real SMS/email vendor wired up this round, only a mock implementation
+    that logs/records what would have been sent."""
+    __tablename__ = "appointment_reminders"
+    id = Column(Integer, primary_key=True, index=True)
+    appointment_id = Column(Integer, ForeignKey("appointments.id"), nullable=False)
+    channel = Column(String, nullable=False)  # 'sms' | 'email'
+    kind = Column(String, nullable=False)  # 'confirmation' | 'reminder'
+    status = Column(String, nullable=False)  # 'sent' | 'skipped_no_opt_in' | 'failed'
+    recipient = Column(String)  # phone number or email address at time of send
+    message_body = Column(Text)
+    scheduled_for = Column(DateTime)  # for 'reminder' kind, the appointment's own scheduled_at
+    sent_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    appointment = relationship("Appointment")
+
+    __table_args__ = (
+        Index("ix_reminder_appt_channel_kind", "appointment_id", "channel", "kind"),
     )
 
 

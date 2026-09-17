@@ -30,6 +30,11 @@ async def _login_redirect_handler(request: Request, exc: LoginRedirect):
 
 app.include_router(auth_routes.router)
 
+# Reminder cron endpoint: no session dependency (Vercel's Cron Job caller has
+# no session cookie), authenticated instead via its own CRON_SECRET bearer-
+# token check inside the route body -- see ehr/routes/appointments.py.
+app.include_router(appointments.cron_router)
+
 # Every route in these 6 pre-existing route files now requires a valid,
 # non-expired, non-revoked session (get_current_user) -- applied here at
 # router-inclusion time rather than editing every individual route function,

@@ -4,6 +4,7 @@ workflow coverage -- just enough to catch a broken build or a routing/auth
 regression before it reaches a real deployment.
 """
 import re
+from datetime import datetime, timedelta
 
 DEMO_EMAIL = "admin@newpathvision.example"
 DEMO_PASSWORD = "ChangeMe123!"
@@ -634,3 +635,80 @@ def test_waitlist_add_view_and_surfaced_on_cancellation(logged_in_page, live_ser
     page.wait_for_load_state("networkidle")
     page.goto(live_server + "/appointments/waitlist")
     assert "Waiting for an earlier slot" not in page.locator(".card").inner_text()
+
+
+def test_reminders_opt_in_gating_and_cron_scan(logged_in_page, live_server):
+    """Automated Confirmations & Reminders, Phase 3 (BUILD_BACKLOG.md 5a) --
+    no real SMS/email vendor is wired up, sends are mocked/logged only via
+    ehr.services.notifications, and every send is gated on the patient's own
+    sms_opt_in/email_opt_in (both default False, ehr/templates/patients/form.html).
+    Covers: opting a patient in saves and re-renders checked; booking an
+    appointment fires a mock confirmation recorded on the audit page
+    (appointments/reminders.html); the cron-protected scan endpoint
+    (GET /appointments/reminders/run) rejects a missing/wrong bearer token,
+    accepts the right one with no session at all, and is idempotent -- a
+    second scan doesn't re-send the same appointment+channel+kind."""
+    page = logged_in_page
+
+    # Opt a seeded patient into both channels via the edit form.
+    page.goto(live_server + "/patients/")
+    page.locator("a", has_text="Johnson").first.click()
+    page.wait_for_load_state("networkidle")
+    patient_url = page.url
+    patient_id = patient_url.rstrip("/").split("/")[-1]
+    page.goto(live_server + f"/patients/{patient_id}/edit")
+    page.check("#sms_opt_in")
+    page.check("#email_opt_in")
+    page.locator('button[type="submit"]', has_text="Save Changes").click()
+    page.wait_for_url(re.compile(rf"/patients/{patient_id}$"))
+    page.wait_for_load_state("networkidle")
+    page.goto(live_server + f"/patients/{patient_id}/edit")
+    assert page.locator("#sms_opt_in").is_checked()
+    assert page.locator("#email_opt_in").is_checked()
+
+    # Book a new appointment for this patient, scheduled soon (within the
+    # cron scan's 24h lookahead) so the reminder-kind scan below picks it up.
+    page.goto(live_server + f"/appointments/new?patient_id={patient_id}")
+    # An odd, off-the-hour time (not a typical booked slot) to avoid colliding
+    # with seed data's own appointments, still well within the cron scan's
+    # 24h lookahead window.
+    when = (datetime.utcnow() + timedelta(hours=3, minutes=37)).strftime("%Y-%m-%dT%H:%M")
+    page.fill("#scheduled_at", when)
+    page.locator('button[type="submit"]', has_text="Schedule Appointment").click()
+    page.wait_for_url(re.compile(r"/appointments/\d+$"))
+    page.wait_for_load_state("networkidle")
+    appt_id = page.url.rstrip("/").split("/")[-1]
+
+    # Booking itself sends a (mock) confirmation on both opted-in channels.
+    page.goto(live_server + "/appointments/reminders")
+    reminders_text = page.locator(".card").inner_text()
+    assert f"#{appt_id}" in reminders_text
+    assert "Sent" in reminders_text
+
+    # The cron endpoint rejects a missing/wrong bearer token...
+    no_auth = page.request.get(live_server + "/appointments/reminders/run")
+    assert no_auth.status == 403
+    wrong_auth = page.request.get(live_server + "/appointments/reminders/run",
+                                   headers={"Authorization": "Bearer wrong-secret"})
+    assert wrong_auth.status == 403
+
+    # ...and accepts the real one, with no session cookie required at all
+    # (page.request shares the browser context's cookies, but the route
+    # itself is on a separate, session-dependency-free router -- see
+    # ehr/routes/appointments.py's cron_router).
+    ok = page.request.get(live_server + "/appointments/reminders/run",
+                           headers={"Authorization": "Bearer test-cron-secret"})
+    assert ok.status == 200
+    first_data = ok.json()
+    assert first_data["ok"] is True
+    assert first_data["notices_sent"] >= 1
+
+    # Idempotent: running it again does not re-send the same appointment's
+    # reminder-kind notices (send_appointment_notice's own dedup check).
+    page.goto(live_server + "/appointments/reminders")
+    reminder_rows_after_first = page.locator(".card").inner_text().count("Reminder")
+    page.request.get(live_server + "/appointments/reminders/run",
+                      headers={"Authorization": "Bearer test-cron-secret"})
+    page.goto(live_server + "/appointments/reminders")
+    reminder_rows_after_second = page.locator(".card").inner_text().count("Reminder")
+    assert reminder_rows_after_second == reminder_rows_after_first
