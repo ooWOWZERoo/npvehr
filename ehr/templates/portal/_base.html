@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="csrf-token" content="{{ request.state.csrf_token }}">
+  <title>{% block title %}Patient Portal &mdash; New Path Vision EHR{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@600;700;800&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+  <link rel="stylesheet" href="/static/css/app.css">
+  <style>
+    body.portal-body { background: var(--bg, #f4f6f5); }
+    .portal-topbar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: var(--space-4) var(--space-6); background: var(--surface);
+      border-bottom: 1px solid var(--border, #e2e8e6);
+    }
+    .portal-brand { font-family: var(--font-display); font-weight: 700; color: var(--primary-strong); }
+    .portal-main { max-width: 720px; margin: 0 auto; padding: var(--space-6); }
+  </style>
+</head>
+<body class="portal-body">
+  <div class="portal-topbar">
+    <span class="portal-brand">New Path Vision &mdash; Patient Portal</span>
+    <form method="post" action="/portal/logout" style="margin:0">
+      <button type="submit" class="btn btn-secondary btn-sm">Sign Out</button>
+    </form>
+  </div>
+  <div class="portal-main">
+    {% block portal_content %}{% endblock %}
+  </div>
+  <script src="/static/js/app.js"></script>
+</body>
+</html>

@@ -30,6 +30,10 @@
       <div class="form-group checkbox-row"><input type="checkbox" name="allows_established" value="true" id="allows_established" {{ 'checked' if not version or version.allows_established }}><label for="allows_established" style="margin:0">Allow Established Patients</label></div>
     </div>
     <div class="form-row cols-2">
+      <div class="form-group checkbox-row"><input type="checkbox" name="patient_bookable" value="true" id="patient_bookable" {{ 'checked' if version and version.patient_bookable }}><label for="patient_bookable" style="margin:0">Bookable through the online patient portal</label></div>
+    </div>
+    <p style="font-size:0.8rem;color:#64748b;margin-top:-0.5rem">Off by default -- only types explicitly opted in here show up for patients self-booking at /portal (BUILD_BACKLOG.md 5a Phase 4). Staff booking (this form's own booking flow) is unaffected either way.</p>
+    <div class="form-row cols-2">
       <div class="form-group"><label>New-Patient Duration (min, multiple of 5)</label><input name="new_duration_minutes" type="number" step="5" value="{{ version.new_duration_minutes if version else '' }}"></div>
       <div class="form-group"><label>Established-Patient Duration (min, multiple of 5)</label><input name="established_duration_minutes" type="number" step="5" value="{{ version.established_duration_minutes if version else '' }}"></div>
     </div>

@@ -47,6 +47,7 @@ def create_type(request: Request, code: str = Form(...), internal_name: str = Fo
     new_duration_minutes: str = Form(""), established_duration_minutes: str = Form(""),
     buffer_before_minutes: int = Form(0), buffer_after_minutes: int = Form(0),
     arrival_lead_minutes: int = Form(0), base_color: str = Form(""), active: bool = Form(False),
+    patient_bookable: bool = Form(False),
     csrf_token: str = Form(""), db: Session = Depends(get_db)):
     csrf.verify_or_403(request.state.csrf_token, csrf_token)
     code = code.strip().upper()
@@ -64,6 +65,7 @@ def create_type(request: Request, code: str = Form(...), internal_name: str = Fo
         established_duration_minutes=int(established_duration_minutes) if established_duration_minutes else None,
         buffer_before_minutes=buffer_before_minutes, buffer_after_minutes=buffer_after_minutes,
         arrival_lead_minutes=arrival_lead_minutes, base_color=base_color or None, staff_bookable=True,
+        patient_bookable=patient_bookable,
         effective_from=datetime.utcnow().date().isoformat(), active=bool(active and base_color),
         change_reason="Created via admin UI")
     db.add(v); db.flush()
@@ -163,6 +165,7 @@ def publish_new_version(request: Request, type_id: int, internal_name: str = For
     new_duration_minutes: str = Form(""), established_duration_minutes: str = Form(""),
     buffer_before_minutes: int = Form(0), buffer_after_minutes: int = Form(0),
     arrival_lead_minutes: int = Form(0), base_color: str = Form(""), active: bool = Form(False),
+    patient_bookable: bool = Form(False),
     change_reason: str = Form(...), csrf_token: str = Form(""), db: Session = Depends(get_db)):
     """Publish an immutable new AppointmentTypeVersion (spec 8.3, 17.4). Existing
     appointments keep referencing their original version_id -- nothing here rewrites
@@ -184,6 +187,7 @@ def publish_new_version(request: Request, type_id: int, internal_name: str = For
         established_duration_minutes=int(established_duration_minutes) if established_duration_minutes else None,
         buffer_before_minutes=buffer_before_minutes, buffer_after_minutes=buffer_after_minutes,
         arrival_lead_minutes=arrival_lead_minutes, base_color=base_color or None, staff_bookable=True,
+        patient_bookable=patient_bookable,
         effective_from=datetime.utcnow().date().isoformat(), active=bool(active and base_color),
         change_reason=change_reason)
     if prev:
@@ -250,6 +254,7 @@ def clone_type(request: Request, type_id: int, new_code: str = Form(...), csrf_t
         new_duration_minutes=v.new_duration_minutes, established_duration_minutes=v.established_duration_minutes,
         buffer_before_minutes=v.buffer_before_minutes, buffer_after_minutes=v.buffer_after_minutes,
         arrival_lead_minutes=v.arrival_lead_minutes, base_color=v.base_color, staff_bookable=True,
+        patient_bookable=v.patient_bookable,
         effective_from=datetime.utcnow().date().isoformat(), active=False, change_reason=f"Cloned from {t.code}")
     db.add(nv); db.flush()
     for r in v.color_rules:

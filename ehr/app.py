@@ -8,8 +8,9 @@ from ehr.models.database import init_db, engine, get_db, SessionLocal, Patient, 
 from ehr.db.migrations import run_column_migrations, run_post_create_all_migrations
 from ehr.db.seed import seed_demo_data
 from ehr.env_info import EHR_ENV
-from ehr.routes import patients, appointments, exams, prescriptions, admin_scheduling, store_ops, auth as auth_routes
+from ehr.routes import patients, appointments, exams, prescriptions, admin_scheduling, store_ops, portal, auth as auth_routes
 from ehr.auth.deps import get_current_user, LoginRedirect
+from ehr.auth.portal_deps import PortalLoginRedirect
 from ehr.auth.permissions import (ROLE_LABELS, ANY_STAFF, PATIENT_EDIT, APPOINTMENT_EDIT, EXAM_VIEW, EXAM_EDIT,
     RX_VIEW, RX_EDIT, ADMIN_SCHEDULING_VIEW, ADMIN_SCHEDULING_EDIT, STORE_OPS_VIEW, STORE_OPS_EDIT, CLAIMS_VIEW,
     CATALOG_ORDERS_VIEW, require_role)
@@ -28,12 +29,22 @@ templates.env.globals["ROLE_LABELS"] = ROLE_LABELS
 async def _login_redirect_handler(request: Request, exc: LoginRedirect):
     return exc.response
 
+@app.exception_handler(PortalLoginRedirect)
+async def _portal_login_redirect_handler(request: Request, exc: PortalLoginRedirect):
+    return exc.response
+
 app.include_router(auth_routes.router)
 
 # Reminder cron endpoint: no session dependency (Vercel's Cron Job caller has
 # no session cookie), authenticated instead via its own CRON_SECRET bearer-
 # token check inside the route body -- see ehr/routes/appointments.py.
 app.include_router(appointments.cron_router)
+
+# Patient self-service portal (Phase 4, BUILD_BACKLOG.md 5a): its own
+# passwordless auth (ehr/auth/portal_deps.py), never the staff get_current_user
+# dependency -- a patient has no staff session and must never be able to get
+# one via this surface.
+app.include_router(portal.router)
 
 # Every route in these 6 pre-existing route files now requires a valid,
 # non-expired, non-revoked session (get_current_user) -- applied here at

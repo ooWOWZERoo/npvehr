@@ -85,3 +85,15 @@ def send_appointment_notice(db: Session, appointment: Appointment, kind: str) ->
         results.append(_record(db, appointment, channel, kind,
                                 "sent" if ok else "failed", recipient, message))
     return results
+
+
+def send_portal_login_link(patient, link_url: str) -> None:
+    """Patient self-service portal magic link (Phase 4 -- BUILD_BACKLOG.md
+    5a). Not gated on Patient.email_opt_in -- opt-in guards unsolicited
+    reminder/marketing-style contact, not a login link the patient just
+    explicitly requested by typing their own email into the login form.
+    Same mock-only posture as the rest of this module: no real email vendor
+    is wired up, so this only logs what would have been sent."""
+    if not patient.email:
+        return
+    _mock_send("email", patient.email, f"Your New Path Vision sign-in link: {link_url}")

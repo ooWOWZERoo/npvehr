@@ -1,0 +1,35 @@
+{% extends "portal/_base.html" %}
+{% block title %}Reschedule Appointment &mdash; Patient Portal{% endblock %}
+{% block portal_content %}
+<div class="page-header">
+  <h1>Reschedule Appointment</h1>
+  <a href="/portal/appointments" class="btn btn-secondary btn-sm">Back</a>
+</div>
+<div class="card">
+  <p style="color:var(--ink-muted);font-size:0.85rem">Currently scheduled for {{ appt.scheduled_at.strftime('%B %-d, %Y at %-I:%M %p') }} with Dr. {{ appt.provider.last_name }} ({{ appt.appointment_type_version.display_name if appt.appointment_type_version else '' }}). Choose a new time below &mdash; the provider and appointment type stay the same.</p>
+  <form method="get" style="display:flex;gap:0.5rem;align-items:flex-end;margin-top:1rem">
+    <div class="form-group" style="margin:0"><label>Date</label>
+      <input type="date" name="date_str" value="{{ target_date.isoformat() }}" onchange="this.form.submit()">
+    </div>
+  </form>
+</div>
+
+{% if error %}
+<div class="card"><p style="color:#b91c1c">{{ error }}</p></div>
+{% endif %}
+<div class="card">
+  <h3>Available Times &mdash; {{ target_date.strftime('%B %-d, %Y') }}</h3>
+  {% if slots %}
+  <div style="display:flex;flex-wrap:wrap;gap:0.5rem">
+    {% for slot in slots %}
+    <form method="post" action="/portal/appointments/{{ appt.id }}/reschedule/confirm" style="margin:0">
+      <input type="hidden" name="scheduled_at" value="{{ slot.isoformat() }}">
+      <button type="submit" class="btn btn-secondary btn-sm">{{ slot.strftime('%-I:%M %p') }}</button>
+    </form>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p style="color:var(--ink-muted)">No open times on this date &mdash; try another date.</p>
+  {% endif %}
+</div>
+{% endblock %}
