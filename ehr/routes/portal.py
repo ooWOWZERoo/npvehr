@@ -8,28 +8,40 @@ get_current_patient -- never on ehr.auth.deps.get_current_user, and this
 router is included directly on `app` in ehr/app.py with NO get_current_user
 dependency, so a patient never needs (or gets) a staff session.
 
-Scope this round (explicit decision): book, cancel, and reschedule, all
-reusing the exact same conflict-rule engine
-(ehr.routes.appointments._apply_scheduling_rules) staff booking uses -- a
-patient can never override a conflict or a computed duration (those params
-simply aren't exposed here), and relationship (new/established) is always
-computed automatically, never patient-chosen. Reschedule keeps the same
-provider and appointment type; only the time can change. Cancel and
-reschedule both require at least PORTAL_SELF_SERVICE_CUTOFF_HOURS notice.
-Only AppointmentTypeVersion rows with patient_bookable=True (default False,
-an explicit per-type staff opt-in, see admin/scheduling/type_form.html) are
-offered.
+Scope originally (Phase 4): book, cancel, and reschedule, all reusing the
+exact same conflict-rule engine (ehr.routes.appointments.
+_apply_scheduling_rules) staff booking uses -- a patient can never override
+a conflict or a computed duration (those params simply aren't exposed
+here), and relationship (new/established) is always computed automatically,
+never patient-chosen. Cancel and reschedule both require at least the
+configurable PortalSettings.self_service_cutoff_hours notice (admin/
+scheduling/portal_settings.html). Only AppointmentTypeVersion rows with
+patient_bookable=True (default False, an explicit per-type staff opt-in,
+see admin/scheduling/type_form.html) are offered.
+
+Phase 4 follow-ups added in this round (BUILD_BACKLOG.md 5a): reschedule
+can now also change provider/appointment type, not just time; the cutoff
+window is a staff-configurable setting instead of a hardcoded constant;
+login-link requests are rate-limited per matched patient; a patient can
+join/view/cancel their own waitlist entries; and a patient-facing view of
+their own visit summaries, prescriptions, and documents (each view logged
+to PortalAccessAuditEvent for staff visibility). Explicitly still out of
+scope: patient self-registration (the portal only authenticates existing
+chart-matched emails) and a real email vendor (magic links are still
+mocked/logged, per Phase 3).
 """
 from datetime import datetime, date, timedelta
 from fastapi import APIRouter, Depends, Request, Form
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from ehr.models.database import (get_db, Patient, Provider, AppointmentType, AppointmentTypeVersion,
-    Appointment, AppointmentStatus)
+    Appointment, AppointmentStatus, PortalSettings, PatientPortalLoginToken, WaitlistEntry, EyeExam,
+    Prescription, PatientDocument, PortalAccessAuditEvent)
 from ehr.services import scheduling as sched
 from ehr.services import notifications as notify
+from ehr.services.media import get_document_bytes
 from ehr.env_info import EHR_ENV
 from ehr.auth import csrf
 from ehr.auth.portal_deps import (get_current_patient, issue_login_token, consume_login_token,
@@ -40,10 +52,23 @@ router = APIRouter(prefix="/portal", tags=["portal"])
 templates = Jinja2Templates(directory="ehr/templates")
 templates.env.globals["ehr_env"] = EHR_ENV
 
-# A patient can't cancel/reschedule online inside this window before the
-# appointment -- past this point they must call the office. Deliberately a
-# simple module constant (not yet a per-practice setting) for this round.
-PORTAL_SELF_SERVICE_CUTOFF_HOURS = 24
+# Login-link request rate limit: at most this many tokens minted per matched
+# patient within the trailing window below, regardless of how many times
+# their email is submitted -- prevents /portal/login being used to spam a
+# patient's inbox (once a real vendor is wired up) or hammer the DB with
+# token rows. No new schema needed: counts existing PatientPortalLoginToken
+# rows rather than tracking attempts separately.
+LOGIN_LINK_RATE_LIMIT_COUNT = 3
+LOGIN_LINK_RATE_LIMIT_WINDOW = timedelta(minutes=15)
+
+
+def _get_cutoff_hours(db: Session) -> int:
+    """The patient self-service cutoff window, now a staff-configurable
+    setting (admin/scheduling/portal_settings.html) rather than a hardcoded
+    constant. Falls back to 24 if the singleton settings row is somehow
+    missing (shouldn't happen post-migration)."""
+    settings = db.query(PortalSettings).filter(PortalSettings.id == 1).first()
+    return settings.self_service_cutoff_hours if settings else 24
 
 
 def _patient_bookable_type_versions(db: Session):
@@ -91,7 +116,17 @@ def portal_login_request(request: Request, email: str = Form(...), csrf_token: s
     email = email.strip()
     matches = db.query(Patient).filter(Patient.email.isnot(None), Patient.email.ilike(email)).all() if email else []
     dev_links = []
+    since = datetime.utcnow() - LOGIN_LINK_RATE_LIMIT_WINDOW
     for patient in matches:
+        # Rate limit per matched patient, silently -- the response is
+        # identical either way (see the comment below), so a rate-limited
+        # request looks exactly like a normal one to whoever's asking.
+        recent_count = (db.query(PatientPortalLoginToken)
+                        .filter(PatientPortalLoginToken.patient_id == patient.id,
+                                PatientPortalLoginToken.created_at >= since)
+                        .count())
+        if recent_count >= LOGIN_LINK_RATE_LIMIT_COUNT:
+            continue
         token = issue_login_token(db, patient)
         db.flush()
         link_url = str(request.base_url).rstrip("/") + f"/portal/login/{token}"
@@ -234,7 +269,7 @@ def portal_appointments(request: Request, booked: str = None, patient: Patient =
     appts = (db.query(Appointment).filter(Appointment.patient_id == patient.id)
              .order_by(Appointment.scheduled_at.desc()).all())
     now = datetime.utcnow()
-    cutoff = timedelta(hours=PORTAL_SELF_SERVICE_CUTOFF_HOURS)
+    cutoff = timedelta(hours=_get_cutoff_hours(db))
     return templates.TemplateResponse(request, "portal/appointments.html", {
         "appointments": appts, "now": now, "cutoff": cutoff, "booked": bool(booked)})
 
@@ -256,9 +291,10 @@ def portal_cancel_appointment(request: Request, appt_id: int, csrf_token: str = 
     appt = _own_scheduled_appointment_or_none(db, patient, appt_id)
     if not appt:
         return HTMLResponse("Not found", status_code=404)
-    if appt.scheduled_at - datetime.utcnow() < timedelta(hours=PORTAL_SELF_SERVICE_CUTOFF_HOURS):
+    cutoff_hours = _get_cutoff_hours(db)
+    if appt.scheduled_at - datetime.utcnow() < timedelta(hours=cutoff_hours):
         return HTMLResponse(
-            f"This appointment is within {PORTAL_SELF_SERVICE_CUTOFF_HOURS} hours and can no longer be "
+            f"This appointment is within {cutoff_hours} hours and can no longer be "
             f"cancelled online -- please call the office.", status_code=400)
     appt.status = AppointmentStatus.cancelled
     _audit(db, appt.id, "status_changed", field_name="status", old_value="scheduled", new_value="cancelled",
@@ -269,16 +305,22 @@ def portal_cancel_appointment(request: Request, appt_id: int, csrf_token: str = 
 
 
 @router.get("/appointments/{appt_id}/reschedule", response_class=HTMLResponse)
-def portal_reschedule_search(request: Request, appt_id: int, date_str: str = None,
+def portal_reschedule_search(request: Request, appt_id: int, provider_id: str = None,
+                              appointment_type_version_id: str = None, date_str: str = None,
                               patient: Patient = Depends(get_current_patient), db: Session = Depends(get_db)):
     appt = _own_scheduled_appointment_or_none(db, patient, appt_id)
     if not appt:
         return HTMLResponse("Not found", status_code=404)
-    if appt.scheduled_at - datetime.utcnow() < timedelta(hours=PORTAL_SELF_SERVICE_CUTOFF_HOURS):
+    cutoff_hours = _get_cutoff_hours(db)
+    if appt.scheduled_at - datetime.utcnow() < timedelta(hours=cutoff_hours):
         return HTMLResponse(
-            f"This appointment is within {PORTAL_SELF_SERVICE_CUTOFF_HOURS} hours and can no longer be "
+            f"This appointment is within {cutoff_hours} hours and can no longer be "
             f"rescheduled online -- please call the office.", status_code=400)
-    ctx = _slot_search_context(db, appt.provider_id, appt.appointment_type_version_id,
+    # Phase 4 follow-up: provider/type can now change on a self-service
+    # reschedule too, not just the time -- defaults to the appointment's
+    # current provider/type when the patient hasn't picked different ones.
+    ctx = _slot_search_context(db, _qi(provider_id) or appt.provider_id,
+                                _qi(appointment_type_version_id) or appt.appointment_type_version_id,
                                 date_str or appt.scheduled_at.date().isoformat(), patient.id,
                                 exclude_appointment_id=appt.id)
     ctx["appt"] = appt
@@ -286,36 +328,182 @@ def portal_reschedule_search(request: Request, appt_id: int, date_str: str = Non
 
 
 @router.post("/appointments/{appt_id}/reschedule/confirm")
-def portal_reschedule_confirm(request: Request, appt_id: int, scheduled_at: str = Form(...),
+def portal_reschedule_confirm(request: Request, appt_id: int, provider_id: int = Form(...),
+                               appointment_type_version_id: int = Form(...), scheduled_at: str = Form(...),
                                csrf_token: str = Form(""), patient: Patient = Depends(get_current_patient),
                                db: Session = Depends(get_db)):
     csrf.verify_or_403(request.state.csrf_token, csrf_token)
     appt = _own_scheduled_appointment_or_none(db, patient, appt_id)
     if not appt:
         return HTMLResponse("Not found", status_code=404)
-    if appt.scheduled_at - datetime.utcnow() < timedelta(hours=PORTAL_SELF_SERVICE_CUTOFF_HOURS):
+    cutoff_hours = _get_cutoff_hours(db)
+    if appt.scheduled_at - datetime.utcnow() < timedelta(hours=cutoff_hours):
         return HTMLResponse(
-            f"This appointment is within {PORTAL_SELF_SERVICE_CUTOFF_HOURS} hours and can no longer be "
+            f"This appointment is within {cutoff_hours} hours and can no longer be "
             f"rescheduled online -- please call the office.", status_code=400)
     try:
         when = datetime.fromisoformat(scheduled_at)
     except (ValueError, TypeError):
-        return HTMLResponse("Invalid date/time.", status_code=400)
+        when = None
 
-    version = appt.appointment_type_version
+    version = (db.query(AppointmentTypeVersion)
+               .filter(AppointmentTypeVersion.id == appointment_type_version_id,
+                       AppointmentTypeVersion.patient_bookable == True, AppointmentTypeVersion.active == True)
+               .first())
+
+    def fail(msg, status_code):
+        ctx = _slot_search_context(db, provider_id, appointment_type_version_id,
+                                    (when or appt.scheduled_at).date().isoformat(), patient.id,
+                                    exclude_appointment_id=appt.id)
+        ctx["appt"] = appt
+        ctx["error"] = msg
+        return templates.TemplateResponse(request, "portal/reschedule.html", ctx, status_code=status_code)
+
+    if when is None:
+        return fail("Invalid date/time.", 400)
+    if not version:
+        return fail("That appointment type is no longer available online. Please choose another.", 400)
+
+    relationship = sched.suggest_relationship(db, patient.id, when.date().isoformat())
+    if not sched.eligible_for_relationship(version, relationship):
+        return fail(f"{version.display_name} isn't available to book online for your patient status. "
+                    f"Please call the office.", 400)
+
     old_when = appt.scheduled_at
     try:
-        _apply_scheduling_rules(db, appt, version, appt.patient_relationship_at_booking, appt.is_follow_up,
-            when, appt.provider_id, exclude_appointment_id=appt.id)
+        _apply_scheduling_rules(db, appt, version, relationship, appt.is_follow_up,
+            when, provider_id, exclude_appointment_id=appt.id)
     except ValueError:
-        ctx = _slot_search_context(db, appt.provider_id, appt.appointment_type_version_id,
-                                    when.date().isoformat(), patient.id, exclude_appointment_id=appt.id)
-        ctx["appt"] = appt
-        ctx["error"] = "That time was just booked by someone else. Please choose another slot."
-        return templates.TemplateResponse(request, "portal/reschedule.html", ctx, status_code=409)
+        return fail("That time was just booked by someone else. Please choose another slot.", 409)
 
     _sync_resource_reservations(db, appt, version)
     _audit(db, appt.id, "rescheduled", field_name="scheduled_at", old_value=old_when, new_value=when,
            reason="Rescheduled via patient portal")
     db.commit()
     return RedirectResponse("/portal/appointments?rescheduled=1", status_code=303)
+
+
+# ---------------------------------------------------------------------------
+# Waitlist self-service (Phase 4 follow-up, BUILD_BACKLOG.md 5a): a patient
+# can join or view their own WaitlistEntry rows -- the same model and
+# matching logic (ehr.services.scheduling.find_matching_waitlist_entries)
+# staff already use, just a second entry point alongside patients/waitlist_tab.html.
+# ---------------------------------------------------------------------------
+
+@router.get("/waitlist", response_class=HTMLResponse)
+def portal_waitlist(request: Request, patient: Patient = Depends(get_current_patient), db: Session = Depends(get_db)):
+    entries = (db.query(WaitlistEntry).filter(WaitlistEntry.patient_id == patient.id)
+               .order_by(WaitlistEntry.status, WaitlistEntry.created_at.desc()).all())
+    providers = db.query(Provider).order_by(Provider.last_name).all()
+    types = _patient_bookable_type_versions(db)
+    return templates.TemplateResponse(request, "portal/waitlist.html",
+        {"entries": entries, "providers": providers, "types": types})
+
+
+@router.post("/waitlist/new")
+def portal_waitlist_new(request: Request, provider_id: str = Form(""), appointment_type_version_id: str = Form(""),
+    desired_date_start: str = Form(""), desired_date_end: str = Form(""), notes: str = Form(""),
+    csrf_token: str = Form(""), patient: Patient = Depends(get_current_patient), db: Session = Depends(get_db)):
+    csrf.verify_or_403(request.state.csrf_token, csrf_token)
+    # No priority field here -- unlike the staff-facing form (patients/
+    # waitlist_tab.html), "urgent" is a triage judgment call this app leaves
+    # to staff; a patient-created entry always starts "normal" (staff can
+    # still re-triage it, same as any other entry, via direct DB access or
+    # a future admin affordance -- there is no edit route for priority today).
+    db.add(WaitlistEntry(
+        patient_id=patient.id,
+        provider_id=_qi(provider_id),
+        appointment_type_version_id=_qi(appointment_type_version_id),
+        desired_date_start=desired_date_start or None,
+        desired_date_end=desired_date_end or None,
+        priority="normal",
+        notes=notes or None))
+    db.commit()
+    return RedirectResponse("/portal/waitlist", status_code=303)
+
+
+@router.post("/waitlist/{entry_id}/cancel")
+def portal_waitlist_cancel(request: Request, entry_id: int, csrf_token: str = Form(""),
+                            patient: Patient = Depends(get_current_patient), db: Session = Depends(get_db)):
+    csrf.verify_or_403(request.state.csrf_token, csrf_token)
+    entry = db.query(WaitlistEntry).filter(WaitlistEntry.id == entry_id, WaitlistEntry.patient_id == patient.id).first()
+    if not entry:
+        return HTMLResponse("Not found", status_code=404)
+    if entry.status == "active":
+        entry.status = "cancelled"
+        entry.cancelled_at = datetime.utcnow()
+        db.commit()
+    return RedirectResponse("/portal/waitlist", status_code=303)
+
+
+# ---------------------------------------------------------------------------
+# Patient-facing clinical data view (Phase 4 follow-up, BUILD_BACKLOG.md 5a):
+# read-only visit summaries, prescriptions, and documents, scoped strictly
+# to the logged-in patient's own records (every route re-checks ownership,
+# 404 on any mismatch, same posture as the appointment routes above). Every
+# view is logged to PortalAccessAuditEvent for staff visibility into when a
+# patient looked at their own data.
+# ---------------------------------------------------------------------------
+
+def _log_portal_access(db: Session, patient_id: int, resource_type: str, resource_id: int = None):
+    db.add(PortalAccessAuditEvent(patient_id=patient_id, resource_type=resource_type, resource_id=resource_id))
+    db.commit()
+
+
+@router.get("/records", response_class=HTMLResponse)
+def portal_records_home(request: Request, patient: Patient = Depends(get_current_patient)):
+    return templates.TemplateResponse(request, "portal/records_home.html", {})
+
+
+@router.get("/records/visits", response_class=HTMLResponse)
+def portal_records_visits(request: Request, patient: Patient = Depends(get_current_patient), db: Session = Depends(get_db)):
+    exams = (db.query(EyeExam).filter(EyeExam.patient_id == patient.id)
+             .order_by(EyeExam.exam_date.desc()).all())
+    return templates.TemplateResponse(request, "portal/records_visits.html", {"exams": exams})
+
+
+@router.get("/records/visits/{exam_id}", response_class=HTMLResponse)
+def portal_records_visit_detail(request: Request, exam_id: int, patient: Patient = Depends(get_current_patient),
+                                 db: Session = Depends(get_db)):
+    exam = db.query(EyeExam).filter(EyeExam.id == exam_id).first()
+    if not exam or exam.patient_id != patient.id:
+        return HTMLResponse("Not found", status_code=404)
+    _log_portal_access(db, patient.id, "visit_summary", exam.id)
+    return templates.TemplateResponse(request, "portal/records_visit_detail.html", {"exam": exam})
+
+
+@router.get("/records/prescriptions", response_class=HTMLResponse)
+def portal_records_prescriptions(request: Request, patient: Patient = Depends(get_current_patient),
+                                  db: Session = Depends(get_db)):
+    rxs = (db.query(Prescription).filter(Prescription.patient_id == patient.id)
+           .order_by(Prescription.issue_date.desc()).all())
+    _log_portal_access(db, patient.id, "prescriptions")
+    return templates.TemplateResponse(request, "portal/records_prescriptions.html", {"prescriptions": rxs})
+
+
+@router.get("/records/documents", response_class=HTMLResponse)
+def portal_records_documents(request: Request, patient: Patient = Depends(get_current_patient),
+                              db: Session = Depends(get_db)):
+    docs = (db.query(PatientDocument).filter(PatientDocument.patient_id == patient.id)
+            .order_by(PatientDocument.uploaded_at.desc()).all())
+    return templates.TemplateResponse(request, "portal/records_documents.html", {"documents": docs})
+
+
+@router.get("/records/documents/{doc_id}")
+def portal_records_document_download(doc_id: int, patient: Patient = Depends(get_current_patient),
+                                      db: Session = Depends(get_db)):
+    """Same secure-proxy pattern as the staff download route (ehr.routes.
+    patients.download_patient_document): the document is only ever served
+    if its own patient_id matches the logged-in patient -- a valid doc_id
+    for another patient's document 404s here, never revealing it exists."""
+    doc = db.query(PatientDocument).filter(PatientDocument.id == doc_id).first()
+    if not doc or doc.patient_id != patient.id:
+        return HTMLResponse(status_code=404, content="")
+    result = get_document_bytes(doc.storage_marker)
+    if result is None:
+        return HTMLResponse(status_code=404, content="")
+    data, content_type = result
+    _log_portal_access(db, patient.id, "document", doc.id)
+    return Response(content=data, media_type=doc.content_type or content_type,
+                     headers={"Cache-Control": "private, max-age=300",
+                              "Content-Disposition": f'inline; filename="{doc.original_filename}"'})

@@ -984,6 +984,37 @@ def migration_029_waitlist_notifications(conn):
         "CREATE INDEX IF NOT EXISTS ix_waitlist_notif_entry_appt_channel "
         "ON waitlist_notifications (waitlist_entry_id, appointment_id, channel)"))
 
+def migration_030_portal_settings_and_access_audit(conn):
+    """Phase 4 portal follow-ups (BUILD_BACKLOG.md 5a): a configurable
+    self-service cutoff window (models.database.PortalSettings, a singleton
+    row seeded here) and an access audit trail for the patient-facing
+    clinical data view (models.database.PortalAccessAuditEvent)."""
+    conn.execute(text(f"""
+        CREATE TABLE IF NOT EXISTS portal_settings (
+            id INTEGER PRIMARY KEY,
+            self_service_cutoff_hours INTEGER NOT NULL,
+            updated_at TIMESTAMP,
+            updated_by_user_id INTEGER
+        )
+    """))
+    existing = conn.execute(text("SELECT id FROM portal_settings WHERE id = 1")).fetchone()
+    if not existing:
+        conn.execute(text(
+            "INSERT INTO portal_settings (id, self_service_cutoff_hours, updated_at) "
+            "VALUES (1, 24, :ts)"), {"ts": datetime.utcnow().isoformat()})
+    conn.execute(text(f"""
+        CREATE TABLE IF NOT EXISTS portal_access_audit_events (
+            id {_pk_ddl(conn)},
+            patient_id INTEGER NOT NULL,
+            resource_type VARCHAR NOT NULL,
+            resource_id INTEGER,
+            viewed_at TIMESTAMP
+        )
+    """))
+    conn.execute(text(
+        "CREATE INDEX IF NOT EXISTS ix_portal_access_patient_viewed "
+        "ON portal_access_audit_events (patient_id, viewed_at)"))
+
 # Ordered list of (id, function). Adding new migrations: append, never edit past entries.
 COLUMN_MIGRATIONS = [
     ("001_appointment_columns", migration_001_appointment_columns),
@@ -1010,6 +1041,7 @@ COLUMN_MIGRATIONS = [
     ("027_reminders_and_opt_in", migration_027_reminders_and_opt_in),
     ("028_patient_portal", migration_028_patient_portal),
     ("029_waitlist_notifications", migration_029_waitlist_notifications),
+    ("030_portal_settings_and_access_audit", migration_030_portal_settings_and_access_audit),
 ]
 POST_CREATE_ALL_MIGRATIONS = [
     ("002_seed_appointment_types", migration_002_seed_appointment_types),

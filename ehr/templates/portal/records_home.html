@@ -1,0 +1,16 @@
+{% extends "portal/_base.html" %}
+{% block title %}My Records &mdash; Patient Portal{% endblock %}
+{% block portal_content %}
+<div class="page-header">
+  <h1>My Records</h1>
+  <a href="/portal/" class="btn btn-secondary btn-sm">Back</a>
+</div>
+<div class="card">
+  <p style="color:var(--ink-muted);font-size:0.85rem">A summary of your visits, prescriptions, and documents on file. For your full clinical chart, please contact the office.</p>
+  <div style="display:flex;flex-direction:column;gap:0.75rem;margin-top:1rem">
+    <a href="/portal/records/visits" class="btn btn-secondary" style="justify-content:flex-start">Visit Summaries</a>
+    <a href="/portal/records/prescriptions" class="btn btn-secondary" style="justify-content:flex-start">Prescriptions</a>
+    <a href="/portal/records/documents" class="btn btn-secondary" style="justify-content:flex-start">Documents</a>
+  </div>
+</div>
+{% endblock %}

@@ -5,10 +5,11 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from ehr.models.database import (get_db, AppointmentType, AppointmentTypeVersion, AppointmentTypeColorRule,
     DiagnosticTest, Resource, AvailabilityTemplate, AppointmentTypeAuditEvent, AppointmentAuditEvent, Appointment,
-    PracticeClosure, Provider, ProviderAvailabilityTemplate)
+    PracticeClosure, Provider, ProviderAvailabilityTemplate, PortalSettings)
 from ehr.services import scheduling as sched
 from ehr.env_info import EHR_ENV
 from ehr.auth.permissions import require_role, ADMIN_SCHEDULING_VIEW, ADMIN_SCHEDULING_EDIT, ROLE_LABELS
+from ehr.auth.deps import get_current_user
 from ehr.auth import csrf
 
 router = APIRouter(prefix="/admin/scheduling", tags=["admin-scheduling"])
@@ -402,3 +403,34 @@ def scheduling_audit(request: Request, db: Session = Depends(get_db)):
     type_events = db.query(AppointmentTypeAuditEvent).order_by(AppointmentTypeAuditEvent.occurred_at.desc()).limit(100).all()
     return templates.TemplateResponse(request, "admin/scheduling/audit.html",
         {"appt_events": appt_events, "type_events": type_events})
+
+
+def _get_portal_settings(db: Session) -> PortalSettings:
+    """The singleton row (id=1) is seeded by migration 030 -- this is a
+    fallback only for a database that somehow lacks it (shouldn't happen
+    post-migration, but avoids a 500 rather than assuming)."""
+    settings = db.query(PortalSettings).filter(PortalSettings.id == 1).first()
+    if not settings:
+        settings = PortalSettings(id=1, self_service_cutoff_hours=24)
+        db.add(settings); db.commit(); db.refresh(settings)
+    return settings
+
+
+@router.get("/portal-settings", response_class=HTMLResponse, dependencies=[Depends(require_role(*ADMIN_SCHEDULING_VIEW))])
+def portal_settings_form(request: Request, db: Session = Depends(get_db)):
+    return templates.TemplateResponse(request, "admin/scheduling/portal_settings.html",
+        {"settings": _get_portal_settings(db)})
+
+
+@router.post("/portal-settings", dependencies=[Depends(require_role(*ADMIN_SCHEDULING_EDIT))])
+def update_portal_settings(request: Request, self_service_cutoff_hours: int = Form(...),
+    csrf_token: str = Form(""), db: Session = Depends(get_db), user=Depends(get_current_user)):
+    csrf.verify_or_403(request.state.csrf_token, csrf_token)
+    if self_service_cutoff_hours < 0:
+        return HTMLResponse("Cutoff hours must be zero or positive.", status_code=400)
+    settings = _get_portal_settings(db)
+    settings.self_service_cutoff_hours = self_service_cutoff_hours
+    settings.updated_at = datetime.utcnow()
+    settings.updated_by_user_id = user.id
+    db.commit()
+    return RedirectResponse("/admin/scheduling/portal-settings", status_code=303)
