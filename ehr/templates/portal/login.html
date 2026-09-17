@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Sign In &mdash; New Path Vision EHR</title>
+  <title>Patient Portal Sign In &mdash; New Path Vision EHR</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@600;700;800&display=swap">
@@ -18,9 +18,7 @@
       background: var(--surface); border-radius: 14px; box-shadow: 0 20px 50px rgba(19,36,32,0.25);
       padding: var(--space-7) var(--space-6); width: 100%; max-width: 380px;
     }
-    .login-brand { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-6); }
-    .login-brand img { height: 40px; width: auto; }
-    .login-brand-text { font-family: var(--font-display); font-size: 1.3rem; font-weight: 700; color: var(--primary-strong); }
+    .login-brand-text { font-family: var(--font-display); font-size: 1.2rem; font-weight: 700; color: var(--primary-strong); margin-bottom: var(--space-6); display: block; }
     .login-card h1 { font-size: 1.3rem; margin-bottom: var(--space-2); }
     .login-card p.login-sub { color: var(--ink-muted); margin: 0 0 var(--space-5); font-size: 0.85rem; }
     .login-card .btn-primary { width: 100%; justify-content: center; padding: 0.6rem; font-size: 0.9rem; }
@@ -29,29 +27,21 @@
 </head>
 <body class="login-body">
   <div class="login-card">
-    <div class="login-brand">
-      <span class="login-brand-text">New Path Vision EHR</span>
-    </div>
+    <span class="login-brand-text">New Path Vision &mdash; Patient Portal</span>
     <h1>Sign in</h1>
-    <p class="login-sub">Enter your credentials to access the practice portal.</p>
+    <p class="login-sub">Enter the email on file with your provider. We'll send you a one-time sign-in link &mdash; no password needed.</p>
     {% if error %}
     <div class="alert alert-error" style="margin-bottom: var(--space-4)">{{ error }}</div>
     {% endif %}
-    <form method="post" action="/login">
-      <input type="hidden" name="next" value="{{ next or '/' }}">
+    <form method="post" action="/portal/login">
       <input type="hidden" name="csrf_token" value="{{ login_csrf_token }}">
       <div class="form-group">
         <label for="email">Email</label>
-        <input type="email" id="email" name="email" required autofocus autocomplete="username">
+        <input type="email" id="email" name="email" required autofocus autocomplete="email">
       </div>
-      <div class="form-group">
-        <label for="password">Password</label>
-        <input type="password" id="password" name="password" required autocomplete="current-password">
-      </div>
-      <button type="submit" class="btn btn-primary">Sign In</button>
+      <button type="submit" class="btn btn-primary">Send Sign-In Link</button>
     </form>
-    <p class="login-footnote">Access is limited to authorized practice staff. All sign-in attempts are logged.</p>
-    <p class="login-footnote">Patients: <a href="/portal/login">book or manage your appointment online</a>.</p>
+    <p class="login-footnote">Are you a staff member? <a href="/login">Sign in here</a> instead.</p>
   </div>
 </body>
 </html>

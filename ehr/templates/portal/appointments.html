@@ -1,0 +1,40 @@
+{% extends "portal/_base.html" %}
+{% block title %}My Appointments &mdash; Patient Portal{% endblock %}
+{% block portal_content %}
+<div class="page-header">
+  <h1>My Appointments</h1>
+  <a href="/portal/book" class="btn btn-primary btn-sm">+ Book an Appointment</a>
+</div>
+{% if booked %}<div class="alert alert-info" style="margin-bottom:1rem">Your appointment is booked.</div>{% endif %}
+{% if request.query_params.get('cancelled') %}<div class="alert" style="margin-bottom:1rem;background:#f1f5f9">Appointment cancelled.</div>{% endif %}
+{% if request.query_params.get('rescheduled') %}<div class="alert alert-info" style="margin-bottom:1rem">Appointment rescheduled.</div>{% endif %}
+<div class="card">
+  {% if not appointments %}
+  <p style="color:var(--ink-muted)">You don't have any appointments on file.</p>
+  {% else %}
+  <table class="exam-table">
+    <tr><th>Date &amp; Time</th><th>Provider</th><th>Type</th><th>Status</th><th></th></tr>
+    {% for a in appointments %}
+    <tr>
+      <td class="mono-data">{{ a.scheduled_at.strftime('%b %-d, %Y %-I:%M %p') }}</td>
+      <td>Dr. {{ a.provider.last_name }}</td>
+      <td>{{ a.appointment_type_version.display_name if a.appointment_type_version else '—' }}</td>
+      <td><span class="badge{% if a.status.value == 'scheduled' %} badge-scheduled{% elif a.status.value == 'cancelled' %} badge-cancelled{% else %} badge-completed{% endif %}">{{ a.status.value }}</span></td>
+      <td>
+        {% if a.status.value == 'scheduled' %}
+          {% if a.scheduled_at - now < cutoff %}
+          <span style="font-size:0.75rem;color:var(--ink-muted)">Call the office to change</span>
+          {% else %}
+          <a href="/portal/appointments/{{ a.id }}/reschedule" class="btn btn-sm btn-secondary">Reschedule</a>
+          <form method="post" action="/portal/appointments/{{ a.id }}/cancel" style="display:inline" onsubmit="return confirm('Cancel this appointment?')">
+            <button type="submit" class="btn btn-sm btn-secondary">Cancel</button>
+          </form>
+          {% endif %}
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+</div>
+{% endblock %}

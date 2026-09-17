@@ -712,3 +712,123 @@ def test_reminders_opt_in_gating_and_cron_scan(logged_in_page, live_server):
     page.goto(live_server + "/appointments/reminders")
     reminder_rows_after_second = page.locator(".card").inner_text().count("Reminder")
     assert reminder_rows_after_second == reminder_rows_after_first
+
+
+def test_patient_portal_book_reschedule_cancel_and_isolation(logged_in_page, live_server, page, context):
+    """Online Patient Self-Booking, Phase 4 (BUILD_BACKLOG.md 5a) -- a second,
+    patient-facing surface with its own passwordless (magic-link) auth
+    (ehr/auth/portal_deps.py), entirely separate from staff sessions. Covers:
+    a staff member opting an appointment type into online booking
+    (patient_bookable, off by default); a patient signing in via the mocked
+    magic link (no real email vendor -- the dev-only check-email page surfaces
+    it directly, per ehr.services.notifications.send_portal_login_link);
+    booking, rescheduling, and cancelling an appointment through the same
+    conflict-rule engine staff booking uses; and the ownership/isolation
+    guard -- another patient's portal session gets a 404, not the appointment,
+    when it tries to act on someone else's booking."""
+    staff_page = logged_in_page
+
+    # Staff opts one appointment type into online booking (off by default).
+    staff_page.goto(live_server + "/admin/scheduling/appointment-types")
+    staff_page.locator("table a").first.click()
+    staff_page.wait_for_load_state("networkidle")
+    type_url = staff_page.url
+    type_id = type_url.rstrip("/").split("/")[-1]
+    staff_page.goto(live_server + f"/admin/scheduling/appointment-types/{type_id}/edit")
+    staff_page.check("#patient_bookable")
+    staff_page.fill('input[name="change_reason"]', "Enable online booking for test coverage")
+    staff_page.locator('button[type="submit"]', has_text="Publish New Version").click()
+    staff_page.wait_for_url(re.compile(rf"/appointment-types/{type_id}$"))
+    staff_page.wait_for_load_state("networkidle")
+
+    # A second, independent browser context for the patient -- proves the
+    # portal's cookie (npv_portal_session) is entirely separate from the
+    # staff session cookie already held by `page`'s context.
+    patient_ctx = context.browser.new_context()
+    patient_page = patient_ctx.new_page()
+    patient_page.goto(live_server + "/portal/login")
+    patient_page.fill("#email", "alice@example.com")
+    patient_page.click('button[type=submit]')
+    patient_page.wait_for_load_state("networkidle")
+    login_link = patient_page.locator("a", has_text="Sign in as Alice Johnson")
+    login_link.wait_for(state="visible")
+    href = login_link.get_attribute("href")
+    patient_page.goto(href)
+    patient_page.wait_for_url(re.compile(r"/portal/$"))
+    assert patient_page.locator("h1", has_text="Welcome").is_visible()
+
+    # Book: pick the newly-bookable type (read its *version* id off the
+    # portal's own dropdown -- distinct from the AppointmentType id used in
+    # the admin URLs above), a provider, a weekday a few days out (seed
+    # provider availability excludes weekends), and the first slot.
+    weekday_offset = 1
+    while (datetime.utcnow() + timedelta(days=weekday_offset)).weekday() >= 5:
+        weekday_offset += 1
+    target_date = (datetime.utcnow() + timedelta(days=weekday_offset)).strftime("%Y-%m-%d")
+    patient_page.goto(live_server + f"/portal/book?date_str={target_date}")
+    type_version_id = patient_page.locator('select[name="appointment_type_version_id"] option').nth(1).get_attribute("value")
+    patient_page.select_option('select[name="appointment_type_version_id"]', type_version_id)
+    patient_page.wait_for_load_state("networkidle")
+    patient_page.select_option('select[name="provider_id"]', index=1)
+    patient_page.wait_for_load_state("networkidle")
+    slot_forms = patient_page.locator('form[action="/portal/book/confirm"]')
+    slot_forms.first.wait_for(state="visible")
+    slot_forms.first.locator('button[type="submit"]').click()
+    patient_page.wait_for_url(re.compile(r"/portal/appointments\?booked=1"))
+    patient_page.wait_for_load_state("networkidle")
+    assert "Your appointment is booked" in patient_page.locator(".alert").inner_text()
+
+    appt_link = patient_page.locator('a[href*="/reschedule"]').first
+    appt_href = appt_link.get_attribute("href")
+    appt_id = appt_href.rstrip("/").split("/")[-2]
+
+    # Ownership isolation, checked before touching the appointment further:
+    # a different patient's portal session cannot cancel this one -- 404,
+    # not the appointment itself.
+    other_ctx = context.browser.new_context()
+    other_page = other_ctx.new_page()
+    other_page.goto(live_server + "/portal/login")
+    other_page.fill("#email", "bob@example.com")
+    other_page.click('button[type=submit]')
+    other_page.wait_for_load_state("networkidle")
+    other_login_link = other_page.locator("a", has_text="Sign in as Bob")
+    other_href = other_login_link.get_attribute("href")
+    other_page.goto(other_href)
+    other_page.wait_for_url(re.compile(r"/portal/$"))
+    csrf_token = other_page.locator('meta[name="csrf-token"]').get_attribute("content")
+    cross_patient_status = other_page.evaluate("""
+        async ([apptId, csrf]) => {
+            const body = new URLSearchParams();
+            body.set('csrf_token', csrf);
+            const resp = await fetch('/portal/appointments/' + apptId + '/cancel', {method: 'POST', body});
+            return resp.status;
+        }
+    """, [appt_id, csrf_token])
+    assert cross_patient_status == 404
+    other_ctx.close()
+
+    # Reschedule to a different slot (same provider/type, per this round's scope).
+    patient_page.goto(live_server + f"/portal/appointments/{appt_id}/reschedule")
+    reschedule_forms = patient_page.locator('form[action$="/reschedule/confirm"]')
+    reschedule_forms.first.wait_for(state="visible")
+    reschedule_forms.first.locator('button[type="submit"]').click()
+    patient_page.wait_for_url(re.compile(r"/portal/appointments\?rescheduled=1"))
+    patient_page.wait_for_load_state("networkidle")
+    assert "Appointment rescheduled" in patient_page.locator(".alert").inner_text()
+
+    # Cancel the real appointment as its rightful owner. Bypasses the cancel
+    # button's native confirm() dialog. Playwright auto-dismisses dialogs by
+    # default, and unlike a plain form.submit(), requestSubmit() (used
+    # elsewhere in this suite to bypass onsubmit handlers) still fires and
+    # honors this one's onsubmit -- a dismissed confirm() returns false and
+    # silently cancels the submission. So here the dialog is accepted like a
+    # real user would, then the button is clicked normally.
+    patient_page.goto(live_server + "/portal/appointments")
+    patient_page.once("dialog", lambda dialog: dialog.accept())
+    cancel_button = patient_page.locator('form[action$="/cancel"] button').first
+    cancel_button.wait_for(state="visible")
+    cancel_button.click()
+    patient_page.wait_for_url(re.compile(r"/portal/appointments\?cancelled=1"))
+    patient_page.wait_for_load_state("networkidle")
+
+    patient_ctx.close()

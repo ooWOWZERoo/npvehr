@@ -887,6 +887,48 @@ class UserSession(Base):
     )
 
 
+class PatientPortalLoginToken(Base):
+    """One-time magic-link login token for the patient self-service portal
+    (Calendar & Appointments UX Overhaul Phase 4 -- BUILD_BACKLOG.md 5a).
+    Requesting a link at /portal/login creates one of these per Patient row
+    matching the submitted email (a shared family email can match more than
+    one patient); consuming it via /portal/login/<token> marks it used and
+    creates a PatientPortalSession. No real email vendor is wired up (same
+    mock-send posture as Phase 3's AppointmentReminder) -- ehr.services.
+    notifications logs what would have been sent."""
+    __tablename__ = "patient_portal_login_tokens"
+    id = Column(Integer, primary_key=True, index=True)
+    patient_id = Column(Integer, ForeignKey("patients.id"), nullable=False)
+    token = Column(String, nullable=False, unique=True, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    expires_at = Column(DateTime, nullable=False)
+    used_at = Column(DateTime)
+
+    patient = relationship("Patient")
+
+
+class PatientPortalSession(Base):
+    """Session for a logged-in patient portal user -- deliberately separate
+    from UserSession (staff) so a patient's and a staff member's login never
+    collide in the same browser (distinct cookie name, see
+    ehr/auth/portal_deps.py). Same not-hashed-at-rest tradeoff as UserSession
+    (see its own comment) -- the token itself is the 256-bit secret."""
+    __tablename__ = "patient_portal_sessions"
+    id = Column(Integer, primary_key=True, index=True)
+    patient_id = Column(Integer, ForeignKey("patients.id"), nullable=False)
+    session_token = Column(String, nullable=False, unique=True, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    last_seen_at = Column(DateTime, default=datetime.utcnow)
+    expires_at = Column(DateTime, nullable=False)
+    revoked = Column(Boolean, default=False, nullable=False)
+
+    patient = relationship("Patient")
+
+    __table_args__ = (
+        Index("ix_patient_portal_sessions_patient_revoked", "patient_id", "revoked"),
+    )
+
+
 class AuthAuditEvent(Base):
     """Authentication/access-control audit trail. SCOPE: login/logout/failed-
     login/session-expiry/access-denied/account-admin events ONLY -- distinct

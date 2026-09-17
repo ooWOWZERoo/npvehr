@@ -928,6 +928,40 @@ def migration_027_reminders_and_opt_in(conn):
         "CREATE INDEX IF NOT EXISTS ix_reminder_appt_channel_kind "
         "ON appointment_reminders (appointment_id, channel, kind)"))
 
+def migration_028_patient_portal(conn):
+    """Online Patient Self-Booking (Calendar & Appointments UX Overhaul
+    Phase 4 -- BUILD_BACKLOG.md 5a). See models.database.PatientPortalLoginToken/
+    PatientPortalSession -- a magic-link auth system entirely separate from
+    staff sessions (ehr/auth/portal_deps.py)."""
+    conn.execute(text(f"""
+        CREATE TABLE IF NOT EXISTS patient_portal_login_tokens (
+            id {_pk_ddl(conn)},
+            patient_id INTEGER NOT NULL,
+            token VARCHAR NOT NULL,
+            created_at TIMESTAMP,
+            expires_at TIMESTAMP NOT NULL,
+            used_at TIMESTAMP
+        )
+    """))
+    conn.execute(text(
+        "CREATE UNIQUE INDEX IF NOT EXISTS ix_portal_login_tokens_token ON patient_portal_login_tokens (token)"))
+    conn.execute(text(f"""
+        CREATE TABLE IF NOT EXISTS patient_portal_sessions (
+            id {_pk_ddl(conn)},
+            patient_id INTEGER NOT NULL,
+            session_token VARCHAR NOT NULL,
+            created_at TIMESTAMP,
+            last_seen_at TIMESTAMP,
+            expires_at TIMESTAMP NOT NULL,
+            revoked BOOLEAN DEFAULT FALSE
+        )
+    """))
+    conn.execute(text(
+        "CREATE UNIQUE INDEX IF NOT EXISTS ix_portal_sessions_token ON patient_portal_sessions (session_token)"))
+    conn.execute(text(
+        "CREATE INDEX IF NOT EXISTS ix_portal_sessions_patient_revoked "
+        "ON patient_portal_sessions (patient_id, revoked)"))
+
 # Ordered list of (id, function). Adding new migrations: append, never edit past entries.
 COLUMN_MIGRATIONS = [
     ("001_appointment_columns", migration_001_appointment_columns),
@@ -952,6 +986,7 @@ COLUMN_MIGRATIONS = [
     ("025_glaucoma_stage", migration_025_glaucoma_stage),
     ("026_create_waitlist_entries", migration_026_create_waitlist_entries),
     ("027_reminders_and_opt_in", migration_027_reminders_and_opt_in),
+    ("028_patient_portal", migration_028_patient_portal),
 ]
 POST_CREATE_ALL_MIGRATIONS = [
     ("002_seed_appointment_types", migration_002_seed_appointment_types),

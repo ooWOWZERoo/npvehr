@@ -1,0 +1,48 @@
+{% extends "portal/_base.html" %}
+{% block title %}Book an Appointment &mdash; Patient Portal{% endblock %}
+{% block portal_content %}
+<div class="page-header">
+  <h1>Book an Appointment</h1>
+  <a href="/portal/" class="btn btn-secondary btn-sm">Back</a>
+</div>
+<div class="card">
+  <form method="get" style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:flex-end">
+    <div class="form-group" style="margin:0"><label>Provider</label>
+      <select name="provider_id" onchange="this.form.submit()"><option value="">Choose a provider&hellip;</option>
+        {% for p in providers %}<option value="{{ p.id }}" {{ 'selected' if provider_id == p.id }}>Dr. {{ p.last_name }}</option>{% endfor %}</select>
+    </div>
+    <div class="form-group" style="margin:0"><label>Reason for Visit</label>
+      <select name="appointment_type_version_id" onchange="this.form.submit()"><option value="">Choose a type&hellip;</option>
+        {% for t in types %}<option value="{{ t.id }}" {{ 'selected' if appointment_type_version_id == t.id }}>{{ t.display_name }}</option>{% endfor %}</select>
+    </div>
+    <div class="form-group" style="margin:0"><label>Date</label>
+      <input type="date" name="date_str" value="{{ target_date.isoformat() }}" onchange="this.form.submit()">
+    </div>
+  </form>
+  {% if not types %}
+  <p style="color:var(--ink-muted);font-size:0.85rem;margin-top:1rem">Online booking isn't available for any appointment type right now &mdash; please call the office.</p>
+  {% endif %}
+</div>
+
+{% if error %}
+<div class="card"><p style="color:#b91c1c">{{ error }}</p></div>
+{% elif provider_id and appointment_type_version_id and version %}
+<div class="card">
+  <h3>Available Times &mdash; {{ target_date.strftime('%B %-d, %Y') }}</h3>
+  {% if slots %}
+  <div style="display:flex;flex-wrap:wrap;gap:0.5rem">
+    {% for slot in slots %}
+    <form method="post" action="/portal/book/confirm" style="margin:0">
+      <input type="hidden" name="provider_id" value="{{ provider_id }}">
+      <input type="hidden" name="appointment_type_version_id" value="{{ appointment_type_version_id }}">
+      <input type="hidden" name="scheduled_at" value="{{ slot.isoformat() }}">
+      <button type="submit" class="btn btn-secondary btn-sm">{{ slot.strftime('%-I:%M %p') }}</button>
+    </form>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p style="color:var(--ink-muted)">No open times on this date &mdash; try another date.</p>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,28 @@
+{% extends "portal/_base.html" %}
+{% block title %}My Account &mdash; Patient Portal{% endblock %}
+{% block portal_content %}
+<div class="page-header">
+  <h1>Welcome, {{ patient.preferred_name or patient.first_name }}</h1>
+  <div style="display:flex;gap:0.5rem">
+    <a href="/portal/appointments" class="btn btn-secondary btn-sm">My Appointments</a>
+    <a href="/portal/book" class="btn btn-primary btn-sm">Book an Appointment</a>
+  </div>
+</div>
+<div class="card">
+  <h3>Upcoming Appointments</h3>
+  {% if not upcoming %}
+  <p style="color:var(--ink-muted)">You have no upcoming appointments. <a href="/portal/book">Book one now</a>.</p>
+  {% else %}
+  <table class="exam-table">
+    <tr><th>Date &amp; Time</th><th>Provider</th><th>Type</th></tr>
+    {% for a in upcoming %}
+    <tr>
+      <td class="mono-data">{{ a.scheduled_at.strftime('%b %-d, %Y %-I:%M %p') }}</td>
+      <td>Dr. {{ a.provider.last_name }}</td>
+      <td>{{ a.appointment_type_version.display_name if a.appointment_type_version else '—' }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+</div>
+{% endblock %}
