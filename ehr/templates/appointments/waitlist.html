@@ -31,4 +31,31 @@
   </div>
   {% endif %}
 </div>
+
+<div class="card" style="margin-top:1rem">
+  <h3>Recent Waitlist Notifications</h3>
+  <p style="color:var(--ink-muted);font-size:0.85rem;margin-top:-0.5rem">Every attempted (mock) send when a matching slot opened up. No real SMS/email vendor is connected yet -- "Sent" means the mock send interface logged what would have gone out.</p>
+  {% if not notifications %}
+  <p style="color:#64748b;text-align:center">No waitlist notifications sent yet.</p>
+  {% else %}
+  <div class="table-responsive">
+  <table class="exam-table">
+    <tr><th>When</th><th>Patient</th><th>Freed Appointment</th><th>Channel</th><th>Status</th></tr>
+    {% for n in notifications %}
+    <tr>
+      <td class="mono-data">{{ n.created_at.strftime('%Y-%m-%d %H:%M') if n.created_at else '—' }}</td>
+      <td><a href="/patients/{{ n.waitlist_entry.patient_id }}">{{ n.waitlist_entry.patient.last_name }}, {{ n.waitlist_entry.patient.first_name }}</a></td>
+      <td><a href="/appointments/{{ n.appointment_id }}">#{{ n.appointment_id }}</a></td>
+      <td>{{ n.channel|upper }}</td>
+      <td>
+        {% if n.status == 'sent' %}<span style="color:#166534;font-weight:600">Sent</span>
+        {% elif n.status == 'skipped_no_opt_in' %}<span style="color:#92400e">Skipped (no opt-in)</span>
+        {% else %}<span style="color:#b91c1c;font-weight:600">Failed</span>{% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  </div>
+  {% endif %}
+</div>
 {% endblock %}
