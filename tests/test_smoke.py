@@ -760,8 +760,12 @@ def test_patient_portal_book_reschedule_cancel_and_isolation(logged_in_page, liv
     # Book: pick the newly-bookable type (read its *version* id off the
     # portal's own dropdown -- distinct from the AppointmentType id used in
     # the admin URLs above), a provider, a weekday a few days out (seed
-    # provider availability excludes weekends), and the first slot.
-    weekday_offset = 1
+    # provider availability excludes weekends), and the first slot. Starts
+    # two days out, not one -- the portal's self-service cutoff defaults to
+    # 24 hours, and "tomorrow's earliest slot" can be less than 24 hours
+    # away depending on what time of day this test happens to run, which
+    # would hide the reschedule link this test depends on.
+    weekday_offset = 2
     while (datetime.utcnow() + timedelta(days=weekday_offset)).weekday() >= 5:
         weekday_offset += 1
     target_date = (datetime.utcnow() + timedelta(days=weekday_offset)).strftime("%Y-%m-%d")
