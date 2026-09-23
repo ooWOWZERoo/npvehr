@@ -303,9 +303,19 @@ def _board_context(request: Request, db: Session, initial_view: str, initial_dat
     template's own JS fetches it live from /appointments/feed.json, so this
     context only supplies filter-dropdown options and the initial state to
     load the page in."""
+    providers = db.query(Provider).order_by(Provider.last_name).all()
+    # Slot/duration reconciliation follow-up: each provider's effective
+    # offering granularity, so the board's calendar grid (visual slot lines
+    # and drag/resize snapping) matches what find_open_slots actually offers
+    # for booking -- not just a hardcoded 5-minute grid. Keyed by provider id
+    # (string, since it becomes a JS object key) for the template's JS.
+    granularity_by_provider = {str(p.id): sched.get_effective_slot_granularity(db, p.id) for p in providers}
+    from ehr.models.database import SchedulingSettings
+    settings_row = db.query(SchedulingSettings).filter(SchedulingSettings.id == 1).first()
+    default_granularity = settings_row.default_slot_granularity_minutes if settings_row else 5
     return {
         "initial_view": initial_view, "initial_date": initial_date.isoformat(), "providers_mode": providers_mode,
-        "providers": db.query(Provider).order_by(Provider.last_name).all(),
+        "providers": providers,
         "rooms": db.query(Resource).filter(Resource.resource_class == "room", Resource.active == True)
                    .order_by(Resource.display_name).all(),
         "types": _bookable_type_versions(db), "statuses": list(AppointmentStatus),
@@ -313,6 +323,7 @@ def _board_context(request: Request, db: Session, initial_view: str, initial_dat
         "relationship": relationship, "status": status, "room_resource_id": room_resource_id, "has_notes": has_notes,
         "legend_types": _all_active_type_versions_for_legend(db),
         "context_patient": patient_context(db.query(Patient).filter(Patient.id == patient_id).first()) if patient_id else None,
+        "granularity_by_provider": granularity_by_provider, "default_granularity": default_granularity,
     }
 
 
@@ -453,7 +464,7 @@ def availability(request: Request, provider_id: int = None, appointment_type_ver
         else:
             try:
                 duration_minutes = sched.compute_duration_minutes(version, relationship)
-                slots = sched.find_open_slots(db, provider_id, target_date, duration_minutes)
+                slots = sched.find_open_slots(db, provider_id, target_date, duration_minutes, version=version)
             except ValueError as e:
                 error = str(e)
     return templates.TemplateResponse(request, "appointments/availability.html", {

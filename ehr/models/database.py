@@ -166,6 +166,15 @@ class Provider(Base):
     license_number = Column(String)
     npi = Column(String)
     specialty = Column(String, default="Optometry")
+    # Scheduling slot granularity/reconciliation follow-up: which start-time
+    # increments (5/10/15/20/30/60 min) this provider's open-slot search
+    # offers to staff and patients -- null means "use the practice-wide
+    # SchedulingSettings.default_slot_granularity_minutes." This is purely a
+    # display/offering filter on top of find_open_slots' always-fine-grained
+    # (5-minute) conflict math -- it never lets a coarser granularity hide a
+    # real conflict or offer an unsafe time; see ehr.services.scheduling.
+    # get_effective_slot_granularity.
+    slot_granularity_minutes = Column(Integer)
     appointments = relationship("Appointment", back_populates="provider")
     eye_exams = relationship("EyeExam", back_populates="provider")
     prescriptions = relationship("Prescription", back_populates="provider")
@@ -571,6 +580,21 @@ class PortalSettings(Base):
     updated_by_user_id = Column(Integer, ForeignKey("users.id"))
 
 
+class SchedulingSettings(Base):
+    """Singleton (one row, id=1) practice-wide scheduling configuration.
+    Currently just the default slot granularity (BUILD_BACKLOG.md's
+    slot/duration reconciliation follow-up) -- how finely start times are
+    offered on the calendar and in availability search, on top of the
+    always-fine-grained (5-minute) conflict-checking math in
+    ehr.services.scheduling.find_open_slots. A provider with its own
+    Provider.slot_granularity_minutes set overrides this default."""
+    __tablename__ = "scheduling_settings"
+    id = Column(Integer, primary_key=True)
+    default_slot_granularity_minutes = Column(Integer, default=5, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow)
+    updated_by_user_id = Column(Integer, ForeignKey("users.id"))
+
+
 class PortalAccessAuditEvent(Base):
     """Audit trail of a patient viewing their own clinical data through the
     portal (BUILD_BACKLOG.md 5a, Phase 4's patient-facing clinical data view
@@ -687,6 +711,11 @@ class EyeExam(Base):
     fundus_periphery_od = Column(String); fundus_periphery_os = Column(String)
     assessment = Column(Text); plan = Column(Text)
     diagnosis_codes = Column(String); follow_up_weeks = Column(Integer)
+    # The unit follow_up_weeks is expressed in -- Day/Week/Month/Year -- so a
+    # follow-up can be entered as e.g. "3 Days" or "6 Months", not just weeks.
+    # Nullable/defaulted to "Week" so every pre-existing exam (all of which
+    # predate this column and were entered in weeks) still reads correctly.
+    follow_up_unit = Column(String, default="Week")
     # Structured Refractive Assessment (VISION_EHR_DATA_STANDARDS_RESEARCH.md
     # 5.1), alongside the free-text assessment/diagnosis_codes above -- diagnosis
     # coding itself stays free-text (deferred terminology-server work, 4.4); these

@@ -12,7 +12,7 @@
     <dt>Reason for Visit</dt><dd>{{ exam.chief_complaint or '—' }}</dd>
     <dt>Assessment</dt><dd>{{ exam.assessment or '—' }}</dd>
     <dt>Plan</dt><dd>{{ exam.plan or '—' }}</dd>
-    {% if exam.follow_up_weeks %}<dt>Follow-Up</dt><dd>{{ exam.follow_up_weeks }} week{{ 's' if exam.follow_up_weeks != 1 }}</dd>{% endif %}
+    {% if exam.follow_up_weeks %}<dt>Follow-Up</dt><dd>{{ exam.follow_up_weeks }} {{ (exam.follow_up_unit or 'Week')|lower }}{{ 's' if exam.follow_up_weeks != 1 }}</dd>{% endif %}
   </dl>
   <p style="color:var(--ink-muted);font-size:0.8rem;margin-top:1rem">This is a summary, not your full clinical record. Contact the office with any questions about this visit.</p>
 </div>

@@ -69,6 +69,7 @@ async def create_exam(request: Request, db: Session = Depends(get_db)):
         fundus_periphery_od=g("fundus_periphery_od"), fundus_periphery_os=g("fundus_periphery_os"),
         assessment=g("assessment"), plan=g("plan"),
         diagnosis_codes=g("diagnosis_codes"), follow_up_weeks=_i(g("follow_up_weeks")),
+        follow_up_unit=g("follow_up_unit") or "Week",
         refractive_diagnosis=gl("refractive_diagnosis"), refractive_laterality=g("refractive_laterality"),
         refractive_stability=g("refractive_stability"), refractive_secondary_findings=gl("refractive_secondary_findings"))
     db.add(exam); db.flush()

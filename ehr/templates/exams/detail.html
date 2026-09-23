@@ -17,7 +17,7 @@
     <dt>IOP OD/OS</dt><dd>{{ exam.iop_od or '—' }} / {{ exam.iop_os or '—' }} mmHg</dd>
     <dt>Cover Test</dt><dd>{{ exam.cover_test or '—' }}</dd>
     <dt>Dx Codes</dt><dd class="mono-data">{{ exam.diagnosis_codes or '—' }}</dd>
-    <dt>Follow-up</dt><dd>{{ (exam.follow_up_weeks|string + ' weeks') if exam.follow_up_weeks else '—' }}</dd>
+    <dt>Follow-up</dt><dd>{% if exam.follow_up_weeks %}{{ exam.follow_up_weeks }} {{ (exam.follow_up_unit or 'Week')|lower }}{{ 's' if exam.follow_up_weeks != 1 }}{% else %}—{% endif %}</dd>
   </dl></div>
   <div class="card"><h3>Visual Acuity</h3>
     <div class="table-responsive">

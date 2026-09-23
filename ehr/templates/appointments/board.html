@@ -60,6 +60,21 @@
   var INITIAL_VIEW = {{ initial_view|tojson }};
   var INITIAL_DATE = {{ initial_date|tojson }};
   var PROVIDERS_MODE = {{ 'true' if providers_mode else 'false' }};
+  // Slot/duration reconciliation follow-up: per-provider offering
+  // granularity (minutes), matching what ehr.services.scheduling.
+  // find_open_slots actually offers -- drives the calendar's visual slot
+  // lines and drag/resize snapping so the board never implies finer control
+  // than what a new booking would actually be offered.
+  var GRANULARITY_BY_PROVIDER = {{ granularity_by_provider|tojson }};
+  var DEFAULT_GRANULARITY = {{ default_granularity|tojson }};
+  function granularityFor(providerId) {
+    if (providerId && GRANULARITY_BY_PROVIDER[String(providerId)]) return GRANULARITY_BY_PROVIDER[String(providerId)];
+    return DEFAULT_GRANULARITY;
+  }
+  function granularityDurationString(minutes) {
+    var h = Math.floor(minutes / 60), m = minutes % 60;
+    return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0') + ':00';
+  }
 
   function filterParams() {
     // Omit empty values entirely -- FastAPI's int-typed query params (e.g.
@@ -157,6 +172,15 @@
   }
 
   function baseOptions(providerIdForColumn) {
+    // Single-calendar mode has no fixed column provider -- fall back to
+    // whatever the provider filter is set to at load time (empty = "All
+    // Providers", so the practice default applies). Changing the filter
+    // afterward re-fetches events but doesn't recreate the calendar, so the
+    // grid/snap granularity reflects the filter as of page load, not live
+    // changes -- a known, acceptable limitation of this first pass.
+    var effectiveProviderId = providerIdForColumn || document.getElementById('filterProvider').value;
+    var granularityMinutes = granularityFor(effectiveProviderId);
+    var granularityStr = granularityDurationString(granularityMinutes);
     return {
       initialView: INITIAL_VIEW,
       initialDate: INITIAL_DATE,
@@ -164,6 +188,8 @@
       height: 'auto',
       slotMinTime: '07:00:00',
       slotMaxTime: '19:00:00',
+      slotDuration: granularityStr,
+      snapDuration: granularityStr,
       nowIndicator: true,
       editable: true,
       eventStartEditable: true,

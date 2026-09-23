@@ -5,7 +5,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from ehr.models.database import (get_db, AppointmentType, AppointmentTypeVersion, AppointmentTypeColorRule,
     DiagnosticTest, Resource, AvailabilityTemplate, AppointmentTypeAuditEvent, AppointmentAuditEvent, Appointment,
-    PracticeClosure, Provider, ProviderAvailabilityTemplate, PortalSettings)
+    PracticeClosure, Provider, ProviderAvailabilityTemplate, PortalSettings, SchedulingSettings)
 from ehr.services import scheduling as sched
 from ehr.env_info import EHR_ENV
 from ehr.auth.permissions import require_role, ADMIN_SCHEDULING_VIEW, ADMIN_SCHEDULING_EDIT, ROLE_LABELS
@@ -347,17 +347,36 @@ def create_availability(request: Request, resource_id: int = Form(...), day_of_w
     return RedirectResponse("/admin/scheduling/availability", status_code=303)
 
 
+SLOT_GRANULARITY_CHOICES = [5, 10, 15, 20, 30, 60]
+
+
+def _get_scheduling_settings(db: Session) -> SchedulingSettings:
+    """The singleton row (id=1) is seeded by migration 031 -- this is a
+    fallback only for a database that somehow lacks it."""
+    settings = db.query(SchedulingSettings).filter(SchedulingSettings.id == 1).first()
+    if not settings:
+        settings = SchedulingSettings(id=1, default_slot_granularity_minutes=5)
+        db.add(settings); db.commit(); db.refresh(settings)
+    return settings
+
+
 @router.get("/provider-availability", response_class=HTMLResponse, dependencies=[Depends(require_role(*ADMIN_SCHEDULING_VIEW))])
 def list_provider_availability(request: Request, db: Session = Depends(get_db)):
     """Provider-scoped counterpart to /availability above (which is
     resource-scoped only). Powers the real open-slot availability search
-    (ehr/services/scheduling.py's find_open_slots, /appointments/availability)."""
+    (ehr/services/scheduling.py's find_open_slots, /appointments/availability).
+    Also hosts the slot/duration reconciliation follow-up's granularity
+    settings (practice default + per-provider override) -- this is the one
+    existing page that already scopes to "provider scheduling config,"
+    so it's the natural home rather than a new page for a provider CRUD
+    surface this app doesn't otherwise have."""
     templates_ = (db.query(ProviderAvailabilityTemplate)
                   .order_by(ProviderAvailabilityTemplate.provider_id, ProviderAvailabilityTemplate.day_of_week)
                   .all())
     return templates.TemplateResponse(request, "admin/scheduling/provider_availability.html",
         {"templates_": templates_, "providers": db.query(Provider).all(),
-         "day_names": ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"]})
+         "day_names": ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"],
+         "scheduling_settings": _get_scheduling_settings(db), "granularity_choices": SLOT_GRANULARITY_CHOICES})
 
 
 @router.post("/provider-availability/new", dependencies=[Depends(require_role(*ADMIN_SCHEDULING_EDIT))])
@@ -366,6 +385,38 @@ def create_provider_availability(request: Request, provider_id: int = Form(...),
     csrf.verify_or_403(request.state.csrf_token, csrf_token)
     db.add(ProviderAvailabilityTemplate(provider_id=provider_id, day_of_week=day_of_week, start_time=start_time,
         end_time=end_time, active=True))
+    db.commit()
+    return RedirectResponse("/admin/scheduling/provider-availability", status_code=303)
+
+
+@router.post("/scheduling-settings", dependencies=[Depends(require_role(*ADMIN_SCHEDULING_EDIT))])
+def update_scheduling_settings(request: Request, default_slot_granularity_minutes: int = Form(...),
+    csrf_token: str = Form(""), db: Session = Depends(get_db), user=Depends(get_current_user)):
+    csrf.verify_or_403(request.state.csrf_token, csrf_token)
+    if default_slot_granularity_minutes not in SLOT_GRANULARITY_CHOICES:
+        return HTMLResponse("Invalid slot granularity.", status_code=400)
+    settings = _get_scheduling_settings(db)
+    settings.default_slot_granularity_minutes = default_slot_granularity_minutes
+    settings.updated_at = datetime.utcnow()
+    settings.updated_by_user_id = user.id
+    db.commit()
+    return RedirectResponse("/admin/scheduling/provider-availability", status_code=303)
+
+
+@router.post("/providers/{provider_id}/slot-granularity", dependencies=[Depends(require_role(*ADMIN_SCHEDULING_EDIT))])
+def update_provider_slot_granularity(request: Request, provider_id: int, slot_granularity_minutes: str = Form(""),
+    csrf_token: str = Form(""), db: Session = Depends(get_db)):
+    csrf.verify_or_403(request.state.csrf_token, csrf_token)
+    provider = db.query(Provider).filter(Provider.id == provider_id).first()
+    if not provider:
+        return HTMLResponse("Not found", status_code=404)
+    if not slot_granularity_minutes:
+        provider.slot_granularity_minutes = None  # blank = inherit the practice default
+    else:
+        value = int(slot_granularity_minutes)
+        if value not in SLOT_GRANULARITY_CHOICES:
+            return HTMLResponse("Invalid slot granularity.", status_code=400)
+        provider.slot_granularity_minutes = value
     db.commit()
     return RedirectResponse("/admin/scheduling/provider-availability", status_code=303)
 

@@ -207,11 +207,33 @@ def suggest_relationship(db, patient_id: int, appointment_date_str: str) -> str:
     return "established" if exam else "new"
 
 
+def get_effective_slot_granularity(db, provider_id: int) -> int:
+    """The start-time granularity (minutes) offered for this provider:
+    Provider.slot_granularity_minutes if set, otherwise
+    SchedulingSettings.default_slot_granularity_minutes (falling back to
+    SLOT_UNIT_MINUTES if even that singleton row is somehow missing).
+    Purely a display/offering filter -- find_open_slots' own conflict math
+    below always runs at SLOT_UNIT_MINUTES resolution regardless of this
+    value, so a coarser granularity can only narrow the offered list, never
+    hide a real conflict or introduce an unsafe time."""
+    from ehr.models.database import Provider, SchedulingSettings
+    provider = db.query(Provider).filter(Provider.id == provider_id).first()
+    if provider and provider.slot_granularity_minutes:
+        return provider.slot_granularity_minutes
+    settings = db.query(SchedulingSettings).filter(SchedulingSettings.id == 1).first()
+    return settings.default_slot_granularity_minutes if settings else SLOT_UNIT_MINUTES
+
+
 def find_open_slots(db, provider_id: int, target_date, duration_minutes: int,
-                     exclude_appointment_id: int = None):
+                     version=None, exclude_appointment_id: int = None):
     """Real open-slot search for one provider on one calendar date. Returns a
     list of available start datetimes where a duration_minutes-long
-    appointment fits with no conflict, walked at SLOT_UNIT_MINUTES resolution.
+    appointment fits with no conflict. Conflict-checking always walks at
+    SLOT_UNIT_MINUTES (5-minute) resolution regardless of the effective slot
+    granularity (get_effective_slot_granularity) -- granularity only filters
+    which of those already-safe start times get returned, so a coarser
+    granularity setting can never hide a real conflict or offer an unsafe
+    time (the slot/duration reconciliation follow-up, BUILD_BACKLOG.md).
 
     Building blocks, all reused rather than reimplemented: this provider's
     ProviderAvailabilityTemplate rows for that day-of-week are the base open
@@ -220,6 +242,14 @@ def find_open_slots(db, provider_id: int, target_date, duration_minutes: int,
     conflicting appointment's occupied interval (via the same
     compute_occupied_interval/intervals_overlap/ACTIVE_STATUSES machinery
     find_provider_conflict already uses) are subtracted from what's left.
+    When `version` is given, each candidate is also checked against
+    plan_resource_requirements/find_resource_conflict/
+    find_resource_blocked_exception -- the same resource-availability check
+    _apply_scheduling_rules applies at actual booking time -- so a slot is
+    never offered here only to fail with a resource conflict at confirm.
+    `version` is optional (defaults to provider-only checking, the prior
+    behavior) only for callers that don't yet have it in hand; every caller
+    that books through this search should pass it.
 
     target_date is a datetime.date. Day-of-week alignment: Python's
     date.weekday() (Monday=0..Sunday=6) matches this schema's day_of_week
@@ -275,6 +305,10 @@ def find_open_slots(db, provider_id: int, target_date, duration_minutes: int,
         if intervals_overlap(occ_start, occ_end, day_start, day_end):
             blockers.append((occ_start, occ_end))
 
+    granularity = get_effective_slot_granularity(db, provider_id)
+    buffer_before = (version.buffer_before_minutes or 0) if version else 0
+    buffer_after = (version.buffer_after_minutes or 0) if version else 0
+
     slots = []
     slot_step = timedelta(minutes=SLOT_UNIT_MINUTES)
     duration_delta = timedelta(minutes=duration_minutes)
@@ -283,7 +317,20 @@ def find_open_slots(db, provider_id: int, target_date, duration_minutes: int,
         while cursor + duration_delta <= window_end:
             candidate_end = cursor + duration_delta
             if not any(intervals_overlap(cursor, candidate_end, b_start, b_end) for b_start, b_end in blockers):
-                slots.append(cursor)
+                resource_ok = True
+                if version is not None:
+                    for requirement, resource, r_start, r_end in plan_resource_requirements(
+                            db, version, cursor, duration_minutes, buffer_before, buffer_after):
+                        if find_resource_conflict(db, resource.id, r_start, r_end, exclude_appointment_id):
+                            resource_ok = False
+                            break
+                        if find_resource_blocked_exception(db, resource.id, r_start, r_end):
+                            resource_ok = False
+                            break
+                if resource_ok:
+                    minute_of_day = cursor.hour * 60 + cursor.minute
+                    if minute_of_day % granularity == 0:
+                        slots.append(cursor)
             cursor += slot_step
     return slots
 
