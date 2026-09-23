@@ -1,7 +1,7 @@
 {% extends "base.html" %}
-{% block title %}New Eye Exam &mdash; New Path Vision EHR{% endblock %}
+{% block title %}New Exam &mdash; New Path Vision EHR{% endblock %}
 {% block content %}
-<div class="page-header"><h1>New Eye Exam</h1><a href="/patients/" class="btn btn-secondary">Cancel</a></div>
+<div class="page-header"><h1>New Exam</h1><a href="/patients/" class="btn btn-secondary">Cancel</a></div>
 <div class="card form-card">
   <form method="post" action="/exams/new">
     <div class="section-title">Visit Info</div>
@@ -467,7 +467,17 @@
     </div>
     <div class="form-row cols-2">
       <div class="form-group"><label>Diagnosis Codes (ICD-10)</label><input name="diagnosis_codes" id="diagnosis_codes" placeholder="H52.13, H52.219"></div>
-      <div class="form-group"><label>Follow-up (weeks)</label><input name="follow_up_weeks" id="follow_up_weeks" type="number"></div>
+      <div class="form-group"><label>Follow-up</label>
+        <div style="display:flex;gap:0.5rem">
+          <input name="follow_up_weeks" id="follow_up_weeks" type="number" style="flex:1">
+          <select name="follow_up_unit" id="follow_up_unit" style="flex:1">
+            <option value="Day">Days</option>
+            <option value="Week" selected>Weeks</option>
+            <option value="Month">Months</option>
+            <option value="Year">Years</option>
+          </select>
+        </div>
+      </div>
     </div>
     <div class="form-actions"><button type="submit" class="btn btn-primary">Save Exam</button></div>
   </form>
@@ -599,13 +609,16 @@ var ICD10_CATARACT_STATUS = {OD: 'Z98.41', OS: 'Z98.42', OU: 'Z98.41, Z98.42'};
   var planEl = document.getElementById('plan');
   var diagnosisCodesEl = document.getElementById('diagnosis_codes');
   var followUpWeeksEl = document.getElementById('follow_up_weeks');
+  var followUpUnitEl = document.getElementById('follow_up_unit');
   var antCodeEl = document.querySelector('[name="ant_primary_diagnosis_code"]');
   var deCodeEl = document.querySelector('[name="de_primary_diagnosis_code"]');
   var noteStyleEl = document.getElementById('ap_note_style');
   var validationIssuesEl = document.getElementById('ap_validation_issues');
-  var diagnosisCodesEdited = false, followUpWeeksEdited = false, antCodeEdited = false, deCodeEdited = false;
+  var diagnosisCodesEdited = false, followUpWeeksEdited = false, followUpUnitEdited = false,
+      antCodeEdited = false, deCodeEdited = false;
   diagnosisCodesEl.addEventListener('input', function () { diagnosisCodesEdited = true; });
   followUpWeeksEl.addEventListener('input', function () { followUpWeeksEdited = true; });
+  followUpUnitEl.addEventListener('change', function () { followUpUnitEdited = true; });
   antCodeEl.addEventListener('input', function () { antCodeEdited = true; });
   deCodeEl.addEventListener('input', function () { deCodeEdited = true; });
   noteStyleEl.addEventListener('change', function () { refresh(); });
@@ -837,6 +850,15 @@ var ICD10_CATARACT_STATUS = {OD: 'Z98.41', OS: 'Z98.42', OU: 'Z98.41, Z98.42'};
     return sec.indexOf('Suspect Glaucoma') !== -1 ? '26' : '52';
   }
 
+  // composeFollowUpWeeks() always suggests a count of weeks, so its unit
+  // follows along -- but only while the clinician hasn't picked a different
+  // unit themselves.
+  function formatFollowUp(value, unit) {
+    var labels = {Day: 'day', Week: 'week', Month: 'month', Year: 'year'};
+    var label = labels[unit] || 'week';
+    return value + ' ' + label + (value === '1' ? '' : 's');
+  }
+
   // Plan bullets follow the Meds / Testing / RTC structure explicitly (plus
   // a Therapy bucket for vision-therapy exercises, which don't fit either).
   function planLine(style, category, text) {
@@ -882,7 +904,7 @@ var ICD10_CATARACT_STATUS = {OD: 'Z98.41', OS: 'Z98.42', OU: 'Z98.41, Z98.42'};
     }
     if (!lines.length) {
       var weeks = fieldValue('follow_up_weeks');
-      if (weeks) pushRtc(weeks + ' weeks');
+      if (weeks) pushRtc(formatFollowUp(weeks, fieldValue('follow_up_unit')));
     }
     return lines.join('\n');
   }
@@ -938,7 +960,13 @@ var ICD10_CATARACT_STATUS = {OD: 'Z98.41', OS: 'Z98.42', OU: 'Z98.41, Z98.42'};
     // follow_up_weeks must be set before composePlan() runs -- its fallback
     // reads the live DOM value, so the auto-suggested weeks flows into the
     // Plan bullet on the same refresh cycle.
-    if (!followUpWeeksEdited) followUpWeeksEl.value = composeFollowUpWeeks();
+    if (!followUpWeeksEdited) {
+      var suggestedWeeks = composeFollowUpWeeks();
+      followUpWeeksEl.value = suggestedWeeks;
+      // composeFollowUpWeeks() is always a week count, so keep the unit in
+      // sync with it too, unless the clinician has already picked a unit.
+      if (suggestedWeeks && !followUpUnitEdited) followUpUnitEl.value = 'Week';
+    }
 
     var newPlan = composePlan(style);
     var mergedPlan = mergeManualEdits(lastAutoPlan, planEl.value, newPlan);
@@ -954,7 +982,7 @@ var ICD10_CATARACT_STATUS = {OD: 'Z98.41', OS: 'Z98.42', OU: 'Z98.41, Z98.42'};
     '#focus-glaucoma input, #focus-glaucoma select, ' +
     '#focus-binocular input, #focus-binocular select, ' +
     '#focus-surgery input, #focus-surgery select, #focus-surgery textarea, ' +
-    '.focus-toggle, [name="follow_up_weeks"]'
+    '.focus-toggle, [name="follow_up_weeks"], [name="follow_up_unit"]'
   ).forEach(function (el) {
     // 'change' covers selects/checkboxes immediately; 'input' is also needed
     // for text/number fields (ant_primary_diagnosis_code, follow_up_weeks,

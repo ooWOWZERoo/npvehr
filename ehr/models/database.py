@@ -711,6 +711,11 @@ class EyeExam(Base):
     fundus_periphery_od = Column(String); fundus_periphery_os = Column(String)
     assessment = Column(Text); plan = Column(Text)
     diagnosis_codes = Column(String); follow_up_weeks = Column(Integer)
+    # The unit follow_up_weeks is expressed in -- Day/Week/Month/Year -- so a
+    # follow-up can be entered as e.g. "3 Days" or "6 Months", not just weeks.
+    # Nullable/defaulted to "Week" so every pre-existing exam (all of which
+    # predate this column and were entered in weeks) still reads correctly.
+    follow_up_unit = Column(String, default="Week")
     # Structured Refractive Assessment (VISION_EHR_DATA_STANDARDS_RESEARCH.md
     # 5.1), alongside the free-text assessment/diagnosis_codes above -- diagnosis
     # coding itself stays free-text (deferred terminology-server work, 4.4); these

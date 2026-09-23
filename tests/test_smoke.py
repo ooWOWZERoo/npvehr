@@ -116,6 +116,33 @@ def test_motility_and_confrontation_vf_save_and_display(logged_in_page, live_ser
     assert page.locator("h3", has_text="Motility & Confrontation VF").count() == 0
 
 
+def test_follow_up_unit_save_and_display(logged_in_page, live_server):
+    """Follow-up Day/Week/Month/Year unit (EyeExam.follow_up_unit) --
+    previously the New Exam form only ever recorded a count of weeks.
+    Verifies a non-default unit (Months) saves and displays correctly
+    (pluralized) on both the exam detail page and, separately, that an
+    exam saved with the default unit still reads as weeks (backward
+    compatible with every exam entered before this field existed)."""
+    page = logged_in_page
+    page.goto(live_server + "/exams/new")
+    assert page.locator("#follow_up_unit").input_value() == "Week"
+    page.fill("#follow_up_weeks", "3")
+    page.locator("#follow_up_unit").select_option("Month")
+    page.locator('button[type="submit"]', has_text="Save Exam").click()
+
+    page.wait_for_url(re.compile(r"/exams/\d+"))
+    assert "3 months" in page.locator("dl.dl-grid").inner_text()
+
+    # Default unit (left at "Week") still reads as weeks -- no regression
+    # for the existing weeks-only behavior.
+    page.goto(live_server + "/exams/new")
+    page.locator('select[name="provider_id"]').select_option(index=1)
+    page.fill("#follow_up_weeks", "2")
+    page.locator('button[type="submit"]', has_text="Save Exam").click()
+    page.wait_for_url(re.compile(r"/exams/\d+"))
+    assert "2 weeks" in page.locator("dl.dl-grid").inner_text()
+
+
 def test_visit_focus_toggle_shows_hides_assessment_sections(logged_in_page, live_server):
     """The Visit Focus checkboxes (ehr/templates/exams/form.html) are the one
     behavior curl-based route checks can't confirm -- this is real client-side

@@ -1041,6 +1041,14 @@ def migration_031_slot_granularity(conn):
             "INSERT INTO scheduling_settings (id, default_slot_granularity_minutes, updated_at) "
             "VALUES (1, 5, :ts)"), {"ts": datetime.utcnow().isoformat()})
 
+def migration_032_follow_up_unit(conn):
+    """New Exam's follow-up field gains a unit (Day/Week/Month/Year) alongside
+    its existing numeric value (EyeExam.follow_up_weeks). Defaults every
+    existing row to 'Week' -- every exam entered before this column existed
+    used week counts."""
+    if _table_exists(conn, "eye_exams"):
+        _add_column_if_missing(conn, "eye_exams", "follow_up_unit", "VARCHAR DEFAULT 'Week'")
+
 # Ordered list of (id, function). Adding new migrations: append, never edit past entries.
 COLUMN_MIGRATIONS = [
     ("001_appointment_columns", migration_001_appointment_columns),
@@ -1069,6 +1077,7 @@ COLUMN_MIGRATIONS = [
     ("029_waitlist_notifications", migration_029_waitlist_notifications),
     ("030_portal_settings_and_access_audit", migration_030_portal_settings_and_access_audit),
     ("031_slot_granularity", migration_031_slot_granularity),
+    ("032_follow_up_unit", migration_032_follow_up_unit),
 ]
 POST_CREATE_ALL_MIGRATIONS = [
     ("002_seed_appointment_types", migration_002_seed_appointment_types),

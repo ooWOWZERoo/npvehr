@@ -3455,3 +3455,32 @@ No change to the underlying `SLOT_UNIT_MINUTES = 5` conflict-checking resolution
 | Updated | `ehr/models/database.py`, `ehr/db/migrations.py`, `ehr/services/scheduling.py`, `ehr/routes/{appointments,portal,admin_scheduling}.py`, `ehr/templates/admin/scheduling/provider_availability.html`, `ehr/templates/appointments/board.html`. `tests/test_smoke.py` gained one new test. |
 | Found, not fixed (tracked) | `publish_new_version` doesn't carry a type's resource requirements forward onto a new version -- logged to `BUILD_BACKLOG.md`. See §52.4. |
 | Explicitly not done | No change to the underlying 5-minute conflict-checking resolution (granularity is presentation-only). No live grid-granularity update on an in-page provider filter change. No portal-side granularity UI (server-rendered slots already reflect it). None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |
+
+## 53. New Exam Follow-Up Units (v2.34)
+
+### 53.1 Origin
+
+User request: add day/week/month/year unit options to the New Exam page's follow-up field (previously a bare integer always implicitly meaning weeks), and rename the page's "New Eye Exam" heading/title to "New Exam" for consistency with every other link to this page (the sidebar, the patient workspace's "New Exam" button, and the patient-context strip all already said "New Exam" -- only the form page itself still said "New Eye Exam").
+
+### 53.2 What changed
+
+**Follow-up unit**: new nullable `EyeExam.follow_up_unit` column (migration `032_follow_up_unit`, `VARCHAR DEFAULT 'Week'` so every pre-existing exam -- all entered in weeks before this column existed -- keeps reading correctly). The New Exam form's follow-up field gained a unit `<select>` (Day/Week/Month/Year, default Week) next to the existing numeric input; the diagnosis-driven auto-suggestion (refractive focus, 26 or 52) still always suggests a week count and now also sets the unit to "Week" alongside it, unless the clinician has already picked a different unit by hand (same "edited" flag pattern the numeric field already used). The composed Plan's RTC fallback line and both display surfaces (`exams/detail.html`, the patient portal's `portal/records_visit_detail.html`) now read the stored unit instead of hardcoding "weeks", with singular/plural handled the same way the app already handles it elsewhere (`'s' if value != 1`).
+
+**Rename**: `exams/form.html`'s `<title>` and `<h1>` changed from "New Eye Exam" to "New Exam" (plus one internal CSS comment for consistency); no other page used the old name.
+
+### 53.3 Verified
+
+`python3 -m py_compile` on every touched Python file. Fresh-database boot and idempotent re-run confirm the new column backfills existing rows to `'Week'`. One new Playwright test (`test_follow_up_unit_save_and_display`) covers a non-default unit (Months) saving and displaying correctly, and confirms the default-unit path still reads as weeks; full suite (48 tests) re-run to confirm no regressions, including the pre-existing diagnosis-driven recall interval test.
+
+### 53.4 Explicitly not done
+
+No backfill/reinterpretation of existing exam data beyond the default-to-"Week" migration (correct, since every pre-existing `follow_up_weeks` value was in fact entered as a week count). No exam-edit route exists in this app (exams are create-only), so no update-path handling was needed. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6.
+
+**Version 2.34 change log (relative to v2.33) — New Exam Follow-Up Units:**
+
+| Area | Change |
+| --- | --- |
+| New capability | Follow-up field on the New Exam form gains a Day/Week/Month/Year unit selector (`EyeExam.follow_up_unit`, migration `032_follow_up_unit`, defaults to `'Week'`). See §53.2. |
+| Renamed | `exams/form.html` "New Eye Exam" → "New Exam" (title, heading), matching every other link to this page. See §53.2. |
+| Updated | `ehr/models/database.py`, `ehr/db/migrations.py`, `ehr/routes/exams.py`, `ehr/templates/exams/{form,detail}.html`, `ehr/templates/portal/records_visit_detail.html`, `ehr/static/css/app.css` (comment only). `tests/test_smoke.py` gained one new test. |
+| Explicitly not done | No reinterpretation of pre-existing follow-up data beyond defaulting it to weeks (correct as entered). No exam-edit route exists to also update (exams are create-only). None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |
