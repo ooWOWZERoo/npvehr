@@ -6,7 +6,8 @@ from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from ehr.models.database import (get_db, Patient, Appointment, EyeExam, Prescription, AppointmentStatus,
-    PatientDocument, Problem, ProblemAddendum, WaitlistEntry, Provider, AppointmentTypeVersion, AppointmentType)
+    PatientDocument, Problem, ProblemAddendum, WaitlistEntry, Provider, AppointmentTypeVersion, AppointmentType,
+    PatientInsurancePlan)
 from ehr.env_info import EHR_ENV
 from ehr.utils import patient_context, compute_age, display_name
 from ehr.auth.permissions import require_role, PATIENT_EDIT, ROLE_LABELS
@@ -363,7 +364,43 @@ def patient_recalls(request: Request, patient_id: int, db: Session = Depends(get
 def patient_insurance(request: Request, patient_id: int, db: Session = Depends(get_db)):
     p = _get_patient_or_404(db, patient_id)
     if not p: return HTMLResponse("Not found", status_code=404)
-    return templates.TemplateResponse(request, "patients/insurance_tab.html", _workspace_ctx(db, p, "insurance"))
+    ctx = _workspace_ctx(db, p, "insurance")
+    # Structured insurance plans (Phase 2 of the chief-complaint/CPT/billing-
+    # flow plan, BUILD_BACKLOG.md 0a) -- additive to the flat
+    # insurance_provider/insurance_id fields above; a patient can carry both
+    # an active vision and an active medical plan on file at once, which the
+    # two-flow billing preview's check-in suggestion reads.
+    ctx["insurance_plans"] = (db.query(PatientInsurancePlan)
+        .filter(PatientInsurancePlan.patient_id == patient_id)
+        .order_by(PatientInsurancePlan.is_active.desc(), PatientInsurancePlan.id.desc()).all())
+    return templates.TemplateResponse(request, "patients/insurance_tab.html", ctx)
+
+
+@router.post("/{patient_id}/insurance/plans", dependencies=[Depends(require_role(*PATIENT_EDIT))])
+def add_insurance_plan(request: Request, patient_id: int, plan_category: str = Form(...),
+    payer_name: str = Form(""), member_id: str = Form(""), group_number: str = Form(""),
+    csrf_token: str = Form(""), db: Session = Depends(get_db)):
+    csrf.verify_or_403(request.state.csrf_token, csrf_token)
+    p = _get_patient_or_404(db, patient_id)
+    if not p: return HTMLResponse("Not found", status_code=404)
+    if plan_category not in ("vision", "medical"):
+        return HTMLResponse("Invalid plan category.", status_code=400)
+    db.add(PatientInsurancePlan(patient_id=patient_id, plan_category=plan_category,
+        payer_name=payer_name or None, member_id=member_id or None, group_number=group_number or None))
+    db.commit()
+    return RedirectResponse(f"/patients/{patient_id}/insurance", status_code=303)
+
+
+@router.post("/{patient_id}/insurance/plans/{plan_id}/deactivate", dependencies=[Depends(require_role(*PATIENT_EDIT))])
+def deactivate_insurance_plan(request: Request, patient_id: int, plan_id: int,
+    csrf_token: str = Form(""), db: Session = Depends(get_db)):
+    csrf.verify_or_403(request.state.csrf_token, csrf_token)
+    plan = db.query(PatientInsurancePlan).filter(PatientInsurancePlan.id == plan_id,
+        PatientInsurancePlan.patient_id == patient_id).first()
+    if plan:
+        plan.is_active = False
+        db.commit()
+    return RedirectResponse(f"/patients/{patient_id}/insurance", status_code=303)
 
 
 @router.get("/{patient_id}/insurance/eligibility", response_class=HTMLResponse)

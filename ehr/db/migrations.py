@@ -1063,6 +1063,94 @@ def migration_033_exam_type_and_em_suggestions(conn):
                     "suggested_em_rationale", "em_code_confirmed"):
             _add_column_if_missing(conn, "eye_exams", col, "VARCHAR")
 
+def migration_034_cpt_and_visit_flow(conn):
+    """Phase 2 of the chief-complaint/CPT/billing-flow plan (BUILD_BACKLOG.md
+    0a): a narrow CPT-code catalog (`cpt_codes`, same "curated lookup, not a
+    real terminology server" posture already established for ICD-10), a
+    per-patient insurance-plan table (`patient_insurance_plans` -- a table,
+    not a single field, since a patient can carry both a vision and a
+    medical plan on file at once), the column finally linking `eye_exams`
+    back to the `appointments` row it came from, and the two-flow ('vision'/
+    'medical') billing-preview fields on `appointments`. Nothing here is
+    ever transmitted or submitted as a real claim -- this app has no
+    billing/claims infrastructure and remains explicitly not for use with
+    real patient data; see ehr.services.cpt_mapper for the read-only preview
+    this schema supports."""
+    if _table_exists(conn, "diagnostic_tests"):
+        _add_column_if_missing(conn, "diagnostic_tests", "cpt_code", "VARCHAR")
+    if _table_exists(conn, "eye_exams"):
+        _add_column_if_missing(conn, "eye_exams", "appointment_id", "INTEGER")
+    if _table_exists(conn, "appointments"):
+        _add_column_if_missing(conn, "appointments", "visit_flow", "VARCHAR")
+        _add_column_if_missing(conn, "appointments", "visit_flow_source", "VARCHAR DEFAULT 'automatic'")
+    conn.execute(text(f"""
+        CREATE TABLE IF NOT EXISTS cpt_codes (
+            id {_pk_ddl(conn)},
+            code VARCHAR NOT NULL UNIQUE,
+            description VARCHAR NOT NULL,
+            category VARCHAR NOT NULL,
+            active BOOLEAN DEFAULT TRUE
+        )
+    """))
+    conn.execute(text(f"""
+        CREATE TABLE IF NOT EXISTS patient_insurance_plans (
+            id {_pk_ddl(conn)},
+            patient_id INTEGER NOT NULL,
+            plan_category VARCHAR NOT NULL,
+            payer_name VARCHAR,
+            member_id VARCHAR,
+            group_number VARCHAR,
+            is_active BOOLEAN DEFAULT TRUE,
+            verified_at TIMESTAMP,
+            created_at TIMESTAMP
+        )
+    """))
+
+def migration_035_seed_cpt_codes(conn):
+    """Seeds the curated CPT catalog (`cpt_codes`) and statically maps each
+    existing `diagnostic_tests` row to a CPT code where one clearly applies
+    (left null for ERG and TearLab osmolarity -- neither has a single clean
+    CPT in this narrow, curated set; see ehr.services.cpt_mapper for the
+    documented ambiguities). Runs post-create_all/post-seed (like
+    migration_003_seed_diagnostic_tests) so `diagnostic_tests` rows already
+    exist to update; idempotent via `WHERE cpt_code IS NULL` guards and
+    ON CONFLICT-free existence checks."""
+    if not _table_exists(conn, "cpt_codes"):
+        return
+    existing = {r[0] for r in conn.execute(text("SELECT code FROM cpt_codes")).fetchall()}
+    codes = [
+        ("92004", "Comprehensive ophthalmological exam, new patient", "exam"),
+        ("92014", "Comprehensive ophthalmological exam, established patient", "exam"),
+        ("92012", "Intermediate ophthalmological exam, established patient", "exam"),
+        ("92015", "Refraction", "refraction"),
+        ("92133", "OCT, optic nerve", "testing"),
+        ("92134", "OCT, retina", "testing"),
+        ("92250", "Fundus photography", "testing"),
+        ("92083", "Visual field exam, extended", "testing"),
+        ("92025", "Corneal topography", "testing"),
+        ("76514", "Corneal pachymetry", "testing"),
+        ("92020", "Gonioscopy", "testing"),
+        ("76512", "B-scan ultrasound", "testing"),
+        ("76513", "Anterior segment ultrasound (UBM)", "testing"),
+        ("92132", "Anterior segment OCT", "testing"),
+        ("92285", "External ocular photography", "testing"),
+    ]
+    for code, description, category in codes:
+        if code in existing:
+            continue
+        conn.execute(text("INSERT INTO cpt_codes (code, description, category, active) "
+            "VALUES (:code, :description, :category, TRUE)"),
+            {"code": code, "description": description, "category": category})
+    if _table_exists(conn, "diagnostic_tests"):
+        # OCT's catalog row has no OD/OS-split ONH-vs-retina distinction, so
+        # this maps it to the more general-use retina code (92134) -- a
+        # documented simplification, not a claim that 92133 never applies.
+        test_cpt_map = {"OCT": "92134", "OPTOS": "92250", "VF": "92083",
+            "CORNEAL_ANALYZER": "92025", "MEIBOGRAPHY": "92285"}
+        for test_code, cpt in test_cpt_map.items():
+            conn.execute(text("UPDATE diagnostic_tests SET cpt_code = :cpt "
+                "WHERE code = :test_code AND cpt_code IS NULL"), {"cpt": cpt, "test_code": test_code})
+
 # Ordered list of (id, function). Adding new migrations: append, never edit past entries.
 COLUMN_MIGRATIONS = [
     ("001_appointment_columns", migration_001_appointment_columns),
@@ -1093,6 +1181,7 @@ COLUMN_MIGRATIONS = [
     ("031_slot_granularity", migration_031_slot_granularity),
     ("032_follow_up_unit", migration_032_follow_up_unit),
     ("033_exam_type_and_em_suggestions", migration_033_exam_type_and_em_suggestions),
+    ("034_cpt_and_visit_flow", migration_034_cpt_and_visit_flow),
 ]
 POST_CREATE_ALL_MIGRATIONS = [
     ("002_seed_appointment_types", migration_002_seed_appointment_types),
@@ -1100,6 +1189,7 @@ POST_CREATE_ALL_MIGRATIONS = [
     ("004_legacy_appointment_type", migration_004_legacy_appointment_type),
     ("005_backfill_legacy_appointments", migration_005_backfill_legacy_appointments),
     ("011_seed_resources_and_requirements", migration_011_seed_resources_and_requirements),
+    ("035_seed_cpt_codes", migration_035_seed_cpt_codes),
 ]
 
 def run_column_migrations(engine):

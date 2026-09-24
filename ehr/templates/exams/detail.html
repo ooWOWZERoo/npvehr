@@ -56,6 +56,40 @@
     {% endfor %}
   </div>
 </div>
+{% if cpt_summary %}
+<div class="card" style="margin-top:1rem">
+  <h3>Billing Preview <span style="font-weight:normal;color:var(--ink-muted);font-size:0.8rem">&mdash; staff reference only, not a submitted claim</span></h3>
+  {% if not cpt_summary.visit_flow %}
+  <p style="color:#b45309">This visit hasn't been checked in with a flow yet &mdash; <a href="/appointments/{{ exam.appointment_id }}">confirm on the appointment page</a> to see the full preview.</p>
+  {% elif cpt_summary.visit_flow == 'medical' %}
+  <div class="form-row cols-2">
+    <div>
+      <strong>Claim 1 &mdash; Medical Insurance{% if cpt_summary.medical_payer_name %} ({{ cpt_summary.medical_payer_name }}){% endif %}</strong>
+      <ul style="margin:0.4rem 0 0;padding-left:1.2rem">
+        {% if cpt_summary.em_code %}<li class="mono-data">{{ cpt_summary.em_code }} &mdash; E/M</li>{% endif %}
+        <li class="mono-data">{{ cpt_summary.exam_code.code }} &mdash; {{ cpt_summary.exam_code.description }}</li>
+        {% for t in cpt_summary.testing_codes %}<li class="mono-data">{{ t.code }} &mdash; {{ t.description }}</li>{% endfor %}
+      </ul>
+      {% if cpt_summary.diagnosis_codes %}<p style="margin-top:0.5rem;font-size:0.85rem"><strong>Dx:</strong> <span class="mono-data">{{ cpt_summary.diagnosis_codes|join(', ') }}</span></p>{% endif %}
+    </div>
+    <div>
+      <strong>Claim 2 &mdash; Patient Responsibility (ABN){% if cpt_summary.vision_payer_name %} / {{ cpt_summary.vision_payer_name }} on file{% endif %}</strong>
+      <ul style="margin:0.4rem 0 0;padding-left:1.2rem">
+        <li class="mono-data">{{ cpt_summary.refraction_code.code }} &mdash; {{ cpt_summary.refraction_code.description }} (non-covered under medical insurance)</li>
+      </ul>
+    </div>
+  </div>
+  {% else %}
+  <strong>Vision Plan{% if cpt_summary.vision_payer_name %} ({{ cpt_summary.vision_payer_name }}){% endif %}</strong>
+  <ul style="margin:0.4rem 0 0;padding-left:1.2rem">
+    <li class="mono-data">{{ cpt_summary.refraction_code.code }} &mdash; {{ cpt_summary.refraction_code.description }}</li>
+    <li class="mono-data">{{ cpt_summary.exam_code.code }} &mdash; {{ cpt_summary.exam_code.description }}</li>
+    {% for t in cpt_summary.testing_codes %}<li class="mono-data">{{ t.code }} &mdash; {{ t.description }}</li>{% endfor %}
+  </ul>
+  {% endif %}
+  <p style="color:var(--ink-muted);font-size:0.75rem;margin-top:0.75rem">Preview only &mdash; no claim has been filed or transmitted.</p>
+</div>
+{% endif %}
 <div class="detail-grid" style="margin-top:1rem">
   {% if exam.pupil_size_light_od or exam.pupil_size_light_os or exam.pupil_size_dark_od or exam.pupil_size_dark_os or exam.pupil_size_near_od or exam.pupil_size_near_os or exam.pupil_reactivity_od or exam.pupil_reactivity_os or exam.pupil_apd_finding or exam.pupil_notes %}
   <div class="card"><h3>Pupils</h3>

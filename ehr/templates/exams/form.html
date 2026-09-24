@@ -4,6 +4,7 @@
 <div class="page-header"><h1>New Exam</h1><a href="/patients/" class="btn btn-secondary">Cancel</a></div>
 <div class="card form-card">
   <form method="post" action="/exams/new">
+    {% if appointment_id %}<input type="hidden" name="appointment_id" value="{{ appointment_id }}">{% endif %}
     <div class="section-title">Visit Info</div>
     <div class="form-row cols-3">
       <div class="form-group"><label>Patient*</label>

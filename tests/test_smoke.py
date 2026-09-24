@@ -201,6 +201,90 @@ def test_chief_complaint_triage_and_em_suggestion(logged_in_page, live_server):
     assert "99212" in detail_text
 
 
+def test_cpt_mapping_and_two_flow_billing_preview(logged_in_page, live_server):
+    """Phase 2 of the chief-complaint/CPT/billing-flow plan (BUILD_BACKLOG.md
+    0a) -- a patient's structured insurance plans drive a check-in flow
+    suggestion (medical insurance on file -> 'medical', none -> 'vision'),
+    an exam started from that appointment inherits its appointment_id, and
+    the exam detail page renders the right split-invoice preview for each
+    flow: a Claim 1 (medical E/M + exam code)/Claim 2 (92015 to patient
+    responsibility) split for a medical visit, and a single bundled block
+    for a vision-plan visit. Everything renders as an explicit "not a
+    submitted claim" preview -- this app has no billing/claims
+    infrastructure and nothing here is ever transmitted."""
+    page = logged_in_page
+
+    events = page.request.get(live_server + "/appointments/feed.json?start=2020-01-01&end=2030-01-01").json()
+    assert len(events) >= 2
+    medical_appt_id = events[0]["id"]
+    vision_appt_id = events[1]["id"]
+
+    page.goto(live_server + f"/appointments/{medical_appt_id}")
+    patient_href = page.locator('dl.dl-grid a[href^="/patients/"]').first.get_attribute("href")
+    patient_id = re.search(r"/patients/(\d+)", patient_href).group(1)
+
+    # Add a medical insurance plan for this patient -- the check-in flow
+    # suggestion should immediately switch to 'medical'.
+    page.goto(live_server + f"/patients/{patient_id}/insurance")
+    page.select_option('select[name="plan_category"]', "medical")
+    page.fill('input[name="payer_name"]', "Medicare")
+    page.fill('input[name="member_id"]', "M12345")
+    page.locator('form[action$="/insurance/plans"] button[type="submit"]').click()
+    page.wait_for_url(re.compile(r"/insurance$"))
+    assert "Medicare" in page.locator(".card", has_text="Insurance Plans").inner_text()
+
+    page.goto(live_server + f"/appointments/{medical_appt_id}")
+    flow_select = page.locator('form[action$="/visit-flow"] select[name="visit_flow"]')
+    assert flow_select.input_value() == "medical"
+    page.locator('form[action$="/visit-flow"] button[type="submit"]').click()
+    page.wait_for_load_state("networkidle")
+
+    # Start an exam from this appointment -- appointment_id flows through as
+    # a hidden field and persists onto the created exam.
+    page.goto(live_server + f"/appointments/{medical_appt_id}")
+    exam_new_href = page.locator("a", has_text="Start Exam").get_attribute("href")
+    assert f"appointment_id={medical_appt_id}" in exam_new_href
+    page.goto(live_server + exam_new_href)
+    assert page.eval_on_selector('input[name="appointment_id"]', "el => el.value") == str(medical_appt_id)
+    page.fill("#chief_complaint", "annual exam")
+    page.locator('form[action="/exams/new"] button[type="submit"]', has_text="Save Exam").click()
+    page.wait_for_url(re.compile(r"/exams/\d+"))
+
+    billing_card = page.locator(".card", has_text="Billing Preview")
+    billing_text = billing_card.inner_text()
+    assert "Claim 1" in billing_text and "Medicare" in billing_text
+    assert "Claim 2" in billing_text and "92015" in billing_text
+    assert "not a submitted claim" in billing_text
+    assert "no claim has been filed or transmitted" in billing_text
+
+    # A second appointment for a patient with no insurance plans on file
+    # suggests 'vision' and renders the single bundled block.
+    page.goto(live_server + f"/appointments/{vision_appt_id}")
+    vision_flow_select = page.locator('form[action$="/visit-flow"] select[name="visit_flow"]')
+    assert vision_flow_select.input_value() == "vision"
+    page.locator('form[action$="/visit-flow"] button[type="submit"]').click()
+    page.wait_for_load_state("networkidle")
+
+    page.goto(live_server + f"/appointments/{vision_appt_id}")
+    exam_new_href2 = page.locator("a", has_text="Start Exam").get_attribute("href")
+    page.goto(live_server + exam_new_href2)
+    page.locator('form[action="/exams/new"] button[type="submit"]', has_text="Save Exam").click()
+    page.wait_for_url(re.compile(r"/exams/\d+"))
+    vision_billing_text = page.locator(".card", has_text="Billing Preview").inner_text()
+    assert "Vision Plan" in vision_billing_text
+    assert "Claim 1" not in vision_billing_text
+    assert "92015" in vision_billing_text
+
+    # An exam with no linked appointment (a walk-in entered directly) shows
+    # no billing preview at all -- backward compatible, nothing to compute
+    # a preview from.
+    page.goto(live_server + "/exams/new")
+    page.select_option('select[name="provider_id"]', index=1)
+    page.locator('form[action="/exams/new"] button[type="submit"]', has_text="Save Exam").click()
+    page.wait_for_url(re.compile(r"/exams/\d+"))
+    assert page.locator(".card", has_text="Billing Preview").count() == 0
+
+
 def test_visit_focus_toggle_shows_hides_assessment_sections(logged_in_page, live_server):
     """The Visit Focus checkboxes (ehr/templates/exams/form.html) are the one
     behavior curl-based route checks can't confirm -- this is real client-side

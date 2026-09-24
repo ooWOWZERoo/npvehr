@@ -9,6 +9,7 @@ from ehr.env_info import EHR_ENV
 from ehr.utils import patient_context
 from ehr.auth.permissions import require_role, EXAM_VIEW, EXAM_EDIT, ROLE_LABELS
 from ehr.auth import csrf
+from ehr.services import cpt_mapper
 
 router = APIRouter(prefix="/exams", tags=["exams"])
 templates = Jinja2Templates(directory="ehr/templates")
@@ -27,7 +28,7 @@ def _b(v):
     return {"Yes": True, "No": False}.get(v)
 
 @router.get("/new", response_class=HTMLResponse, dependencies=[Depends(require_role(*EXAM_EDIT))])
-def new_exam_form(request: Request, patient_id: int = None, db: Session = Depends(get_db)):
+def new_exam_form(request: Request, patient_id: int = None, appointment_id: int = None, db: Session = Depends(get_db)):
     ctx_patient = patient_context(db.query(Patient).filter(Patient.id == patient_id).first()) if patient_id else None
     # Active problems for the "Problems Addressed" checklist -- only meaningful
     # once a patient is already known (reached via the patient workspace's
@@ -39,7 +40,7 @@ def new_exam_form(request: Request, patient_id: int = None, db: Session = Depend
         "patients": db.query(Patient).order_by(Patient.last_name).all(),
         "providers": db.query(Provider).all(),
         "selected_patient_id": patient_id, "today": str(date.today()), "context_patient": ctx_patient,
-        "active_problems": active_problems})
+        "active_problems": active_problems, "appointment_id": appointment_id})
 
 @router.post("/new", dependencies=[Depends(require_role(*EXAM_EDIT))])
 async def create_exam(request: Request, db: Session = Depends(get_db)):
@@ -49,6 +50,7 @@ async def create_exam(request: Request, db: Session = Depends(get_db)):
     gl = lambda k: ", ".join(form.getlist(k))  # comma-join a multi-value (checkbox) field
     exam = EyeExam(
         patient_id=int(g("patient_id")), provider_id=int(g("provider_id")),
+        appointment_id=_i(g("appointment_id")),
         exam_date=g("exam_date"), chief_complaint=g("chief_complaint"),
         od_sc=g("od_sc"), os_sc=g("os_sc"), od_cc=g("od_cc"), os_cc=g("os_cc"),
         pupil_size_light_od=_f(g("pupil_size_light_od")), pupil_size_light_os=_f(g("pupil_size_light_os")),
@@ -195,5 +197,7 @@ def exam_detail(request: Request, exam_id: int, db: Session = Depends(get_db)):
     e = db.query(EyeExam).filter(EyeExam.id == exam_id).first()
     if not e: return HTMLResponse("Not found", status_code=404)
     problem_addenda = db.query(ProblemAddendum).filter(ProblemAddendum.exam_id == exam_id).all()
+    cpt_summary = cpt_mapper.compute_cpt_summary(db, e)
     return templates.TemplateResponse(request, "exams/detail.html",
-        {"exam": e, "context_patient": patient_context(e.patient), "problem_addenda": problem_addenda})
+        {"exam": e, "context_patient": patient_context(e.patient), "problem_addenda": problem_addenda,
+         "cpt_summary": cpt_summary})

@@ -80,6 +80,27 @@ class Patient(Base):
     prescriptions = relationship("Prescription", back_populates="patient", cascade="all, delete-orphan")
     documents = relationship("PatientDocument", back_populates="patient", cascade="all, delete-orphan")
     problems = relationship("Problem", back_populates="patient", cascade="all, delete-orphan")
+    insurance_plans = relationship("PatientInsurancePlan", back_populates="patient", cascade="all, delete-orphan")
+
+class PatientInsurancePlan(Base):
+    """A structured insurance plan on file for a patient (Phase 2 of the
+    chief-complaint/CPT/billing-flow plan, BUILD_BACKLOG.md 0a) -- a table,
+    not a single field on Patient, since the two-flow billing preview needs
+    a patient to be able to carry both a vision plan (VSP/EyeMed) and a
+    medical plan (Medicare/Aetna) on file simultaneously. Additive: the
+    existing flat Patient.insurance_provider/insurance_id fields are
+    untouched for backward compatibility."""
+    __tablename__ = "patient_insurance_plans"
+    id = Column(Integer, primary_key=True, index=True)
+    patient_id = Column(Integer, ForeignKey("patients.id"), nullable=False)
+    plan_category = Column(String, nullable=False)  # 'vision' | 'medical'
+    payer_name = Column(String)
+    member_id = Column(String)
+    group_number = Column(String)
+    is_active = Column(Boolean, default=True)
+    verified_at = Column(DateTime)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    patient = relationship("Patient", back_populates="insurance_plans")
 
 class PatientDocument(Base):
     """Generic per-patient document storage (BUILD_BACKLOG.md's Documents tab,
@@ -218,6 +239,14 @@ class Appointment(Base):
     # one of those routes.
     created_by_user_id = Column(Integer, ForeignKey("users.id"))
     updated_by_user_id = Column(Integer, ForeignKey("users.id"))
+    # Two-flow billing preview (Phase 2 of the chief-complaint/CPT/billing-flow
+    # plan, BUILD_BACKLOG.md 0a) -- 'vision' (routine commercial vision plan)
+    # or 'medical' (medical insurance, refraction billed separately to the
+    # patient). Nullable/None means undetermined (not yet checked in);
+    # decision support only, same as patient_relationship_source's
+    # 'automatic'/'manual_override' split.
+    visit_flow = Column(String)  # 'vision' | 'medical' | None
+    visit_flow_source = Column(String, default="automatic")  # 'automatic' | 'manual_override'
 
     patient = relationship("Patient", back_populates="appointments")
     provider = relationship("Provider", back_populates="appointments")
@@ -313,6 +342,27 @@ class DiagnosticTest(Base):
     counts_toward_color = Column(Boolean, default=True)
     default_duration_minutes = Column(Integer)
     display_order = Column(Integer, default=0)
+    # Billing-preview CPT mapping (Phase 2, BUILD_BACKLOG.md 0a) -- nullable,
+    # a static one-to-one mapping to `cpt_codes.code` seeded alongside this
+    # table; left null where no single CPT in the curated catalog cleanly
+    # covers the test (see ehr.services.cpt_mapper for the full mapping and
+    # its documented ambiguities). Decision support only, never billed.
+    cpt_code = Column(String)
+
+
+class CptCode(Base):
+    """A narrow, curated CPT-code catalog (Phase 2 of the chief-complaint/
+    CPT/billing-flow plan, BUILD_BACKLOG.md 0a) -- the same "hardcoded
+    lookup, not a real terminology server" posture already established for
+    ICD-10 (ehr.services.ap_composer). Exists purely for the on-screen
+    billing preview; this app has no billing/claims infrastructure and
+    nothing here is ever transmitted or submitted as a real claim."""
+    __tablename__ = "cpt_codes"
+    id = Column(Integer, primary_key=True, index=True)
+    code = Column(String, nullable=False, unique=True)
+    description = Column(String, nullable=False)
+    category = Column(String, nullable=False)  # 'exam' | 'refraction' | 'testing'
+    active = Column(Boolean, default=True)
 
 
 class AppointmentTest(Base):
@@ -671,6 +721,13 @@ class EyeExam(Base):
     id = Column(Integer, primary_key=True, index=True)
     patient_id = Column(Integer, ForeignKey("patients.id"), nullable=False)
     provider_id = Column(Integer, ForeignKey("providers.id"), nullable=False)
+    # Links this exam back to the scheduled visit it came from (Phase 2 of the
+    # chief-complaint/CPT/billing-flow plan, BUILD_BACKLOG.md 0a) -- previously
+    # EyeExam and Appointment were entirely unconnected. Nullable: an exam
+    # reached without going through an appointment (e.g. a walk-in entered
+    # directly) has no appointment to link, and every pre-existing exam
+    # predates this column.
+    appointment_id = Column(Integer, ForeignKey("appointments.id"))
     exam_date = Column(String, nullable=False)
     chief_complaint = Column(Text)
     od_sc = Column(String); os_sc = Column(String)
@@ -741,6 +798,7 @@ class EyeExam(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     patient = relationship("Patient", back_populates="eye_exams")
     provider = relationship("Provider", back_populates="eye_exams")
+    appointment = relationship("Appointment")
     refractions = relationship("Refraction", back_populates="exam", cascade="all, delete-orphan")
     prescriptions = relationship("Prescription", back_populates="exam")
     dry_eye_assessments = relationship("DryEyeAssessment", back_populates="exam", cascade="all, delete-orphan")
