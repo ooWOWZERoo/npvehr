@@ -708,15 +708,16 @@ function mentionsRxManagement(text) {
       antCodeEdited = false, deCodeEdited = false, examTypeConfirmedEdited = false, emCodeConfirmedEdited = false;
   diagnosisCodesEl.addEventListener('input', function () { diagnosisCodesEdited = true; });
   followUpWeeksEl.addEventListener('input', function () { followUpWeeksEdited = true; });
-  followUpUnitEl.addEventListener('change', function () { followUpUnitEdited = true; });
-  antCodeEl.addEventListener('input', function () { antCodeEdited = true; });
-  deCodeEl.addEventListener('input', function () { deCodeEdited = true; });
   // Both 'input' and 'change' listen here (not just 'change' like the plain
   // text-input edited flags above) -- a <select> fires 'input' before
   // 'change', and the generic refresh() wiring below listens for both on
   // this same element, so setting the flag only on 'change' would let an
   // 'input'-triggered refresh() run first and stomp the clinician's own
   // selection right back to the suggestion before 'change' ever fires.
+  followUpUnitEl.addEventListener('input', function () { followUpUnitEdited = true; });
+  followUpUnitEl.addEventListener('change', function () { followUpUnitEdited = true; });
+  antCodeEl.addEventListener('input', function () { antCodeEdited = true; });
+  deCodeEl.addEventListener('input', function () { deCodeEdited = true; });
   examTypeConfirmedEl.addEventListener('input', function () { examTypeConfirmedEdited = true; });
   examTypeConfirmedEl.addEventListener('change', function () { examTypeConfirmedEdited = true; });
   emCodeConfirmedEl.addEventListener('input', function () { emCodeConfirmedEdited = true; });

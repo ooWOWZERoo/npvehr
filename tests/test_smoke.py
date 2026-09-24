@@ -143,6 +143,37 @@ def test_follow_up_unit_save_and_display(logged_in_page, live_server):
     assert "2 weeks" in page.locator("dl.dl-grid").inner_text()
 
 
+def test_follow_up_unit_manual_selection_survives_auto_suggestion_refresh(logged_in_page, live_server):
+    """Regression test for a bug logged in BUILD_BACKLOG.md (found during the
+    Phase 1 chief-complaint/E/M work, v2.35): a <select> fires 'input' before
+    'change', and refresh()'s generic recompute wiring listens for both
+    events on every tracked field -- so #follow_up_unit's edited flag, set
+    only on 'change', let an 'input'-triggered refresh() run first and
+    silently revert a clinician's manual unit selection back to the
+    auto-suggested "Week" before 'change' ever fired. Fixed the same way the
+    newer #exam_type_confirmed/#em_code_confirmed fields already were: also
+    setting the edited flag on 'input'."""
+    page = logged_in_page
+    page.goto(live_server + "/exams/new")
+    weeks = page.locator("#follow_up_weeks")
+
+    # Trigger a non-empty auto-suggested weeks value (same setup as
+    # test_icd10_suggestion_and_diagnosis_driven_recall_interval above) so
+    # refresh()'s "keep the unit in sync with a fresh weeks suggestion"
+    # branch actually runs on every subsequent refresh.
+    page.locator('input[name="refractive_diagnosis"][value="Myopia"]').check()
+    page.locator('select[name="refractive_laterality"]').select_option("OU")
+    assert weeks.input_value() == "52"
+
+    page.locator("#follow_up_unit").select_option("Month")
+    assert page.locator("#follow_up_unit").input_value() == "Month"
+
+    # A further edit elsewhere re-runs refresh(); the manual unit selection
+    # above must still not be clobbered back to "Week".
+    page.locator('input[name="refractive_diagnosis"][value="Astigmatism"]').check()
+    assert page.locator("#follow_up_unit").input_value() == "Month"
+
+
 def test_chief_complaint_triage_and_em_suggestion(logged_in_page, live_server):
     """Chief-complaint keyword triage + MDM-based E/M-level suggestion
     (EyeExam.suggested_exam_type/exam_type_confirmed/suggested_em_code/
@@ -1380,24 +1411,44 @@ def test_slot_granularity_and_resource_conflict_reconciliation(logged_in_page, l
     # carries a resource requirement in its seed data. Book it for one
     # provider, then confirm a different provider's availability search
     # no longer offers that exact time (the resource, not the provider, is
-    # what's actually unavailable) -- and that booking it anyway is rejected
-    # with the same conflict message staff would see from the full form.
+    # what's actually unavailable).
     page.goto(live_server + "/appointments/new")
     resource_type_options = page.locator('select[name="appointment_type_version_id"] option').all()
     resource_type_version_id = next(o.get_attribute("value") for o in resource_type_options
                                      if "Contact Lens Evaluation" in (o.inner_text() or ""))
+    provider_options = page.locator('select[name="provider_id"] option').all()
+    booking_provider_id = provider_options[1].get_attribute("value")  # second provider
+    other_provider_id = provider_options[0].get_attribute("value")    # a different provider
+
+    # Pick a time actually free for BOTH providers on this date rather than a
+    # hardcoded 13:00 -- the seed data plants a demo appointment for one
+    # provider "tomorrow" (ehr/db/seed.py), which is exactly the kind of
+    # near-term date this search can land on, so a fixed time risks colliding
+    # with it. Needing it free for both also means the after-booking absence
+    # check below proves the room, not some unrelated conflict, is what changed.
+    page.goto(live_server +
+              f"/appointments/availability?provider_id={booking_provider_id}&appointment_type_version_id={resource_type_version_id}&relationship=established&date_str={target_date}")
+    booking_provider_times = set(page.locator(".slot-grid a").all_inner_texts())
+    page.goto(live_server +
+              f"/appointments/availability?provider_id={other_provider_id}&appointment_type_version_id={resource_type_version_id}&relationship=established&date_str={target_date}")
+    other_provider_times = set(page.locator(".slot-grid a").all_inner_texts())
+    common_times = booking_provider_times & other_provider_times
+    assert common_times
+    chosen_time_label = sorted(common_times)[0]
+    chosen_time_24h = datetime.strptime(chosen_time_label, "%I:%M %p").strftime("%H:%M")
+
+    page.goto(live_server + "/appointments/new")
     page.select_option('select[name="patient_id"]', index=0)
-    page.select_option('select[name="provider_id"]', index=1)  # second provider
+    page.select_option('select[name="provider_id"]', booking_provider_id)
     page.select_option('select[name="appointment_type_version_id"]', resource_type_version_id)
-    when = f"{target_date}T13:00"
-    page.fill("#scheduled_at", when)
+    page.fill("#scheduled_at", f"{target_date}T{chosen_time_24h}")
     page.locator('button[type="submit"]', has_text="Schedule Appointment").click()
     page.wait_for_url(re.compile(r"/appointments/\d+$"))
 
     page.goto(live_server +
-              f"/appointments/availability?provider_id=1&appointment_type_version_id={resource_type_version_id}&relationship=established&date_str={target_date}")
+              f"/appointments/availability?provider_id={other_provider_id}&appointment_type_version_id={resource_type_version_id}&relationship=established&date_str={target_date}")
     remaining_times = page.locator(".slot-grid a").all_inner_texts()
-    assert "01:00 PM" not in remaining_times
+    assert chosen_time_label not in remaining_times
 
 
 def test_publish_new_version_carries_resource_requirements_forward(logged_in_page, live_server):

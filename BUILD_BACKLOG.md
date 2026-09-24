@@ -1,6 +1,6 @@
 # New Path Vision EHR — Master Build Backlog
 
-**Status:** Living tracking document. **Baseline as of:** spec v2.39 / research doc v2.24 (2026-09-24).
+**Status:** Living tracking document. **Baseline as of:** spec v2.40 / research doc v2.24 (2026-09-24).
 
 ## Purpose and how to use this document
 
@@ -41,7 +41,7 @@ This consolidates every outstanding build item, investigation, and test scattere
 - [x] **Chief-complaint triage + E/M-level suggestion (Phase 1 of 4)** — user request describing a full optometry-EHR workflow (chief-complaint-driven exam-type triage, MDM-based E/M coding, CPT mapping + split billing across two patient flows, diagnostic-order tracking, and a chronic-disease look-back alert engine). None of the underlying billing/orders infrastructure existed; planned as 4 independently-shippable phases (see §0a below), of which this round builds Phase 1 only -- pure client-side decision support, never transmitted or submitted anywhere. **Done, v2.35** — see baseline spec §54.
 - [x] **CPT mapping + two-flow billing preview (Phase 2 of 4)** — curated CPT catalog + diagnostic-test mapping, a per-patient insurance-plan table (vision + medical can coexist), the `EyeExam`-to-`Appointment` link that never existed before, a check-in step selecting the billing flow, and a read-only split-invoice preview card. Still staff-facing decision support only -- no claim is ever generated or transmitted. **Done, v2.36** — see baseline spec §55.
 - [x] **Diagnostic order tracking (Phase 3 of 4)** — a real `DiagnosticOrder` lifecycle (`ordered → scheduled → in_progress → completed/cancelled`), wired to the Glaucoma dashboard's existing diagnostic-orders checkboxes, with a Pending Diagnostic Orders card and one-click Mark Complete/Cancel on the patient overview tab. **Done, v2.37** — see baseline spec §56.
-- [x] **Look-back & clinical alert engine (Phase 4 of 4)** — no new schema; ambient `.alert-warning`/`.alert-info` banners (never a blocking modal) for outstanding diagnostic orders and overdue chronic-condition testing (glaucoma, Plaquenil monitoring), each with one-click resolution, on the patient overview tab and New Exam form header. **This closes out the 4-phase chief-complaint/CPT/billing-flow plan.** **Done, v2.38** — see baseline spec §57. Pick up the follow-up refinements logged in §0a below, the `follow_up_unit` input/change edited-flag bug found in Phase 1, the Phase 3 real-vendor follow-up (a different "Phase 3", from the Calendar overhaul), patient self-registration, or another item from the sections below.
+- [x] **Look-back & clinical alert engine (Phase 4 of 4)** — no new schema; ambient `.alert-warning`/`.alert-info` banners (never a blocking modal) for outstanding diagnostic orders and overdue chronic-condition testing (glaucoma, Plaquenil monitoring), each with one-click resolution, on the patient overview tab and New Exam form header. **This closes out the 4-phase chief-complaint/CPT/billing-flow plan.** **Done, v2.38** — see baseline spec §57. Pick up the follow-up refinements logged in §0a below, the Phase 3 real-vendor follow-up (a different "Phase 3", from the Calendar overhaul), patient self-registration, or another item from the sections below.
 
 ### 0a. Chief-Complaint Triage, E/M Coding, CPT Mapping, Orders & Look-Back Alerts (user request, 2026-09-23) — closed out, v2.38
 
@@ -145,7 +145,7 @@ User asked for a deep-dive rethink of the calendar/scheduling UX against ten spe
 - [ ] Provider records cannot be managed in the application (no add/edit provider UI) — re-verify current truth (§18.2 item 3)
 - [ ] Prescription relationships not validated for patient/provider/exam consistency (§18.2 item 2)
 - [ ] Prism/base omitted from normal and printable prescription displays; contact-lens values omitted from normal prescription detail (§18.2 items 8-9) — re-verify against the v2.10 Lens Design & Follow-Up work, which may have already narrowed this
-- [ ] **`follow_up_unit` (v2.34) has the same latent edited-flag ordering bug fixed for the new suggestion fields in v2.35** (baseline spec §54.2): a `<select>` fires `input` before `change`, and the generic form-recompute wiring listens for both, so an edited-flag set only on `change` lets the `input`-triggered recompute fire first and silently revert a clinician's manual unit selection. Not yet triggered by any existing test (`follow_up_unit`'s own auto-suggestion only fires under narrow refractive-focus conditions), but the same fix (also set the flag on `input`) should be applied there too.
+- [x] **`follow_up_unit` (v2.34) has the same latent edited-flag ordering bug fixed for the new suggestion fields in v2.35** (baseline spec §54.2): a `<select>` fires `input` before `change`, and the generic form-recompute wiring listens for both, so an edited-flag set only on `change` lets the `input`-triggered recompute fire first and silently revert a clinician's manual unit selection. Fixed the same way (also set the flag on `input`); a new regression test confirms it (verified to fail without the fix). **Done, v2.40** — see baseline spec §59.
 
 ---
 

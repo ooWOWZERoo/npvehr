@@ -3656,3 +3656,32 @@ No admin UI added for viewing or editing resource requirements directly — requ
 | Bug fix | `publish_new_version` now copies `AppointmentTypeResourceRequirement` rows from the previous version onto every newly published version, mirroring the existing color-rules carry-forward in the same route — closing a gap where republishing a type silently dropped its room/resource requirement. See §58.2. |
 | Updated | `ehr/routes/admin_scheduling.py`. `tests/test_smoke.py` gained one new test and had an outdated comment (describing this exact gap) updated. |
 | Explicitly not done | No admin UI for viewing/editing resource requirements (still direct-DB-access only). No change to how requirements are created. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |
+
+## 59. `follow_up_unit` Edited-Flag Ordering Fix (v2.40)
+
+### 59.1 Origin
+
+Found and explicitly deferred during Phase 1 of the chief-complaint/E/M feature (baseline spec §54.2, v2.35): a `<select>` element fires its `input` event before its `change` event, and this form's generic "recompute on any edit" wiring listens for both events on every tracked field. The two new suggestion `<select>` fields added in that round (`#exam_type_confirmed`, `#em_code_confirmed`) set their edited flag on both events for exactly this reason. The pre-existing `#follow_up_unit` field (added in v2.34) had the identical structure but only set its edited flag on `change` — so selecting a non-default unit could be silently reverted back to "Week" by an `input`-triggered `refresh()` call before `change` ever fired, if `follow_up_weeks`' own auto-suggestion was active at the same time (`refresh()`'s "keep the unit in sync with a fresh weeks suggestion" branch, guarded by the same edited flag). At the time, this was logged as a known bug rather than fixed, since no existing test exercised the narrow condition needed to trigger it (a non-empty auto-suggested `follow_up_weeks` value, which only happens under specific Refractive-focus conditions) and it was out of scope for that round.
+
+### 59.2 What changed
+
+One-line fix in `ehr/templates/exams/form.html`: `followUpUnitEl.addEventListener('input', ...)` added alongside the pre-existing `change` listener, exactly matching the pattern already used for `#exam_type_confirmed`/`#em_code_confirmed`. No behavior changes for any other field.
+
+### 59.3 Verified
+
+`python3 -m py_compile` equivalent (Jinja template parse-check) on the touched template. New Playwright test `test_follow_up_unit_manual_selection_survives_auto_suggestion_refresh`: triggers a non-empty auto-suggested `follow_up_weeks` value (same setup as the pre-existing ICD-10/recall-interval test), manually selects a non-default follow-up unit, and confirms a further form edit that re-runs `refresh()` does not revert it. Confirmed this test fails without the fix (reverted the template change and re-ran the new test in isolation — failed as expected) and passes with it restored. Full suite (54 tests, up from 53) re-run to confirm no regressions.
+
+**An unrelated pre-existing test-fragility bug surfaced and fixed during this verification pass**: `test_slot_granularity_and_resource_conflict_reconciliation` (from the v2.33 slot/duration reconciliation round) hardcoded 13:00 for its resource-conflict booking. `ehr/db/seed.py` plants a demo appointment for one provider on a rolling "tomorrow," and this test's own target-date search can land on that same "tomorrow" -- when it does, the hardcoded 13:00 booking collides with the seed appointment and the test fails with a real provider-double-booking error, not the resource conflict it means to test. This was masked in most runs because other earlier tests in the shared suite usually consume enough of "tomorrow"'s slots to push the search to a later, seed-conflict-free date, so it only reproduced reliably in isolation or after this round's file changes shifted things slightly. Fixed the same way as the new `test_publish_new_version_carries_resource_requirements_forward` test in v2.39: pick a time slot actually free for both providers from the real availability results, rather than a fixed clock time.
+
+### 59.4 Explicitly not done
+
+No broader audit of every `<select>`-driven edited flag in this form for the same pattern beyond the three fields already known to need it (`follow_up_unit`, `exam_type_confirmed`, `em_code_confirmed`) — a wider sweep would be a separate, more thorough follow-up if any other such field is found. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6.
+
+**Version 2.40 change log (relative to v2.39) — `follow_up_unit` Edited-Flag Ordering Fix:**
+
+| Area | Change |
+| --- | --- |
+| Bug fix | `#follow_up_unit`'s edited flag now also sets on the `<select>`'s `input` event (not just `change`), matching the fix already applied to `#exam_type_confirmed`/`#em_code_confirmed` in v2.35 -- closes a gap where a manually selected follow-up unit could be silently reverted to "Week" by an in-flight auto-suggestion refresh. See §59.2. |
+| Test fix (found during verification) | `test_slot_granularity_and_resource_conflict_reconciliation`'s hardcoded 13:00 booking could collide with a seed-data demo appointment planted on a rolling "tomorrow," depending on which date its own search landed on -- fixed to pick an actually-free slot from the real availability results instead, same pattern as v2.39's new test. See §59.3. |
+| Updated | `ehr/templates/exams/form.html`. `tests/test_smoke.py` gained one new test (verified to fail without the fix) and had the pre-existing resource-conflict test's hardcoded booking time replaced with a dynamically discovered free slot. |
+| Explicitly not done | No wider audit of every `<select>`-driven edited flag in this form for the same pattern. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |
