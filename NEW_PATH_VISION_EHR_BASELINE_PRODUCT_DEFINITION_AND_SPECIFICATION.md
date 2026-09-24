@@ -3630,3 +3630,29 @@ No configurable/admin-managed rules matrix -- `CONDITION_PROFILES` is a small ha
 | Bug fix (caught pre-ship) | An interval-due alert and an outstanding-order alert for the same test would otherwise both show at once right after ordering it -- fixed by suppressing the interval-due check for any test with an order already outstanding. See §57.2. |
 | Updated | `ehr/routes/{exams,patients}.py`, `ehr/templates/exams/form.html`, `ehr/templates/patients/overview.html`. New `ehr/services/lookback_alerts.py`, `ehr/templates/patients/_lookback_alerts.html`. `tests/test_smoke.py` gained one new test. |
 | Explicitly not done | No configurable rules matrix (small hardcoded list, same convention as ICD-10/CPT). No background/scheduled evaluation. No profiles beyond glaucoma/Plaquenil (AMD/DR/keratoconus are a straightforward follow-up). No deep-linked "Order Now" action. This closes out the 4-phase plan (BUILD_BACKLOG.md 0a) started in v2.35. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |
+
+## 58. `publish_new_version` Resource-Requirements Carry-Forward Fix (v2.39)
+
+### 58.1 Origin
+
+Found while verifying the v2.33 slot/duration reconciliation round (BUILD_BACKLOG.md §6, cited from baseline spec §52.4): `publish_new_version` (`ehr/routes/admin_scheduling.py`) already carried a type's color rules forward onto a freshly published `AppointmentTypeVersion`, but left `AppointmentTypeResourceRequirement` rows attached to the now-inactive previous version — so republishing a type that needs a room or other resource (e.g. "Contact Lens Evaluation/Check," which requires the Contact Lens Fitting Room) silently dropped that requirement from the new version, and the double-booking prevention the requirement exists for was quietly bypassed for every appointment booked against it afterward. The backlog item was left open behind an explicit design question: should every republish always carry resource requirements forward (mirroring color rules), or is there a legitimate workflow for changing them at publish time that a blanket carry-forward would break?
+
+### 58.2 What changed
+
+Resolved the open design question by inspection rather than by assumption: there is no admin UI anywhere in this app — not on the type edit/publish form, not on the type detail page, not as a standalone resource-requirements editor — to view or edit an `AppointmentTypeResourceRequirement` row at all, at publish time or otherwise. With no existing workflow that depends on requirements resetting on republish, a blanket carry-forward has no competing behavior to protect, so it gets the exact same treatment already established for color rules immediately above it in the same route: right after the color-rules copy loop in `publish_new_version`, a new loop copies every `AppointmentTypeResourceRequirement` row from the previous version onto the newly published one (`resource_id`, `resource_pool_code`, `required`, `offset_minutes`, `duration_minutes`). No schema change — this is a same-shape carry-forward fix, not a new capability. Requirements are still only editable via direct DB access, same as before this fix and same as color rules; a dedicated resource-requirements editor UI remains a documented future item, not part of this fix.
+
+### 58.3 Verified
+
+`python3 -m py_compile` on `ehr/routes/admin_scheduling.py` and `tests/test_smoke.py`. No migration/idempotency check applies — no schema changed. New Playwright test `test_publish_new_version_carries_resource_requirements_forward`: republishes "Contact Lens Evaluation/Check" via the real admin edit form (filling only the required Change Reason field, exactly as a staff user would for an otherwise-unremarkable republish), then confirms the *new* version still enforces its Contact Lens Fitting Room requirement — booking that new version for one provider makes the identical time slot disappear from a different provider's availability search for that same new version, proving the requirement carried forward rather than being silently dropped. The pre-existing `test_slot_granularity_and_resource_conflict_reconciliation` test's comment explaining why it avoided republishing "Contact Lens Evaluation/Check" (to dodge this exact gap) was updated now that the gap is closed. Full Playwright suite (53 tests, up from 52) re-run to confirm no regressions.
+
+### 58.4 Explicitly not done
+
+No admin UI added for viewing or editing resource requirements directly — requirements are still only manageable via direct DB access, both before and after this fix; that remains a documented future item. No change to how requirements are *created* (still only at initial type creation, via seed data or direct DB access) — this fix only addresses what happens to *existing* requirements when a type is republished. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6.
+
+**Version 2.39 change log (relative to v2.38) — `publish_new_version` Resource-Requirements Carry-Forward Fix:**
+
+| Area | Change |
+| --- | --- |
+| Bug fix | `publish_new_version` now copies `AppointmentTypeResourceRequirement` rows from the previous version onto every newly published version, mirroring the existing color-rules carry-forward in the same route — closing a gap where republishing a type silently dropped its room/resource requirement. See §58.2. |
+| Updated | `ehr/routes/admin_scheduling.py`. `tests/test_smoke.py` gained one new test and had an outdated comment (describing this exact gap) updated. |
+| Explicitly not done | No admin UI for viewing/editing resource requirements (still direct-DB-access only). No change to how requirements are created. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |

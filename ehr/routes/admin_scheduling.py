@@ -5,7 +5,8 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from ehr.models.database import (get_db, AppointmentType, AppointmentTypeVersion, AppointmentTypeColorRule,
     DiagnosticTest, Resource, AvailabilityTemplate, AppointmentTypeAuditEvent, AppointmentAuditEvent, Appointment,
-    PracticeClosure, Provider, ProviderAvailabilityTemplate, PortalSettings, SchedulingSettings)
+    PracticeClosure, Provider, ProviderAvailabilityTemplate, PortalSettings, SchedulingSettings,
+    AppointmentTypeResourceRequirement)
 from ehr.services import scheduling as sched
 from ehr.env_info import EHR_ENV
 from ehr.auth.permissions import require_role, ADMIN_SCHEDULING_VIEW, ADMIN_SCHEDULING_EDIT, ROLE_LABELS
@@ -199,6 +200,17 @@ def publish_new_version(request: Request, type_id: int, internal_name: str = For
                 patient_relationship=r.patient_relationship, is_follow_up=r.is_follow_up,
                 minimum_countable_tests=r.minimum_countable_tests, maximum_countable_tests=r.maximum_countable_tests,
                 color=r.color, reason_code=r.reason_code, version=v))
+        # Carry forward resource requirements too (found missing while verifying
+        # the v2.33 slot/duration reconciliation round -- BUILD_BACKLOG.md §6).
+        # Same blanket-carry-forward treatment as color rules just above: there is
+        # no admin UI to view or edit a resource requirement at all, at publish
+        # time or otherwise, so there's no "legitimate workflow for changing them
+        # at publish time" a carry-forward could break -- leaving them behind was
+        # simply a bug, not an intentional reset point.
+        for req in prev.resource_requirements:
+            db.add(AppointmentTypeResourceRequirement(resource_id=req.resource_id,
+                resource_pool_code=req.resource_pool_code, required=req.required,
+                offset_minutes=req.offset_minutes, duration_minutes=req.duration_minutes, version=v))
         prev.active = False
     db.add(v); db.flush()
     db.add(AppointmentTypeAuditEvent(appointment_type_id=t.id, appointment_type_version_id=v.id,

@@ -1377,13 +1377,8 @@ def test_slot_granularity_and_resource_conflict_reconciliation(logged_in_page, l
     page.wait_for_load_state("networkidle")
 
     # Resource-conflict reconciliation: "Contact Lens Evaluation/Check"
-    # carries a resource requirement in its seed data and, unlike
-    # "Comprehensive Vision Exam" above, no other test in this file
-    # republishes it -- publish_new_version doesn't carry resource
-    # requirements forward onto a new version (a separate, pre-existing
-    # gap, out of scope here), so a type other tests keep republishing
-    # would no longer reliably have one by the time this runs. Book it for
-    # one provider, then confirm a different provider's availability search
+    # carries a resource requirement in its seed data. Book it for one
+    # provider, then confirm a different provider's availability search
     # no longer offers that exact time (the resource, not the provider, is
     # what's actually unavailable) -- and that booking it anyway is rejected
     # with the same conflict message staff would see from the full form.
@@ -1403,3 +1398,75 @@ def test_slot_granularity_and_resource_conflict_reconciliation(logged_in_page, l
               f"/appointments/availability?provider_id=1&appointment_type_version_id={resource_type_version_id}&relationship=established&date_str={target_date}")
     remaining_times = page.locator(".slot-grid a").all_inner_texts()
     assert "01:00 PM" not in remaining_times
+
+
+def test_publish_new_version_carries_resource_requirements_forward(logged_in_page, live_server):
+    """publish_new_version now copies AppointmentTypeResourceRequirement rows
+    forward onto the freshly published version (see the comment beside that
+    copy loop in admin_scheduling.py). Republish "Contact Lens Evaluation/Check"
+    -- which carries a Contact Lens Fitting Room requirement in its seed data --
+    and confirm the *new* version still enforces it: book the room for one
+    provider and confirm a different provider's availability search for that
+    same new version no longer offers that time."""
+    page = logged_in_page
+
+    page.goto(live_server + "/admin/scheduling/appointment-types")
+    row = page.locator("tr", has_text="Contact Lens Evaluation")
+    row.locator("a", has_text="Edit").click()
+    page.wait_for_load_state("networkidle")
+
+    page.fill('input[name="change_reason"]', "Regression test: confirm resource requirements carry forward")
+    page.locator('form button[type="submit"]', has_text="Publish").click()
+    page.wait_for_url(re.compile(r"/admin/scheduling/appointment-types/\d+$"))
+
+    page.goto(live_server + "/appointments/new")
+    new_type_options = page.locator('select[name="appointment_type_version_id"] option').all()
+    new_type_version_id = next(o.get_attribute("value") for o in new_type_options
+                                if "Contact Lens Evaluation" in (o.inner_text() or ""))
+    provider_options = page.locator('select[name="provider_id"] option').all()
+    booking_provider_id = provider_options[1].get_attribute("value")  # second provider
+    other_provider_id = provider_options[0].get_attribute("value")    # a different provider
+
+    # Search for a date/time actually free for BOTH providers right now
+    # (rather than a hardcoded time) -- this app's shared live_server has 34
+    # other tests' appointments already on the books by the time this one
+    # runs, so a fixed date/time risks colliding with a provider's own
+    # pre-existing appointment, not just the shared room. Needing it free for
+    # both providers also means the later "no longer offered" check proves
+    # the room, not some unrelated conflict, is what changed.
+    target_date, chosen_time_label = None, None
+    for weekday_offset in range(1, 60):
+        candidate = datetime.utcnow() + timedelta(days=weekday_offset)
+        if candidate.weekday() >= 5:
+            continue
+        candidate_str = candidate.strftime("%Y-%m-%d")
+        page.goto(live_server +
+                  f"/appointments/availability?provider_id={booking_provider_id}&appointment_type_version_id={new_type_version_id}&relationship=established&date_str={candidate_str}")
+        booking_provider_times = set(page.locator(".slot-grid a").all_inner_texts())
+        if len(booking_provider_times) <= 5:
+            continue
+        page.goto(live_server +
+                  f"/appointments/availability?provider_id={other_provider_id}&appointment_type_version_id={new_type_version_id}&relationship=established&date_str={candidate_str}")
+        other_provider_times = set(page.locator(".slot-grid a").all_inner_texts())
+        common_times = booking_provider_times & other_provider_times
+        if common_times:
+            target_date, chosen_time_label = candidate_str, sorted(common_times)[0]
+            break
+    assert target_date is not None and chosen_time_label is not None
+    chosen_time_24h = datetime.strptime(chosen_time_label, "%I:%M %p").strftime("%H:%M")
+
+    page.goto(live_server + "/appointments/new")
+    page.select_option('select[name="patient_id"]', index=0)
+    page.select_option('select[name="provider_id"]', booking_provider_id)
+    page.select_option('select[name="appointment_type_version_id"]', new_type_version_id)
+    page.fill("#scheduled_at", f"{target_date}T{chosen_time_24h}")
+    page.locator('button[type="submit"]', has_text="Schedule Appointment").click()
+    page.wait_for_url(re.compile(r"/appointments/\d+$"))
+
+    # The room, not the booking provider, is what's actually unavailable now --
+    # confirm a *different* provider's search for the same version/date no
+    # longer offers that exact time either.
+    page.goto(live_server +
+              f"/appointments/availability?provider_id={other_provider_id}&appointment_type_version_id={new_type_version_id}&relationship=established&date_str={target_date}")
+    remaining_times = page.locator(".slot-grid a").all_inner_texts()
+    assert chosen_time_label not in remaining_times
