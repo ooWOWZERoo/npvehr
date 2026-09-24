@@ -7,7 +7,8 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from ehr.models.database import (get_db, Patient, Appointment, EyeExam, Prescription, AppointmentStatus,
     PatientDocument, Problem, ProblemAddendum, WaitlistEntry, Provider, AppointmentTypeVersion, AppointmentType,
-    PatientInsurancePlan)
+    PatientInsurancePlan, DiagnosticOrder)
+from ehr.services import diagnostic_orders as diag_orders
 from ehr.env_info import EHR_ENV
 from ehr.utils import patient_context, compute_age, display_name
 from ehr.auth.permissions import require_role, PATIENT_EDIT, ROLE_LABELS
@@ -219,11 +220,18 @@ def patient_detail(request: Request, patient_id: int, db: Session = Depends(get_
                     .order_by(Appointment.scheduled_at.desc()).limit(5).all())
     recent_exams = sorted(p.eye_exams, key=lambda e: e.exam_date or "", reverse=True)[:5]
     recent_rx = sorted(p.prescriptions, key=lambda r: r.issue_date or "", reverse=True)[:5]
+    # Pending diagnostic orders (Phase 3, BUILD_BACKLOG.md 0a) -- surfaced at
+    # check-in/chart-open time, same "ambient card, not a modal" posture the
+    # Phase 4 look-back alerts will extend.
+    pending_orders = (db.query(DiagnosticOrder).filter(DiagnosticOrder.patient_id == p.id,
+            DiagnosticOrder.status.in_(["ordered", "scheduled", "in_progress"]))
+        .order_by(DiagnosticOrder.ordered_at).all())
     ctx.update({
         "upcoming_appointments": upcoming,
         "recent_appointments": recent_appts,
         "recent_exams": recent_exams,
         "recent_prescriptions": recent_rx,
+        "pending_orders": pending_orders,
     })
     return templates.TemplateResponse(request, "patients/overview.html", ctx)
 
@@ -401,6 +409,44 @@ def deactivate_insurance_plan(request: Request, patient_id: int, plan_id: int,
         plan.is_active = False
         db.commit()
     return RedirectResponse(f"/patients/{patient_id}/insurance", status_code=303)
+
+
+@router.post("/{patient_id}/orders/{order_id}/complete", dependencies=[Depends(require_role(*PATIENT_EDIT))])
+def complete_diagnostic_order(request: Request, patient_id: int, order_id: int,
+    result_summary: str = Form(""), csrf_token: str = Form(""), db: Session = Depends(get_db)):
+    """One-click order resolution (Phase 3, BUILD_BACKLOG.md 0a): a
+    standalone "mark complete" action with an optional free-text
+    interpretation/note. Deliberately not deep-linked to the originating
+    Visit Focus dashboard section this round -- a generic DiagnosticTest
+    (e.g. TearLab, ERG) has no natural section to auto-expand, and building
+    that mapping table is speculative scope creep; logged to
+    BUILD_BACKLOG.md as a named future refinement."""
+    csrf.verify_or_403(request.state.csrf_token, csrf_token)
+    order = db.query(DiagnosticOrder).filter(DiagnosticOrder.id == order_id,
+        DiagnosticOrder.patient_id == patient_id).first()
+    if not order: return HTMLResponse("Not found", status_code=404)
+    try:
+        diag_orders.transition(order, diag_orders.COMPLETED,
+            completed_by_user_id=request.state.user.id, result_summary=result_summary or None)
+    except ValueError as e:
+        return HTMLResponse(str(e), status_code=400)
+    db.commit()
+    return RedirectResponse(f"/patients/{patient_id}", status_code=303)
+
+
+@router.post("/{patient_id}/orders/{order_id}/cancel", dependencies=[Depends(require_role(*PATIENT_EDIT))])
+def cancel_diagnostic_order(request: Request, patient_id: int, order_id: int,
+    cancelled_reason: str = Form(""), csrf_token: str = Form(""), db: Session = Depends(get_db)):
+    csrf.verify_or_403(request.state.csrf_token, csrf_token)
+    order = db.query(DiagnosticOrder).filter(DiagnosticOrder.id == order_id,
+        DiagnosticOrder.patient_id == patient_id).first()
+    if not order: return HTMLResponse("Not found", status_code=404)
+    try:
+        diag_orders.transition(order, diag_orders.CANCELLED, cancelled_reason=cancelled_reason or None)
+    except ValueError as e:
+        return HTMLResponse(str(e), status_code=400)
+    db.commit()
+    return RedirectResponse(f"/patients/{patient_id}", status_code=303)
 
 
 @router.get("/{patient_id}/insurance/eligibility", response_class=HTMLResponse)

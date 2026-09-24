@@ -285,6 +285,51 @@ def test_cpt_mapping_and_two_flow_billing_preview(logged_in_page, live_server):
     assert page.locator(".card", has_text="Billing Preview").count() == 0
 
 
+def test_diagnostic_order_created_from_exam_and_resolved(logged_in_page, live_server):
+    """Phase 3 of the chief-complaint/CPT/billing-flow plan (BUILD_BACKLOG.md
+    0a) -- checking one of the Glaucoma dashboard's Diagnostic Orders
+    checkboxes creates a real, patient-scoped DiagnosticOrder row (not just
+    a free-text plan-line note), surfaced as a "Pending Diagnostic Orders"
+    card on the patient workspace overview; the composed Plan text and the
+    saved GlaucomaTracking.diagnostic_orders field both show the
+    human-readable label ("OCT RNFL") even though the checkbox's submitted
+    value is now a terse catalog code ("OCT") needed to create the order.
+    Covers both terminal actions: marking an order complete removes it from
+    the pending list, and cancelling one does too."""
+    page = logged_in_page
+    page.goto(live_server + "/exams/new")
+    page.select_option('select[name="provider_id"]', index=1)
+    page.locator('.focus-toggle[data-target="focus-glaucoma"]').check()
+    page.locator('input[name="gt_diagnostic_orders"][value="OCT"]').check()
+    page.locator('input[name="gt_diagnostic_orders"][value="GONIOSCOPY"]').check()
+
+    plan_text = page.eval_on_selector("#plan", "el => el.value")
+    assert "OCT RNFL" in plan_text and "Gonioscopy" in plan_text
+
+    page.locator('form[action="/exams/new"] button[type="submit"]', has_text="Save Exam").click()
+    page.wait_for_url(re.compile(r"/exams/\d+"))
+    gt_card_text = page.locator(".card", has_text="Posterior Segment").inner_text()
+    assert "OCT RNFL" in gt_card_text and "Gonioscopy" in gt_card_text
+
+    patient_href = page.locator('dl.dl-grid a[href^="/patients/"]').first.get_attribute("href")
+    page.goto(live_server + patient_href)
+    pending_card = page.locator(".card", has_text="Pending Diagnostic Orders")
+    pending_text = pending_card.inner_text()
+    assert "ORDERED" in pending_text
+
+    # Complete one order -- it drops off the pending list, the other remains.
+    pending_card.locator('button', has_text="Mark Complete").first.click()
+    page.wait_for_load_state("networkidle")
+    remaining_card = page.locator(".card", has_text="Pending Diagnostic Orders")
+    assert remaining_card.count() == 1
+    assert remaining_card.locator("tr").count() == 2  # header row + one remaining order
+
+    # Cancel the last one -- the card disappears entirely once none are pending.
+    remaining_card.locator('button', has_text="Cancel").first.click()
+    page.wait_for_load_state("networkidle")
+    assert page.locator(".card", has_text="Pending Diagnostic Orders").count() == 0
+
+
 def test_visit_focus_toggle_shows_hides_assessment_sections(logged_in_page, live_server):
     """The Visit Focus checkboxes (ehr/templates/exams/form.html) are the one
     behavior curl-based route checks can't confirm -- this is real client-side

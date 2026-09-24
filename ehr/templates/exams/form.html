@@ -339,8 +339,8 @@
     </div>
     <div class="form-group"><label>Diagnostic Orders</label></div>
     <div class="test-chip-list">
-      {% for order in ['OCT RNFL', 'Humphrey VF 24-2', 'Gonioscopy', 'Pachymetry'] %}
-      <label class="test-chip"><input type="checkbox" name="gt_diagnostic_orders" value="{{ order }}"> {{ order }}</label>
+      {% for code, label in [('OCT', 'OCT RNFL'), ('VF', 'Humphrey VF 24-2'), ('GONIOSCOPY', 'Gonioscopy'), ('PACHYMETRY', 'Pachymetry')] %}
+      <label class="test-chip"><input type="checkbox" name="gt_diagnostic_orders" value="{{ code }}" data-label="{{ label }}"> {{ label }}</label>
       {% endfor %}
     </div>
     <div class="form-row cols-2">
@@ -744,6 +744,14 @@ function mentionsRxManagement(text) {
     return Array.prototype.map.call(
       document.querySelectorAll('input[name="' + name + '"]:checked'), function (el) { return el.value; });
   }
+  // Same as checkedValues(), but reads each checkbox's data-label instead of
+  // its value -- for fields (like gt_diagnostic_orders) whose value is now a
+  // terse catalog code (Phase 3, BUILD_BACKLOG.md 0a) rather than the
+  // human-readable text a composed Plan line should show.
+  function checkedDataLabels(name) {
+    return Array.prototype.map.call(
+      document.querySelectorAll('input[name="' + name + '"]:checked'), function (el) { return el.dataset.label || el.value; });
+  }
   function fieldValue(name) {
     var el = document.querySelector('[name="' + name + '"]');
     return el ? el.value : '';
@@ -1038,7 +1046,7 @@ function mentionsRxManagement(text) {
     }
     if (isFocusOn('focus-glaucoma')) {
       pushMeds(checkedValues('gt_prescribed_glaucoma_meds'));
-      checkedValues('gt_diagnostic_orders').forEach(function (o) { lines.push(planLine(style, 'Testing', o)); });
+      checkedDataLabels('gt_diagnostic_orders').forEach(function (o) { lines.push(planLine(style, 'Testing', o)); });
       pushRtc(fieldValue('gt_follow_up_interval'));
     }
     if (isFocusOn('focus-binocular')) {

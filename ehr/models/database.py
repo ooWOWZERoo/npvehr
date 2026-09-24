@@ -384,6 +384,53 @@ class AppointmentTest(Base):
     )
 
 
+class DiagnosticOrder(Base):
+    """A clinical diagnostic-test order (Phase 3 of the chief-complaint/CPT/
+    billing-flow plan, BUILD_BACKLOG.md 0a) -- a real, patient-scoped order
+    lifecycle (`ordered -> scheduled -> in_progress -> completed/cancelled`,
+    validated in ehr.services.diagnostic_orders), distinct from
+    `AppointmentTest` above: that table answers "does this specific calendar
+    appointment need scheduling-duration/color-rule credit for a test," a
+    scheduling concern `ehr.services.scheduling` depends on structurally.
+    This table answers "what has a clinician ordered for this patient, and
+    is it done yet" -- a clinical concern that outlives any one appointment
+    (an order can be placed today and fulfilled at a future visit). The two
+    intentionally coexist rather than one being retrofitted into the other.
+
+    `status` is a plain String, not a DB enum, matching this app's existing
+    convention (Appointment.status is the one exception, predating this
+    convention) of validating transitions in the service/route layer."""
+    __tablename__ = "diagnostic_orders"
+    id = Column(Integer, primary_key=True, index=True)
+    patient_id = Column(Integer, ForeignKey("patients.id"), nullable=False)
+    diagnostic_test_id = Column(Integer, ForeignKey("diagnostic_tests.id"), nullable=False)
+    ordered_by_user_id = Column(Integer, ForeignKey("users.id"))
+    ordered_exam_id = Column(Integer, ForeignKey("eye_exams.id"))  # nullable -- may originate off an exam
+    ordered_at = Column(DateTime, default=datetime.utcnow)
+    status = Column(String, default="ordered")  # ordered | scheduled | in_progress | completed | cancelled
+    scheduled_appointment_id = Column(Integer, ForeignKey("appointments.id"))
+    completed_at = Column(DateTime)
+    completed_exam_id = Column(Integer, ForeignKey("eye_exams.id"))
+    completed_by_user_id = Column(Integer, ForeignKey("users.id"))
+    result_summary = Column(Text)
+    cancelled_at = Column(DateTime)
+    cancelled_reason = Column(Text)
+    notes = Column(Text)
+
+    patient = relationship("Patient")
+    diagnostic_test = relationship("DiagnosticTest")
+    ordered_by = relationship("User", foreign_keys=[ordered_by_user_id])
+    ordered_exam = relationship("EyeExam", foreign_keys=[ordered_exam_id])
+    completed_exam = relationship("EyeExam", foreign_keys=[completed_exam_id])
+    completed_by = relationship("User", foreign_keys=[completed_by_user_id])
+    scheduled_appointment = relationship("Appointment", foreign_keys=[scheduled_appointment_id])
+
+    __table_args__ = (
+        Index("ix_diagnostic_orders_patient_status", "patient_id", "status"),
+        Index("ix_diagnostic_orders_test_status", "diagnostic_test_id", "status"),
+    )
+
+
 class Resource(Base):
     __tablename__ = "resources"
     id = Column(Integer, primary_key=True, index=True)

@@ -1151,6 +1151,69 @@ def migration_035_seed_cpt_codes(conn):
             conn.execute(text("UPDATE diagnostic_tests SET cpt_code = :cpt "
                 "WHERE code = :test_code AND cpt_code IS NULL"), {"cpt": cpt, "test_code": test_code})
 
+def migration_036_create_diagnostic_orders(conn):
+    """Phase 3 of the chief-complaint/CPT/billing-flow plan (BUILD_BACKLOG.md
+    0a): a real, patient-scoped diagnostic-order lifecycle table, distinct
+    from the scheduling-only `appointment_tests` (see DiagnosticOrder's own
+    docstring in ehr/models/database.py for why the two coexist rather than
+    one replacing the other). Indexed for the two lookups this phase and the
+    Phase 4 look-back engine both run: this patient's orders by status, and
+    orders for a given test by status."""
+    conn.execute(text(f"""
+        CREATE TABLE IF NOT EXISTS diagnostic_orders (
+            id {_pk_ddl(conn)},
+            patient_id INTEGER NOT NULL,
+            diagnostic_test_id INTEGER NOT NULL,
+            ordered_by_user_id INTEGER,
+            ordered_exam_id INTEGER,
+            ordered_at TIMESTAMP,
+            status VARCHAR DEFAULT 'ordered',
+            scheduled_appointment_id INTEGER,
+            completed_at TIMESTAMP,
+            completed_exam_id INTEGER,
+            completed_by_user_id INTEGER,
+            result_summary TEXT,
+            cancelled_at TIMESTAMP,
+            cancelled_reason TEXT,
+            notes TEXT
+        )
+    """))
+    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_diagnostic_orders_patient_status "
+        "ON diagnostic_orders (patient_id, status)"))
+    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_diagnostic_orders_test_status "
+        "ON diagnostic_orders (diagnostic_test_id, status)"))
+
+def migration_037_seed_gonioscopy_pachymetry(conn):
+    """The New Exam form's Glaucoma dashboard has offered "Gonioscopy" and
+    "Pachymetry" as diagnostic-order checkboxes since before this catalog
+    table's CPT mapping existed (v2.x), but neither test was ever seeded
+    into `diagnostic_tests` -- they were plain free-text plan-line values.
+    Phase 3 wires those checkboxes to create real DiagnosticOrder rows,
+    which requires a real catalog row (and thus a CPT code, per
+    migration_035) for each. Runs post-create_all/post-seed, same as
+    migration_003/035."""
+    if not _table_exists(conn, "diagnostic_tests"):
+        return
+    existing = {r[0] for r in conn.execute(text("SELECT code FROM diagnostic_tests")).fetchall()}
+    tests = [
+        ("GONIOSCOPY", "Gonioscopy", "GONIO", 1, True, 5, 80),
+        ("PACHYMETRY", "Pachymetry", "PACHY", 1, True, 5, 90),
+    ]
+    for code, name, abbr, active, counts, dur, order in tests:
+        if code in existing:
+            continue
+        conn.execute(text("""
+            INSERT INTO diagnostic_tests (code, display_name, calendar_abbreviation, active,
+                counts_toward_color, default_duration_minutes, display_order)
+            VALUES (:code, :name, :abbr, :active, :counts, :dur, :order)
+        """), {"code": code, "name": name, "abbr": abbr, "active": bool(active), "counts": bool(counts),
+                  "dur": dur, "order": order})
+    if _table_exists(conn, "cpt_codes"):
+        cpt_map = {"GONIOSCOPY": "92020", "PACHYMETRY": "76514"}
+        for test_code, cpt in cpt_map.items():
+            conn.execute(text("UPDATE diagnostic_tests SET cpt_code = :cpt "
+                "WHERE code = :test_code AND cpt_code IS NULL"), {"cpt": cpt, "test_code": test_code})
+
 # Ordered list of (id, function). Adding new migrations: append, never edit past entries.
 COLUMN_MIGRATIONS = [
     ("001_appointment_columns", migration_001_appointment_columns),
@@ -1182,6 +1245,7 @@ COLUMN_MIGRATIONS = [
     ("032_follow_up_unit", migration_032_follow_up_unit),
     ("033_exam_type_and_em_suggestions", migration_033_exam_type_and_em_suggestions),
     ("034_cpt_and_visit_flow", migration_034_cpt_and_visit_flow),
+    ("036_create_diagnostic_orders", migration_036_create_diagnostic_orders),
 ]
 POST_CREATE_ALL_MIGRATIONS = [
     ("002_seed_appointment_types", migration_002_seed_appointment_types),
@@ -1190,6 +1254,7 @@ POST_CREATE_ALL_MIGRATIONS = [
     ("005_backfill_legacy_appointments", migration_005_backfill_legacy_appointments),
     ("011_seed_resources_and_requirements", migration_011_seed_resources_and_requirements),
     ("035_seed_cpt_codes", migration_035_seed_cpt_codes),
+    ("037_seed_gonioscopy_pachymetry", migration_037_seed_gonioscopy_pachymetry),
 ]
 
 def run_column_migrations(engine):

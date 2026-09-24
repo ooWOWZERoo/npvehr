@@ -4,7 +4,8 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from ehr.models.database import (get_db, EyeExam, Refraction, DryEyeAssessment, AnteriorSegmentAssessment,
-    GlaucomaTracking, BinocularVisionAssessment, SurgeryComanagementTracking, Patient, Provider, Problem, ProblemAddendum)
+    GlaucomaTracking, BinocularVisionAssessment, SurgeryComanagementTracking, Patient, Provider, Problem, ProblemAddendum,
+    DiagnosticTest, DiagnosticOrder)
 from ehr.env_info import EHR_ENV
 from ehr.utils import patient_context
 from ehr.auth.permissions import require_role, EXAM_VIEW, EXAM_EDIT, ROLE_LABELS
@@ -26,6 +27,16 @@ def _b(v):
     # Tri-state: "Yes"/"No" dropdown, not a checkbox -- an unset finding is
     # clinically different from a confirmed-absent one.
     return {"Yes": True, "No": False}.get(v)
+
+# The Glaucoma dashboard's "Diagnostic Orders" checkboxes submit a
+# diagnostic_tests catalog code (Phase 3, BUILD_BACKLOG.md 0a -- needed to
+# create real DiagnosticOrder rows below), but GlaucomaTracking.diagnostic_orders
+# is a free-text display field on the exam detail page, so this maps back to
+# the human-readable label for that column (exams/form.html's checkboxes
+# carry the same mapping in their data-label attribute for the live Plan
+# preview -- kept in sync by hand, both are small and rarely change).
+GT_DIAGNOSTIC_ORDER_LABELS = {"OCT": "OCT RNFL", "VF": "Humphrey VF 24-2",
+    "GONIOSCOPY": "Gonioscopy", "PACHYMETRY": "Pachymetry"}
 
 @router.get("/new", response_class=HTMLResponse, dependencies=[Depends(require_role(*EXAM_EDIT))])
 def new_exam_form(request: Request, patient_id: int = None, appointment_id: int = None, db: Session = Depends(get_db)):
@@ -143,10 +154,26 @@ async def create_exam(request: Request, db: Session = Depends(get_db)):
         oct_rnfl_average_microns_od=_i(g("gt_oct_rnfl_average_microns_od")), oct_rnfl_average_microns_os=_i(g("gt_oct_rnfl_average_microns_os")),
         visual_field_md_db_od=_f(g("gt_visual_field_md_db_od")), visual_field_md_db_os=_f(g("gt_visual_field_md_db_os")),
         vf_reliability_od=g("gt_vf_reliability_od"), vf_reliability_os=g("gt_vf_reliability_os"),
-        prescribed_glaucoma_meds=gl("gt_prescribed_glaucoma_meds"), diagnostic_orders=gl("gt_diagnostic_orders"),
+        prescribed_glaucoma_meds=gl("gt_prescribed_glaucoma_meds"),
+        diagnostic_orders=", ".join(GT_DIAGNOSTIC_ORDER_LABELS.get(c, c) for c in form.getlist("gt_diagnostic_orders")),
         follow_up_interval=g("gt_follow_up_interval"), clinical_notes=g("gt_clinical_notes"))
     if any(v not in (None, "") for v in gt_fields.values()):
         db.add(GlaucomaTracking(exam_id=exam.id, **gt_fields))
+    # Diagnostic order tracking (Phase 3, BUILD_BACKLOG.md 0a): checking one
+    # of the Glaucoma dashboard's diagnostic-order boxes also creates a real
+    # DiagnosticOrder row (status='ordered'), patient-scoped so it persists
+    # and can be checked at a later visit -- not just a free-text plan-line
+    # note. Unknown codes (there shouldn't be any -- the form's checkboxes
+    # are the only source -- but a catalog row could theoretically be
+    # deactivated between page load and submit) are silently skipped rather
+    # than failing the whole exam save.
+    test_by_code = {t.code: t for t in db.query(DiagnosticTest)
+        .filter(DiagnosticTest.code.in_(form.getlist("gt_diagnostic_orders"))).all()}
+    for code in form.getlist("gt_diagnostic_orders"):
+        test = test_by_code.get(code)
+        if test:
+            db.add(DiagnosticOrder(patient_id=exam.patient_id, diagnostic_test_id=test.id,
+                ordered_by_user_id=request.state.user.id, ordered_exam_id=exam.id))
     # Binocular Vision & Pediatrics (Vision Therapy) assessment (5.4) -- same
     # all-optional rule.
     bv_fields = dict(
