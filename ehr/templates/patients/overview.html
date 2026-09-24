@@ -1,5 +1,7 @@
 {% extends "patients/_workspace.html" %}
 {% block wcontent %}
+{% set patient_id = patient.id %}
+{% include "patients/_lookback_alerts.html" %}
 <div class="card">
   <h3>Balances &amp; Credits</h3>
   <div class="stats-grid">
@@ -25,6 +27,29 @@
     exam-pricing/estimate system exists in this app.</p>
 </div>
 
+{% if pending_orders %}
+<div class="card" style="margin-top:1rem">
+  <h3>Pending Diagnostic Orders</h3>
+  <table class="exam-table">
+    <tr><th>Test</th><th>Status</th><th>Ordered</th><th></th></tr>
+    {% for o in pending_orders %}
+    <tr>
+      <td>{{ o.diagnostic_test.display_name }}</td>
+      <td><span class="badge badge-{{ o.status }}">{{ o.status.replace('_',' ') }}</span></td>
+      <td>{{ o.ordered_at.strftime('%m/%d/%Y') if o.ordered_at else '—' }}</td>
+      <td style="display:flex;gap:0.4rem">
+        <form method="post" action="/patients/{{ patient.id }}/orders/{{ o.id }}/complete" style="display:inline">
+          <button type="submit" class="btn btn-sm btn-primary">Mark Complete</button>
+        </form>
+        <form method="post" action="/patients/{{ patient.id }}/orders/{{ o.id }}/cancel" style="display:inline">
+          <button type="submit" class="btn btn-sm btn-secondary">Cancel</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endif %}
 <div class="detail-grid" style="margin-top:1rem">
   <div class="card">
     <div class="page-header" style="margin-bottom:0.75rem"><h3 style="margin:0">Appointments</h3><a href="/patients/{{ patient.id }}/appointments" class="btn btn-sm btn-secondary">View All</a></div>

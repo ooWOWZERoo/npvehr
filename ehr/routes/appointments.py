@@ -10,6 +10,7 @@ from ehr.models.database import (get_db, Appointment, Patient, Provider, Appoint
     Resource, WaitlistEntry, User, AppointmentReminder, WaitlistNotification)
 from ehr.services import scheduling as sched
 from ehr.services import notifications as notify
+from ehr.services import cpt_mapper
 from ehr.env_info import EHR_ENV, CRON_SECRET
 from ehr.utils import patient_context
 from ehr.auth.permissions import require_role, APPOINTMENT_EDIT, ROLE_LABELS
@@ -603,10 +604,36 @@ def appointment_detail(request: Request, appt_id: int, db: Session = Depends(get
                 db.query(WaitlistNotification.waitlist_entry_id)
                 .filter(WaitlistNotification.appointment_id == a.id, WaitlistNotification.status == "sent")
                 .all()}
+    # Two-flow billing preview (Phase 2, BUILD_BACKLOG.md 0a): suggested only
+    # when the appointment hasn't already had a flow set (either
+    # automatically or by a staff override) -- once set, the stored value is
+    # what the check-in card and the billing preview both use.
+    suggested_visit_flow = a.visit_flow or cpt_mapper.suggest_visit_flow(db, a.patient_id)
     return templates.TemplateResponse(request, "appointments/detail.html",
         {"appt": a, "statuses": list(AppointmentStatus), "audit_events": audit,
          "waitlist_matches": waitlist_matches, "notified_entry_ids": notified_entry_ids,
+         "suggested_visit_flow": suggested_visit_flow,
          "context_patient": patient_context(a.patient)})
+
+
+@router.post("/{appt_id}/visit-flow", dependencies=[Depends(require_role(*APPOINTMENT_EDIT))])
+def update_visit_flow(request: Request, appt_id: int, visit_flow: str = Form(...),
+    csrf_token: str = Form(""), db: Session = Depends(get_db)):
+    """Check-in step of the two-flow billing preview (Phase 2, BUILD_BACKLOG.md
+    0a): staff confirm or override which flow (vision plan vs. medical
+    insurance) this visit follows. Decision support only -- this never
+    submits or transmits anything, it just records which billing-preview
+    template the exam detail page should render."""
+    csrf.verify_or_403(request.state.csrf_token, csrf_token)
+    a = db.query(Appointment).filter(Appointment.id == appt_id).first()
+    if not a: return HTMLResponse("Not found", status_code=404)
+    if visit_flow not in ("vision", "medical"):
+        return HTMLResponse("Invalid visit flow.", status_code=400)
+    suggested = cpt_mapper.suggest_visit_flow(db, a.patient_id)
+    a.visit_flow = visit_flow
+    a.visit_flow_source = "automatic" if visit_flow == suggested else "manual_override"
+    db.commit()
+    return RedirectResponse(f"/appointments/{appt_id}", status_code=303)
 
 
 @router.get("/{appt_id}/edit", response_class=HTMLResponse)

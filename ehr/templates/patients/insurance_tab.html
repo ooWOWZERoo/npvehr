@@ -6,4 +6,40 @@
 </dl>
 <p style="margin-top:1rem"><a href="/patients/{{ patient.id }}/edit" class="btn btn-sm btn-secondary">Edit Insurance</a></p>
 </div>
+<div class="card" style="margin-top:1rem">
+  <h3>Insurance Plans <span style="font-weight:normal;color:var(--ink-muted);font-size:0.8rem">&mdash; feeds the two-flow billing preview's check-in suggestion; a patient can have both an active vision and an active medical plan on file</span></h3>
+  {% if insurance_plans %}
+  <table class="exam-table">
+    <tr><th>Category</th><th>Payer</th><th>Member ID</th><th>Group #</th><th>Status</th><th></th></tr>
+    {% for plan in insurance_plans %}
+    <tr>
+      <td>{{ plan.plan_category|capitalize }}</td>
+      <td>{{ plan.payer_name or '—' }}</td>
+      <td class="mono-data">{{ plan.member_id or '—' }}</td>
+      <td class="mono-data">{{ plan.group_number or '—' }}</td>
+      <td>{% if plan.is_active %}<span style="color:#166534;font-weight:600">Active</span>{% else %}<span style="color:var(--ink-muted)">Inactive</span>{% endif %}</td>
+      <td>{% if plan.is_active %}<form method="post" action="/patients/{{ patient.id }}/insurance/plans/{{ plan.id }}/deactivate" style="display:inline"><button type="submit" class="btn btn-sm btn-secondary">Deactivate</button></form>{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p style="color:var(--ink-muted)">No structured insurance plans on file yet.</p>
+  {% endif %}
+  <form method="post" action="/patients/{{ patient.id }}/insurance/plans" style="margin-top:1rem">
+    <div class="form-row cols-2">
+      <div class="form-group"><label>Category</label>
+        <select name="plan_category" required>
+          <option value="vision">Vision Plan</option>
+          <option value="medical">Medical Insurance</option>
+        </select>
+      </div>
+      <div class="form-group"><label>Payer Name</label><input name="payer_name" placeholder="VSP, EyeMed, Medicare, Aetna..."></div>
+    </div>
+    <div class="form-row cols-2">
+      <div class="form-group"><label>Member ID</label><input name="member_id"></div>
+      <div class="form-group"><label>Group #</label><input name="group_number"></div>
+    </div>
+    <button type="submit" class="btn btn-primary btn-sm">Add Plan</button>
+  </form>
+</div>
 {% endblock %}

@@ -4,11 +4,14 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from ehr.models.database import (get_db, EyeExam, Refraction, DryEyeAssessment, AnteriorSegmentAssessment,
-    GlaucomaTracking, BinocularVisionAssessment, SurgeryComanagementTracking, Patient, Provider, Problem, ProblemAddendum)
+    GlaucomaTracking, BinocularVisionAssessment, SurgeryComanagementTracking, Patient, Provider, Problem, ProblemAddendum,
+    DiagnosticTest, DiagnosticOrder)
 from ehr.env_info import EHR_ENV
 from ehr.utils import patient_context
 from ehr.auth.permissions import require_role, EXAM_VIEW, EXAM_EDIT, ROLE_LABELS
 from ehr.auth import csrf
+from ehr.services import cpt_mapper
+from ehr.services import lookback_alerts
 
 router = APIRouter(prefix="/exams", tags=["exams"])
 templates = Jinja2Templates(directory="ehr/templates")
@@ -26,8 +29,18 @@ def _b(v):
     # clinically different from a confirmed-absent one.
     return {"Yes": True, "No": False}.get(v)
 
+# The Glaucoma dashboard's "Diagnostic Orders" checkboxes submit a
+# diagnostic_tests catalog code (Phase 3, BUILD_BACKLOG.md 0a -- needed to
+# create real DiagnosticOrder rows below), but GlaucomaTracking.diagnostic_orders
+# is a free-text display field on the exam detail page, so this maps back to
+# the human-readable label for that column (exams/form.html's checkboxes
+# carry the same mapping in their data-label attribute for the live Plan
+# preview -- kept in sync by hand, both are small and rarely change).
+GT_DIAGNOSTIC_ORDER_LABELS = {"OCT": "OCT RNFL", "VF": "Humphrey VF 24-2",
+    "GONIOSCOPY": "Gonioscopy", "PACHYMETRY": "Pachymetry"}
+
 @router.get("/new", response_class=HTMLResponse, dependencies=[Depends(require_role(*EXAM_EDIT))])
-def new_exam_form(request: Request, patient_id: int = None, db: Session = Depends(get_db)):
+def new_exam_form(request: Request, patient_id: int = None, appointment_id: int = None, db: Session = Depends(get_db)):
     ctx_patient = patient_context(db.query(Patient).filter(Patient.id == patient_id).first()) if patient_id else None
     # Active problems for the "Problems Addressed" checklist -- only meaningful
     # once a patient is already known (reached via the patient workspace's
@@ -35,11 +48,17 @@ def new_exam_form(request: Request, patient_id: int = None, db: Session = Depend
     # already work elsewhere in this form).
     active_problems = (db.query(Problem).filter(Problem.patient_id == patient_id, Problem.status == "Active")
                         .order_by(Problem.diagnosis_name).all()) if patient_id else []
+    # Look-back & clinical alert engine (Phase 4, BUILD_BACKLOG.md 0a) --
+    # surfaced here too, not just the patient overview tab, since a clinician
+    # about to document a visit is exactly when an overdue chronic-disease
+    # test or a still-outstanding order is most actionable.
+    lookback_alerts_list = lookback_alerts.get_alerts_for_patient(db, patient_id) if patient_id else []
     return templates.TemplateResponse(request, "exams/form.html", {
         "patients": db.query(Patient).order_by(Patient.last_name).all(),
         "providers": db.query(Provider).all(),
         "selected_patient_id": patient_id, "today": str(date.today()), "context_patient": ctx_patient,
-        "active_problems": active_problems})
+        "active_problems": active_problems, "appointment_id": appointment_id,
+        "lookback_alerts": lookback_alerts_list})
 
 @router.post("/new", dependencies=[Depends(require_role(*EXAM_EDIT))])
 async def create_exam(request: Request, db: Session = Depends(get_db)):
@@ -49,6 +68,7 @@ async def create_exam(request: Request, db: Session = Depends(get_db)):
     gl = lambda k: ", ".join(form.getlist(k))  # comma-join a multi-value (checkbox) field
     exam = EyeExam(
         patient_id=int(g("patient_id")), provider_id=int(g("provider_id")),
+        appointment_id=_i(g("appointment_id")),
         exam_date=g("exam_date"), chief_complaint=g("chief_complaint"),
         od_sc=g("od_sc"), os_sc=g("os_sc"), od_cc=g("od_cc"), os_cc=g("os_cc"),
         pupil_size_light_od=_f(g("pupil_size_light_od")), pupil_size_light_os=_f(g("pupil_size_light_os")),
@@ -71,7 +91,10 @@ async def create_exam(request: Request, db: Session = Depends(get_db)):
         diagnosis_codes=g("diagnosis_codes"), follow_up_weeks=_i(g("follow_up_weeks")),
         follow_up_unit=g("follow_up_unit") or "Week",
         refractive_diagnosis=gl("refractive_diagnosis"), refractive_laterality=g("refractive_laterality"),
-        refractive_stability=g("refractive_stability"), refractive_secondary_findings=gl("refractive_secondary_findings"))
+        refractive_stability=g("refractive_stability"), refractive_secondary_findings=gl("refractive_secondary_findings"),
+        suggested_exam_type=g("suggested_exam_type") or None, exam_type_confirmed=g("exam_type_confirmed") or None,
+        suggested_em_code=g("suggested_em_code") or None, suggested_em_rationale=g("suggested_em_rationale") or None,
+        em_code_confirmed=g("em_code_confirmed") or None)
     db.add(exam); db.flush()
     # Three-step refraction matrix (IHE GEE): habitual (current glasses as worn
     # in), manifest (subjective refinement), cycloplegic (post-dilation). Each
@@ -138,10 +161,26 @@ async def create_exam(request: Request, db: Session = Depends(get_db)):
         oct_rnfl_average_microns_od=_i(g("gt_oct_rnfl_average_microns_od")), oct_rnfl_average_microns_os=_i(g("gt_oct_rnfl_average_microns_os")),
         visual_field_md_db_od=_f(g("gt_visual_field_md_db_od")), visual_field_md_db_os=_f(g("gt_visual_field_md_db_os")),
         vf_reliability_od=g("gt_vf_reliability_od"), vf_reliability_os=g("gt_vf_reliability_os"),
-        prescribed_glaucoma_meds=gl("gt_prescribed_glaucoma_meds"), diagnostic_orders=gl("gt_diagnostic_orders"),
+        prescribed_glaucoma_meds=gl("gt_prescribed_glaucoma_meds"),
+        diagnostic_orders=", ".join(GT_DIAGNOSTIC_ORDER_LABELS.get(c, c) for c in form.getlist("gt_diagnostic_orders")),
         follow_up_interval=g("gt_follow_up_interval"), clinical_notes=g("gt_clinical_notes"))
     if any(v not in (None, "") for v in gt_fields.values()):
         db.add(GlaucomaTracking(exam_id=exam.id, **gt_fields))
+    # Diagnostic order tracking (Phase 3, BUILD_BACKLOG.md 0a): checking one
+    # of the Glaucoma dashboard's diagnostic-order boxes also creates a real
+    # DiagnosticOrder row (status='ordered'), patient-scoped so it persists
+    # and can be checked at a later visit -- not just a free-text plan-line
+    # note. Unknown codes (there shouldn't be any -- the form's checkboxes
+    # are the only source -- but a catalog row could theoretically be
+    # deactivated between page load and submit) are silently skipped rather
+    # than failing the whole exam save.
+    test_by_code = {t.code: t for t in db.query(DiagnosticTest)
+        .filter(DiagnosticTest.code.in_(form.getlist("gt_diagnostic_orders"))).all()}
+    for code in form.getlist("gt_diagnostic_orders"):
+        test = test_by_code.get(code)
+        if test:
+            db.add(DiagnosticOrder(patient_id=exam.patient_id, diagnostic_test_id=test.id,
+                ordered_by_user_id=request.state.user.id, ordered_exam_id=exam.id))
     # Binocular Vision & Pediatrics (Vision Therapy) assessment (5.4) -- same
     # all-optional rule.
     bv_fields = dict(
@@ -192,5 +231,7 @@ def exam_detail(request: Request, exam_id: int, db: Session = Depends(get_db)):
     e = db.query(EyeExam).filter(EyeExam.id == exam_id).first()
     if not e: return HTMLResponse("Not found", status_code=404)
     problem_addenda = db.query(ProblemAddendum).filter(ProblemAddendum.exam_id == exam_id).all()
+    cpt_summary = cpt_mapper.compute_cpt_summary(db, e)
     return templates.TemplateResponse(request, "exams/detail.html",
-        {"exam": e, "context_patient": patient_context(e.patient), "problem_addenda": problem_addenda})
+        {"exam": e, "context_patient": patient_context(e.patient), "problem_addenda": problem_addenda,
+         "cpt_summary": cpt_summary})

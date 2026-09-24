@@ -6,7 +6,10 @@ from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from ehr.models.database import (get_db, Patient, Appointment, EyeExam, Prescription, AppointmentStatus,
-    PatientDocument, Problem, ProblemAddendum, WaitlistEntry, Provider, AppointmentTypeVersion, AppointmentType)
+    PatientDocument, Problem, ProblemAddendum, WaitlistEntry, Provider, AppointmentTypeVersion, AppointmentType,
+    PatientInsurancePlan, DiagnosticOrder, DiagnosticTest)
+from ehr.services import diagnostic_orders as diag_orders
+from ehr.services import lookback_alerts
 from ehr.env_info import EHR_ENV
 from ehr.utils import patient_context, compute_age, display_name
 from ehr.auth.permissions import require_role, PATIENT_EDIT, ROLE_LABELS
@@ -218,11 +221,22 @@ def patient_detail(request: Request, patient_id: int, db: Session = Depends(get_
                     .order_by(Appointment.scheduled_at.desc()).limit(5).all())
     recent_exams = sorted(p.eye_exams, key=lambda e: e.exam_date or "", reverse=True)[:5]
     recent_rx = sorted(p.prescriptions, key=lambda r: r.issue_date or "", reverse=True)[:5]
+    # Pending diagnostic orders (Phase 3, BUILD_BACKLOG.md 0a) -- surfaced at
+    # check-in/chart-open time, same "ambient card, not a modal" posture the
+    # Phase 4 look-back alerts will extend.
+    pending_orders = (db.query(DiagnosticOrder).filter(DiagnosticOrder.patient_id == p.id,
+            DiagnosticOrder.status.in_(["ordered", "scheduled", "in_progress"]))
+        .order_by(DiagnosticOrder.ordered_at).all())
     ctx.update({
         "upcoming_appointments": upcoming,
         "recent_appointments": recent_appts,
         "recent_exams": recent_exams,
         "recent_prescriptions": recent_rx,
+        "pending_orders": pending_orders,
+        # Look-back & clinical alert engine (Phase 4, BUILD_BACKLOG.md 0a) --
+        # computed fresh on every page load (no background job infra exists
+        # in this app beyond the one cron-secret reminder endpoint).
+        "lookback_alerts": lookback_alerts.get_alerts_for_patient(db, p.id),
     })
     return templates.TemplateResponse(request, "patients/overview.html", ctx)
 
@@ -363,7 +377,100 @@ def patient_recalls(request: Request, patient_id: int, db: Session = Depends(get
 def patient_insurance(request: Request, patient_id: int, db: Session = Depends(get_db)):
     p = _get_patient_or_404(db, patient_id)
     if not p: return HTMLResponse("Not found", status_code=404)
-    return templates.TemplateResponse(request, "patients/insurance_tab.html", _workspace_ctx(db, p, "insurance"))
+    ctx = _workspace_ctx(db, p, "insurance")
+    # Structured insurance plans (Phase 2 of the chief-complaint/CPT/billing-
+    # flow plan, BUILD_BACKLOG.md 0a) -- additive to the flat
+    # insurance_provider/insurance_id fields above; a patient can carry both
+    # an active vision and an active medical plan on file at once, which the
+    # two-flow billing preview's check-in suggestion reads.
+    ctx["insurance_plans"] = (db.query(PatientInsurancePlan)
+        .filter(PatientInsurancePlan.patient_id == patient_id)
+        .order_by(PatientInsurancePlan.is_active.desc(), PatientInsurancePlan.id.desc()).all())
+    return templates.TemplateResponse(request, "patients/insurance_tab.html", ctx)
+
+
+@router.post("/{patient_id}/insurance/plans", dependencies=[Depends(require_role(*PATIENT_EDIT))])
+def add_insurance_plan(request: Request, patient_id: int, plan_category: str = Form(...),
+    payer_name: str = Form(""), member_id: str = Form(""), group_number: str = Form(""),
+    csrf_token: str = Form(""), db: Session = Depends(get_db)):
+    csrf.verify_or_403(request.state.csrf_token, csrf_token)
+    p = _get_patient_or_404(db, patient_id)
+    if not p: return HTMLResponse("Not found", status_code=404)
+    if plan_category not in ("vision", "medical"):
+        return HTMLResponse("Invalid plan category.", status_code=400)
+    db.add(PatientInsurancePlan(patient_id=patient_id, plan_category=plan_category,
+        payer_name=payer_name or None, member_id=member_id or None, group_number=group_number or None))
+    db.commit()
+    return RedirectResponse(f"/patients/{patient_id}/insurance", status_code=303)
+
+
+@router.post("/{patient_id}/insurance/plans/{plan_id}/deactivate", dependencies=[Depends(require_role(*PATIENT_EDIT))])
+def deactivate_insurance_plan(request: Request, patient_id: int, plan_id: int,
+    csrf_token: str = Form(""), db: Session = Depends(get_db)):
+    csrf.verify_or_403(request.state.csrf_token, csrf_token)
+    plan = db.query(PatientInsurancePlan).filter(PatientInsurancePlan.id == plan_id,
+        PatientInsurancePlan.patient_id == patient_id).first()
+    if plan:
+        plan.is_active = False
+        db.commit()
+    return RedirectResponse(f"/patients/{patient_id}/insurance", status_code=303)
+
+
+@router.post("/{patient_id}/orders/{order_id}/complete", dependencies=[Depends(require_role(*PATIENT_EDIT))])
+def complete_diagnostic_order(request: Request, patient_id: int, order_id: int,
+    result_summary: str = Form(""), csrf_token: str = Form(""), db: Session = Depends(get_db)):
+    """One-click order resolution (Phase 3, BUILD_BACKLOG.md 0a): a
+    standalone "mark complete" action with an optional free-text
+    interpretation/note. Deliberately not deep-linked to the originating
+    Visit Focus dashboard section this round -- a generic DiagnosticTest
+    (e.g. TearLab, ERG) has no natural section to auto-expand, and building
+    that mapping table is speculative scope creep; logged to
+    BUILD_BACKLOG.md as a named future refinement."""
+    csrf.verify_or_403(request.state.csrf_token, csrf_token)
+    order = db.query(DiagnosticOrder).filter(DiagnosticOrder.id == order_id,
+        DiagnosticOrder.patient_id == patient_id).first()
+    if not order: return HTMLResponse("Not found", status_code=404)
+    try:
+        diag_orders.transition(order, diag_orders.COMPLETED,
+            completed_by_user_id=request.state.user.id, result_summary=result_summary or None)
+    except ValueError as e:
+        return HTMLResponse(str(e), status_code=400)
+    db.commit()
+    return RedirectResponse(f"/patients/{patient_id}", status_code=303)
+
+
+@router.post("/{patient_id}/orders/{order_id}/cancel", dependencies=[Depends(require_role(*PATIENT_EDIT))])
+def cancel_diagnostic_order(request: Request, patient_id: int, order_id: int,
+    cancelled_reason: str = Form(""), csrf_token: str = Form(""), db: Session = Depends(get_db)):
+    csrf.verify_or_403(request.state.csrf_token, csrf_token)
+    order = db.query(DiagnosticOrder).filter(DiagnosticOrder.id == order_id,
+        DiagnosticOrder.patient_id == patient_id).first()
+    if not order: return HTMLResponse("Not found", status_code=404)
+    try:
+        diag_orders.transition(order, diag_orders.CANCELLED, cancelled_reason=cancelled_reason or None)
+    except ValueError as e:
+        return HTMLResponse(str(e), status_code=400)
+    db.commit()
+    return RedirectResponse(f"/patients/{patient_id}", status_code=303)
+
+
+@router.post("/{patient_id}/orders/quick-order", dependencies=[Depends(require_role(*PATIENT_EDIT))])
+def quick_order_diagnostic_test(request: Request, patient_id: int, diagnostic_test_code: str = Form(...),
+    csrf_token: str = Form(""), db: Session = Depends(get_db)):
+    """One-click resolution for a Phase 4 (BUILD_BACKLOG.md 0a) look-back
+    "interval due" alert -- unlike an "outstanding order" alert, there's no
+    existing DiagnosticOrder to act on here, so this creates one directly
+    (status='ordered', no exam context -- DiagnosticOrder.ordered_exam_id is
+    nullable for exactly this "originates off an exam" case)."""
+    csrf.verify_or_403(request.state.csrf_token, csrf_token)
+    p = _get_patient_or_404(db, patient_id)
+    if not p: return HTMLResponse("Not found", status_code=404)
+    test = db.query(DiagnosticTest).filter(DiagnosticTest.code == diagnostic_test_code).first()
+    if not test: return HTMLResponse("Unknown diagnostic test.", status_code=400)
+    db.add(DiagnosticOrder(patient_id=patient_id, diagnostic_test_id=test.id,
+        ordered_by_user_id=request.state.user.id))
+    db.commit()
+    return RedirectResponse(f"/patients/{patient_id}", status_code=303)
 
 
 @router.get("/{patient_id}/insurance/eligibility", response_class=HTMLResponse)

@@ -143,6 +143,253 @@ def test_follow_up_unit_save_and_display(logged_in_page, live_server):
     assert "2 weeks" in page.locator("dl.dl-grid").inner_text()
 
 
+def test_chief_complaint_triage_and_em_suggestion(logged_in_page, live_server):
+    """Chief-complaint keyword triage + MDM-based E/M-level suggestion
+    (EyeExam.suggested_exam_type/exam_type_confirmed/suggested_em_code/
+    suggested_em_rationale/em_code_confirmed) -- decision support only,
+    never a submitted claim (this app has no billing/claims infrastructure
+    at all). Covers: a medical-sounding complaint suggests the Medical
+    Established exam type; an urgent complaint outranks a routine one in the
+    same text; two moderate MDM factors (2+ problems and Rx-management
+    language) together suggest 99214 with the right rationale; and a manual
+    override of either suggestion survives a further chief-complaint edit
+    (same edited-flag convention as every other auto-suggested field here)."""
+    page = logged_in_page
+    page.goto(live_server + "/exams/new")
+
+    exam_type = page.locator("#exam_type_confirmed")
+    em_code = page.locator("#em_code_confirmed")
+
+    page.fill("#chief_complaint", "red eye with irritation for 3 days")
+    assert exam_type.input_value() == "Medical Established (Intermediate)"
+
+    # An urgent symptom in the same text outranks the routine one.
+    page.fill("#chief_complaint", "here for annual exam, also sudden vision loss OS")
+    assert exam_type.input_value() == "Emergent/Urgent Medical"
+
+    # Manual override freezes despite a further chief-complaint edit.
+    exam_type.select_option("Routine Vision")
+    page.fill("#chief_complaint", "sudden vision loss, severe pain, red eye")
+    assert exam_type.input_value() == "Routine Vision"
+
+    # E/M suggestion: two moderate MDM factors (2 diagnoses + Rx-management
+    # language) together suggest 99214, not just one bumping to 99213.
+    page.goto(live_server + "/exams/new")
+    page.fill("#diagnosis_codes", "H52.13, H52.203")
+    page.fill("#chief_complaint", "refill latanoprost prescription")
+    assert em_code.input_value() == "99214"
+    assert "2 problems addressed" in page.locator("#em_suggestion_note").inner_text()
+    assert "Rx management noted" in page.locator("#em_suggestion_note").inner_text()
+
+    # A single moderate factor alone only reaches 99213, not 99214 --
+    # confirms the Rx-management hard trigger has real effect on its own
+    # without needing a second factor to also be moderate.
+    page.goto(live_server + "/exams/new")
+    page.fill("#chief_complaint", "refill latanoprost prescription")
+    assert em_code.input_value() == "99213"
+
+    # Manual override of the E/M code freezes despite a further edit.
+    em_code.select_option("99212")
+    page.fill("#chief_complaint", "refill latanoprost prescription, also red eye")
+    assert em_code.input_value() == "99212"
+
+    # Confirmed values save and display on the exam detail page.
+    page.select_option('select[name="provider_id"]', index=1)
+    page.locator('button[type="submit"]', has_text="Save Exam").click()
+    page.wait_for_url(re.compile(r"/exams/\d+"))
+    detail_text = page.locator("dl.dl-grid").first.inner_text()
+    assert "99212" in detail_text
+
+
+def test_cpt_mapping_and_two_flow_billing_preview(logged_in_page, live_server):
+    """Phase 2 of the chief-complaint/CPT/billing-flow plan (BUILD_BACKLOG.md
+    0a) -- a patient's structured insurance plans drive a check-in flow
+    suggestion (medical insurance on file -> 'medical', none -> 'vision'),
+    an exam started from that appointment inherits its appointment_id, and
+    the exam detail page renders the right split-invoice preview for each
+    flow: a Claim 1 (medical E/M + exam code)/Claim 2 (92015 to patient
+    responsibility) split for a medical visit, and a single bundled block
+    for a vision-plan visit. Everything renders as an explicit "not a
+    submitted claim" preview -- this app has no billing/claims
+    infrastructure and nothing here is ever transmitted."""
+    page = logged_in_page
+
+    events = page.request.get(live_server + "/appointments/feed.json?start=2020-01-01&end=2030-01-01").json()
+    assert len(events) >= 2
+    medical_appt_id = events[0]["id"]
+    vision_appt_id = events[1]["id"]
+
+    page.goto(live_server + f"/appointments/{medical_appt_id}")
+    patient_href = page.locator('dl.dl-grid a[href^="/patients/"]').first.get_attribute("href")
+    patient_id = re.search(r"/patients/(\d+)", patient_href).group(1)
+
+    # Add a medical insurance plan for this patient -- the check-in flow
+    # suggestion should immediately switch to 'medical'.
+    page.goto(live_server + f"/patients/{patient_id}/insurance")
+    page.select_option('select[name="plan_category"]', "medical")
+    page.fill('input[name="payer_name"]', "Medicare")
+    page.fill('input[name="member_id"]', "M12345")
+    page.locator('form[action$="/insurance/plans"] button[type="submit"]').click()
+    page.wait_for_url(re.compile(r"/insurance$"))
+    assert "Medicare" in page.locator(".card", has_text="Insurance Plans").inner_text()
+
+    page.goto(live_server + f"/appointments/{medical_appt_id}")
+    flow_select = page.locator('form[action$="/visit-flow"] select[name="visit_flow"]')
+    assert flow_select.input_value() == "medical"
+    page.locator('form[action$="/visit-flow"] button[type="submit"]').click()
+    page.wait_for_load_state("networkidle")
+
+    # Start an exam from this appointment -- appointment_id flows through as
+    # a hidden field and persists onto the created exam.
+    page.goto(live_server + f"/appointments/{medical_appt_id}")
+    exam_new_href = page.locator("a", has_text="Start Exam").get_attribute("href")
+    assert f"appointment_id={medical_appt_id}" in exam_new_href
+    page.goto(live_server + exam_new_href)
+    assert page.eval_on_selector('input[name="appointment_id"]', "el => el.value") == str(medical_appt_id)
+    page.fill("#chief_complaint", "annual exam")
+    page.locator('form[action="/exams/new"] button[type="submit"]', has_text="Save Exam").click()
+    page.wait_for_url(re.compile(r"/exams/\d+"))
+
+    billing_card = page.locator(".card", has_text="Billing Preview")
+    billing_text = billing_card.inner_text()
+    assert "Claim 1" in billing_text and "Medicare" in billing_text
+    assert "Claim 2" in billing_text and "92015" in billing_text
+    assert "not a submitted claim" in billing_text
+    assert "no claim has been filed or transmitted" in billing_text
+
+    # A second appointment for a patient with no insurance plans on file
+    # suggests 'vision' and renders the single bundled block.
+    page.goto(live_server + f"/appointments/{vision_appt_id}")
+    vision_flow_select = page.locator('form[action$="/visit-flow"] select[name="visit_flow"]')
+    assert vision_flow_select.input_value() == "vision"
+    page.locator('form[action$="/visit-flow"] button[type="submit"]').click()
+    page.wait_for_load_state("networkidle")
+
+    page.goto(live_server + f"/appointments/{vision_appt_id}")
+    exam_new_href2 = page.locator("a", has_text="Start Exam").get_attribute("href")
+    page.goto(live_server + exam_new_href2)
+    page.locator('form[action="/exams/new"] button[type="submit"]', has_text="Save Exam").click()
+    page.wait_for_url(re.compile(r"/exams/\d+"))
+    vision_billing_text = page.locator(".card", has_text="Billing Preview").inner_text()
+    assert "Vision Plan" in vision_billing_text
+    assert "Claim 1" not in vision_billing_text
+    assert "92015" in vision_billing_text
+
+    # An exam with no linked appointment (a walk-in entered directly) shows
+    # no billing preview at all -- backward compatible, nothing to compute
+    # a preview from.
+    page.goto(live_server + "/exams/new")
+    page.select_option('select[name="provider_id"]', index=1)
+    page.locator('form[action="/exams/new"] button[type="submit"]', has_text="Save Exam").click()
+    page.wait_for_url(re.compile(r"/exams/\d+"))
+    assert page.locator(".card", has_text="Billing Preview").count() == 0
+
+
+def test_diagnostic_order_created_from_exam_and_resolved(logged_in_page, live_server):
+    """Phase 3 of the chief-complaint/CPT/billing-flow plan (BUILD_BACKLOG.md
+    0a) -- checking one of the Glaucoma dashboard's Diagnostic Orders
+    checkboxes creates a real, patient-scoped DiagnosticOrder row (not just
+    a free-text plan-line note), surfaced as a "Pending Diagnostic Orders"
+    card on the patient workspace overview; the composed Plan text and the
+    saved GlaucomaTracking.diagnostic_orders field both show the
+    human-readable label ("OCT RNFL") even though the checkbox's submitted
+    value is now a terse catalog code ("OCT") needed to create the order.
+    Covers both terminal actions: marking an order complete removes it from
+    the pending list, and cancelling one does too."""
+    page = logged_in_page
+    page.goto(live_server + "/exams/new")
+    page.select_option('select[name="provider_id"]', index=1)
+    page.locator('.focus-toggle[data-target="focus-glaucoma"]').check()
+    page.locator('input[name="gt_diagnostic_orders"][value="OCT"]').check()
+    page.locator('input[name="gt_diagnostic_orders"][value="GONIOSCOPY"]').check()
+
+    plan_text = page.eval_on_selector("#plan", "el => el.value")
+    assert "OCT RNFL" in plan_text and "Gonioscopy" in plan_text
+
+    page.locator('form[action="/exams/new"] button[type="submit"]', has_text="Save Exam").click()
+    page.wait_for_url(re.compile(r"/exams/\d+"))
+    gt_card_text = page.locator(".card", has_text="Posterior Segment").inner_text()
+    assert "OCT RNFL" in gt_card_text and "Gonioscopy" in gt_card_text
+
+    patient_href = page.locator('dl.dl-grid a[href^="/patients/"]').first.get_attribute("href")
+    page.goto(live_server + patient_href)
+    pending_card = page.locator(".card", has_text="Pending Diagnostic Orders")
+    pending_text = pending_card.inner_text()
+    assert "ORDERED" in pending_text
+
+    # Complete one order -- it drops off the pending list, the other remains.
+    pending_card.locator('button', has_text="Mark Complete").first.click()
+    page.wait_for_load_state("networkidle")
+    remaining_card = page.locator(".card", has_text="Pending Diagnostic Orders")
+    assert remaining_card.count() == 1
+    assert remaining_card.locator("tr").count() == 2  # header row + one remaining order
+
+    # Cancel the last one -- the card disappears entirely once none are pending.
+    remaining_card.locator('button', has_text="Cancel").first.click()
+    page.wait_for_load_state("networkidle")
+    assert page.locator(".card", has_text="Pending Diagnostic Orders").count() == 0
+
+
+def test_lookback_alerts_interval_due_and_outstanding_order(logged_in_page, live_server):
+    """Look-back & clinical alert engine (Phase 4 of the chief-complaint/CPT/
+    billing-flow plan, BUILD_BACKLOG.md 0a) -- an Active glaucoma Problem
+    (H40.*) with no completed VF/OCT order shows an 'interval due' banner
+    (.alert-info) for each required test on both the patient overview and
+    the New Exam form; ordering one via its own "Order Now" button creates
+    a real DiagnosticOrder and swaps that specific banner for an
+    'outstanding order' one (.alert-warning) -- never both at once for the
+    same test, which would just be redundant noise; completing that order
+    clears both banners for it entirely, leaving only the test that's still
+    genuinely due. Creates its own brand-new patient rather than reusing any
+    seeded one -- "Brown" (alphabetically first by last name) is the default,
+    unselected patient on every other test's unqualified /exams/new visit
+    and so is the most cross-test-contaminated patient in this whole suite,
+    not a safe choice."""
+    page = logged_in_page
+    page.goto(live_server + "/patients/new")
+    page.fill('input[name="first_name"]', "Lookback")
+    page.fill('input[name="last_name"]', "Testpatient")
+    page.locator('button[type="submit"]', has_text="Create Patient").click()
+    page.wait_for_url(re.compile(r"/patients/\d+$"))
+    patient_id = page.url.rstrip("/").split("/")[-1]
+    page.locator('a[href$="/problems"]').click()
+    page.fill('input[name="diagnosis_name"]', "Primary Open Angle Glaucoma")
+    page.fill('input[name="icd10_code"]', "H40.1132")
+    page.locator('select[name="laterality"]').select_option("OU")
+    page.locator('button[type="submit"]', has_text="Add Problem").click()
+    page.wait_for_load_state("networkidle")
+
+    page.goto(live_server + f"/patients/{patient_id}")
+    info_alerts = page.locator(".alert-info")
+    assert info_alerts.count() == 2  # VF and OCT, both never completed
+    assert "Virtual Visual Field" in info_alerts.nth(0).inner_text()
+    assert "Optical Coherence Tomography" in info_alerts.nth(1).inner_text()
+
+    # Same alerts surface on the New Exam form for this patient too.
+    page.goto(live_server + f"/exams/new?patient_id={patient_id}")
+    assert page.locator(".alert-info").count() == 2
+
+    # Ordering the VF via its own alert button swaps that one alert for an
+    # outstanding-order warning -- never both for the same test at once.
+    page.goto(live_server + f"/patients/{patient_id}")
+    page.locator(".alert-info").first.locator("button", has_text="Order Now").click()
+    page.wait_for_load_state("networkidle")
+    assert page.locator(".alert-warning").count() == 1
+    assert "Virtual Visual Field" in page.locator(".alert-warning").first.inner_text()
+    remaining_info = page.locator(".alert-info")
+    assert remaining_info.count() == 1
+    assert "Optical Coherence Tomography" in remaining_info.first.inner_text()
+
+    # Completing that order clears its outstanding-order banner and, since
+    # it's now compliant, doesn't bring back an interval-due one either.
+    page.locator(".alert-warning").first.locator("button", has_text="Mark Complete").click()
+    page.wait_for_load_state("networkidle")
+    assert page.locator(".alert-warning").count() == 0
+    final_info = page.locator(".alert-info")
+    assert final_info.count() == 1
+    assert "Optical Coherence Tomography" in final_info.first.inner_text()
+
+
 def test_visit_focus_toggle_shows_hides_assessment_sections(logged_in_page, live_server):
     """The Visit Focus checkboxes (ehr/templates/exams/form.html) are the one
     behavior curl-based route checks can't confirm -- this is real client-side
