@@ -2,6 +2,7 @@
 {% block title %}New Exam &mdash; New Path Vision EHR{% endblock %}
 {% block content %}
 <div class="page-header"><h1>New Exam</h1><a href="/patients/" class="btn btn-secondary">Cancel</a></div>
+{% if selected_patient_id %}{% set patient_id = selected_patient_id %}{% include "patients/_lookback_alerts.html" %}{% endif %}
 <div class="card form-card">
   <form method="post" action="/exams/new">
     {% if appointment_id %}<input type="hidden" name="appointment_id" value="{{ appointment_id }}">{% endif %}

@@ -7,8 +7,9 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from ehr.models.database import (get_db, Patient, Appointment, EyeExam, Prescription, AppointmentStatus,
     PatientDocument, Problem, ProblemAddendum, WaitlistEntry, Provider, AppointmentTypeVersion, AppointmentType,
-    PatientInsurancePlan, DiagnosticOrder)
+    PatientInsurancePlan, DiagnosticOrder, DiagnosticTest)
 from ehr.services import diagnostic_orders as diag_orders
+from ehr.services import lookback_alerts
 from ehr.env_info import EHR_ENV
 from ehr.utils import patient_context, compute_age, display_name
 from ehr.auth.permissions import require_role, PATIENT_EDIT, ROLE_LABELS
@@ -232,6 +233,10 @@ def patient_detail(request: Request, patient_id: int, db: Session = Depends(get_
         "recent_exams": recent_exams,
         "recent_prescriptions": recent_rx,
         "pending_orders": pending_orders,
+        # Look-back & clinical alert engine (Phase 4, BUILD_BACKLOG.md 0a) --
+        # computed fresh on every page load (no background job infra exists
+        # in this app beyond the one cron-secret reminder endpoint).
+        "lookback_alerts": lookback_alerts.get_alerts_for_patient(db, p.id),
     })
     return templates.TemplateResponse(request, "patients/overview.html", ctx)
 
@@ -445,6 +450,25 @@ def cancel_diagnostic_order(request: Request, patient_id: int, order_id: int,
         diag_orders.transition(order, diag_orders.CANCELLED, cancelled_reason=cancelled_reason or None)
     except ValueError as e:
         return HTMLResponse(str(e), status_code=400)
+    db.commit()
+    return RedirectResponse(f"/patients/{patient_id}", status_code=303)
+
+
+@router.post("/{patient_id}/orders/quick-order", dependencies=[Depends(require_role(*PATIENT_EDIT))])
+def quick_order_diagnostic_test(request: Request, patient_id: int, diagnostic_test_code: str = Form(...),
+    csrf_token: str = Form(""), db: Session = Depends(get_db)):
+    """One-click resolution for a Phase 4 (BUILD_BACKLOG.md 0a) look-back
+    "interval due" alert -- unlike an "outstanding order" alert, there's no
+    existing DiagnosticOrder to act on here, so this creates one directly
+    (status='ordered', no exam context -- DiagnosticOrder.ordered_exam_id is
+    nullable for exactly this "originates off an exam" case)."""
+    csrf.verify_or_403(request.state.csrf_token, csrf_token)
+    p = _get_patient_or_404(db, patient_id)
+    if not p: return HTMLResponse("Not found", status_code=404)
+    test = db.query(DiagnosticTest).filter(DiagnosticTest.code == diagnostic_test_code).first()
+    if not test: return HTMLResponse("Unknown diagnostic test.", status_code=400)
+    db.add(DiagnosticOrder(patient_id=patient_id, diagnostic_test_id=test.id,
+        ordered_by_user_id=request.state.user.id))
     db.commit()
     return RedirectResponse(f"/patients/{patient_id}", status_code=303)
 

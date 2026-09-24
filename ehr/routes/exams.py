@@ -11,6 +11,7 @@ from ehr.utils import patient_context
 from ehr.auth.permissions import require_role, EXAM_VIEW, EXAM_EDIT, ROLE_LABELS
 from ehr.auth import csrf
 from ehr.services import cpt_mapper
+from ehr.services import lookback_alerts
 
 router = APIRouter(prefix="/exams", tags=["exams"])
 templates = Jinja2Templates(directory="ehr/templates")
@@ -47,11 +48,17 @@ def new_exam_form(request: Request, patient_id: int = None, appointment_id: int 
     # already work elsewhere in this form).
     active_problems = (db.query(Problem).filter(Problem.patient_id == patient_id, Problem.status == "Active")
                         .order_by(Problem.diagnosis_name).all()) if patient_id else []
+    # Look-back & clinical alert engine (Phase 4, BUILD_BACKLOG.md 0a) --
+    # surfaced here too, not just the patient overview tab, since a clinician
+    # about to document a visit is exactly when an overdue chronic-disease
+    # test or a still-outstanding order is most actionable.
+    lookback_alerts_list = lookback_alerts.get_alerts_for_patient(db, patient_id) if patient_id else []
     return templates.TemplateResponse(request, "exams/form.html", {
         "patients": db.query(Patient).order_by(Patient.last_name).all(),
         "providers": db.query(Provider).all(),
         "selected_patient_id": patient_id, "today": str(date.today()), "context_patient": ctx_patient,
-        "active_problems": active_problems, "appointment_id": appointment_id})
+        "active_problems": active_problems, "appointment_id": appointment_id,
+        "lookback_alerts": lookback_alerts_list})
 
 @router.post("/new", dependencies=[Depends(require_role(*EXAM_EDIT))])
 async def create_exam(request: Request, db: Session = Depends(get_db)):

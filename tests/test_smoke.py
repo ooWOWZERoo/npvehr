@@ -330,6 +330,66 @@ def test_diagnostic_order_created_from_exam_and_resolved(logged_in_page, live_se
     assert page.locator(".card", has_text="Pending Diagnostic Orders").count() == 0
 
 
+def test_lookback_alerts_interval_due_and_outstanding_order(logged_in_page, live_server):
+    """Look-back & clinical alert engine (Phase 4 of the chief-complaint/CPT/
+    billing-flow plan, BUILD_BACKLOG.md 0a) -- an Active glaucoma Problem
+    (H40.*) with no completed VF/OCT order shows an 'interval due' banner
+    (.alert-info) for each required test on both the patient overview and
+    the New Exam form; ordering one via its own "Order Now" button creates
+    a real DiagnosticOrder and swaps that specific banner for an
+    'outstanding order' one (.alert-warning) -- never both at once for the
+    same test, which would just be redundant noise; completing that order
+    clears both banners for it entirely, leaving only the test that's still
+    genuinely due. Creates its own brand-new patient rather than reusing any
+    seeded one -- "Brown" (alphabetically first by last name) is the default,
+    unselected patient on every other test's unqualified /exams/new visit
+    and so is the most cross-test-contaminated patient in this whole suite,
+    not a safe choice."""
+    page = logged_in_page
+    page.goto(live_server + "/patients/new")
+    page.fill('input[name="first_name"]', "Lookback")
+    page.fill('input[name="last_name"]', "Testpatient")
+    page.locator('button[type="submit"]', has_text="Create Patient").click()
+    page.wait_for_url(re.compile(r"/patients/\d+$"))
+    patient_id = page.url.rstrip("/").split("/")[-1]
+    page.locator('a[href$="/problems"]').click()
+    page.fill('input[name="diagnosis_name"]', "Primary Open Angle Glaucoma")
+    page.fill('input[name="icd10_code"]', "H40.1132")
+    page.locator('select[name="laterality"]').select_option("OU")
+    page.locator('button[type="submit"]', has_text="Add Problem").click()
+    page.wait_for_load_state("networkidle")
+
+    page.goto(live_server + f"/patients/{patient_id}")
+    info_alerts = page.locator(".alert-info")
+    assert info_alerts.count() == 2  # VF and OCT, both never completed
+    assert "Virtual Visual Field" in info_alerts.nth(0).inner_text()
+    assert "Optical Coherence Tomography" in info_alerts.nth(1).inner_text()
+
+    # Same alerts surface on the New Exam form for this patient too.
+    page.goto(live_server + f"/exams/new?patient_id={patient_id}")
+    assert page.locator(".alert-info").count() == 2
+
+    # Ordering the VF via its own alert button swaps that one alert for an
+    # outstanding-order warning -- never both for the same test at once.
+    page.goto(live_server + f"/patients/{patient_id}")
+    page.locator(".alert-info").first.locator("button", has_text="Order Now").click()
+    page.wait_for_load_state("networkidle")
+    assert page.locator(".alert-warning").count() == 1
+    assert "Virtual Visual Field" in page.locator(".alert-warning").first.inner_text()
+    remaining_info = page.locator(".alert-info")
+    assert remaining_info.count() == 1
+    assert "Optical Coherence Tomography" in remaining_info.first.inner_text()
+
+    # Completing that order clears its outstanding-order banner and, since
+    # it's now compliant, doesn't bring back an interval-due one either.
+    page.locator(".alert-warning").first.locator("button", has_text="Mark Complete").click()
+    page.wait_for_load_state("networkidle")
+    assert page.locator(".alert-warning").count() == 0
+    final_info = page.locator(".alert-info")
+    assert final_info.count() == 1
+    assert "Optical Coherence Tomography" in final_info.first.inner_text()
+
+
 def test_visit_focus_toggle_shows_hides_assessment_sections(logged_in_page, live_server):
     """The Visit Focus checkboxes (ehr/templates/exams/form.html) are the one
     behavior curl-based route checks can't confirm -- this is real client-side

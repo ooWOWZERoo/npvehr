@@ -1,5 +1,7 @@
 {% extends "patients/_workspace.html" %}
 {% block wcontent %}
+{% set patient_id = patient.id %}
+{% include "patients/_lookback_alerts.html" %}
 <div class="card">
   <h3>Balances &amp; Credits</h3>
   <div class="stats-grid">
