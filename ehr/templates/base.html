@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="csrf-token" content="{{ request.state.csrf_token }}">
   <title>{% block title %}New Path Vision EHR{% endblock %}</title>
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@600;700;800&display=swap">
@@ -19,6 +20,7 @@
         <span class="sidebar-brand-text">New Path Vision EHR</span>
       </div>
       <nav class="sidebar-nav" aria-label="Primary">
+        <div class="sidebar-section-heading">Clinical</div>
         <a href="/" class="sidebar-link{% if request.url.path == '/' %} active{% endif %}">
           <span class="sidebar-icon">&#127968;</span><span class="sidebar-label">Dashboard</span>
         </a>
@@ -31,6 +33,14 @@
             <a href="/patients/merge"{% if request.url.path == '/patients/merge' %} style="color:#fff;font-weight:600"{% endif %}>Merge Patient</a>
           </div>
         </div>
+        <a href="/exams/new" class="sidebar-link">
+          <span class="sidebar-icon">&#128065;</span><span class="sidebar-label">New Exam</span>
+        </a>
+        <a href="/prescriptions/new" class="sidebar-link">
+          <span class="sidebar-icon">&#128221;</span><span class="sidebar-label">New Rx</span>
+        </a>
+
+        <div class="sidebar-section-heading">Scheduling</div>
         <div class="sidebar-group{% if request.url.path.startswith('/appointments') %} open{% endif %}">
           <button type="button" class="sidebar-expand-toggle" data-group>
             <span class="sidebar-icon">&#128197;</span><span class="sidebar-label">Appointments</span><span class="sidebar-caret">&#9656;</span>
@@ -45,12 +55,53 @@
             <a href="/appointments/">List</a>
           </div>
         </div>
-        <a href="/exams/new" class="sidebar-link">
-          <span class="sidebar-icon">&#128065;</span><span class="sidebar-label">New Exam</span>
-        </a>
-        <a href="/prescriptions/new" class="sidebar-link">
-          <span class="sidebar-icon">&#128221;</span><span class="sidebar-label">New Rx</span>
-        </a>
+
+        <div class="sidebar-section-heading">Billing &amp; Claims</div>
+        <div class="sidebar-group{% if request.url.path.startswith('/claims') %} open{% endif %}">
+          <button type="button" class="sidebar-expand-toggle" data-group>
+            <span class="sidebar-icon">&#128203;</span><span class="sidebar-label">Claim Management</span><span class="sidebar-caret">&#9656;</span>
+          </button>
+          <div class="sidebar-subnav">
+            <a href="/claims/search">Claim Search</a>
+            <a href="/claims/billing">Billing Claims</a>
+            <a href="/claims/payments">Process Payments</a>
+            <a href="/claims/reports">Billing Reports</a>
+            <a href="/claims/statements">Batch Patient Statements</a>
+          </div>
+        </div>
+
+        <div class="sidebar-section-heading">Inventory &amp; Retail</div>
+        <div class="sidebar-group{% if request.url.path.startswith('/catalog') %} open{% endif %}">
+          <button type="button" class="sidebar-expand-toggle" data-group>
+            <span class="sidebar-icon">&#128194;</span><span class="sidebar-label">Catalog</span><span class="sidebar-caret">&#9656;</span>
+          </button>
+          <div class="sidebar-subnav">
+            <a href="/catalog/frames">Frames</a>
+            <a href="/catalog/eyeglass-lenses">Eyeglass Lenses</a>
+            <a href="/catalog/contact-lenses">Contact Lenses</a>
+            <a href="/catalog/accessories">Accessories</a>
+            <a href="/catalog/insurance-plans">Insurance Plans</a>
+          </div>
+        </div>
+        <div class="sidebar-group{% if request.url.path.startswith('/orders') %} open{% endif %}">
+          <button type="button" class="sidebar-expand-toggle" data-group>
+            <span class="sidebar-icon">&#128230;</span><span class="sidebar-label">Orders</span><span class="sidebar-caret">&#9656;</span>
+          </button>
+          <div class="sidebar-subnav">
+            <a href="/orders/">Order Management</a>
+          </div>
+        </div>
+        <div class="sidebar-group{% if request.url.path.startswith('/store-ops') %} open{% endif %}">
+          <button type="button" class="sidebar-expand-toggle" data-group>
+            <span class="sidebar-icon">&#127978;</span><span class="sidebar-label">Store Operations</span><span class="sidebar-caret">&#9656;</span>
+          </button>
+          <div class="sidebar-subnav">
+            <a href="/store-ops/daily-closing">Daily Closing</a>
+            <a href="/store-ops/change-payments">Change Payments</a>
+          </div>
+        </div>
+
+        <div class="sidebar-section-heading">Administration</div>
         <div class="sidebar-group{% if request.url.path.startswith('/admin/scheduling') %} open{% endif %}">
           <button type="button" class="sidebar-expand-toggle" data-group>
             <span class="sidebar-icon">&#9881;&#65039;</span><span class="sidebar-label">Administration</span><span class="sidebar-caret">&#9656;</span>
@@ -71,47 +122,6 @@
             {% if current_user and current_user.role == 'system_administrator' %}
             <a href="/admin/users">User Accounts</a>
             {% endif %}
-          </div>
-        </div>
-        <div class="sidebar-group{% if request.url.path.startswith('/store-ops') %} open{% endif %}">
-          <button type="button" class="sidebar-expand-toggle" data-group>
-            <span class="sidebar-icon">&#127978;</span><span class="sidebar-label">Store Operations</span><span class="sidebar-caret">&#9656;</span>
-          </button>
-          <div class="sidebar-subnav">
-            <a href="/store-ops/daily-closing">Daily Closing</a>
-            <a href="/store-ops/change-payments">Change Payments</a>
-          </div>
-        </div>
-        <div class="sidebar-group{% if request.url.path.startswith('/orders') %} open{% endif %}">
-          <button type="button" class="sidebar-expand-toggle" data-group>
-            <span class="sidebar-icon">&#128230;</span><span class="sidebar-label">Orders</span><span class="sidebar-caret">&#9656;</span>
-          </button>
-          <div class="sidebar-subnav">
-            <a href="/orders/">Order Management</a>
-          </div>
-        </div>
-        <div class="sidebar-group{% if request.url.path.startswith('/claims') %} open{% endif %}">
-          <button type="button" class="sidebar-expand-toggle" data-group>
-            <span class="sidebar-icon">&#128203;</span><span class="sidebar-label">Claim Management</span><span class="sidebar-caret">&#9656;</span>
-          </button>
-          <div class="sidebar-subnav">
-            <a href="/claims/search">Claim Search</a>
-            <a href="/claims/billing">Billing Claims</a>
-            <a href="/claims/payments">Process Payments</a>
-            <a href="/claims/reports">Billing Reports</a>
-            <a href="/claims/statements">Batch Patient Statements</a>
-          </div>
-        </div>
-        <div class="sidebar-group{% if request.url.path.startswith('/catalog') %} open{% endif %}">
-          <button type="button" class="sidebar-expand-toggle" data-group>
-            <span class="sidebar-icon">&#128194;</span><span class="sidebar-label">Catalog</span><span class="sidebar-caret">&#9656;</span>
-          </button>
-          <div class="sidebar-subnav">
-            <a href="/catalog/frames">Frames</a>
-            <a href="/catalog/eyeglass-lenses">Eyeglass Lenses</a>
-            <a href="/catalog/contact-lenses">Contact Lenses</a>
-            <a href="/catalog/accessories">Accessories</a>
-            <a href="/catalog/insurance-plans">Insurance Plans</a>
           </div>
         </div>
       </nav>

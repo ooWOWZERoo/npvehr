@@ -309,6 +309,8 @@ tr:hover td { background: var(--primary-soft); }
 .sidebar-subnav a { color: rgba(255,255,255,0.75); font-size: 0.8rem; padding: 0.35rem 0; white-space: nowrap; }
 .sidebar-subnav a:hover { color: #fff; text-decoration: none; }
 .sidebar-subnav-heading { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.06em; color: rgba(255,255,255,0.5); margin: 0.4rem 0 0.1rem; }
+.sidebar-section-heading { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.07em; color: rgba(255,255,255,0.45); font-weight: 600; padding: 0.7rem 0.9rem 0.25rem; }
+.sidebar-section-heading:first-child { padding-top: 0.3rem; }
 .sidebar-recent { padding: 0.1rem var(--space-2) 0.3rem 2.35rem; display: flex; flex-direction: column; gap: 0.15rem; }
 .sidebar-recent-heading { font-size: 0.63rem; text-transform: uppercase; color: rgba(255,255,255,0.45); letter-spacing: 0.06em; margin-top: 0.1rem; }
 .sidebar-recent a { font-size: 0.78rem; color: rgba(255,255,255,0.75); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
@@ -326,7 +328,8 @@ tr:hover td { background: var(--primary-soft); }
   .app-shell.sidebar-collapsed .sidebar-subnav,
   .app-shell.sidebar-collapsed .sidebar-recent,
   .app-shell.sidebar-collapsed .sidebar-static-sublinks,
-  .app-shell.sidebar-collapsed .sidebar-subnav-heading { display: none; }
+  .app-shell.sidebar-collapsed .sidebar-subnav-heading,
+  .app-shell.sidebar-collapsed .sidebar-section-heading { display: none; }
 }
 
 .topbar { background: var(--primary-strong); color: #fff; display: flex; align-items: center; gap: var(--space-4); padding: 0 var(--space-4); height: 56px; }
