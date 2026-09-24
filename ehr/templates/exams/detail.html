@@ -14,6 +14,8 @@
     <dt>Provider</dt><dd>Dr. {{ exam.provider.last_name }}</dd>
     <dt>Date</dt><dd>{{ exam.exam_date }}</dd>
     <dt>Chief Complaint</dt><dd>{{ exam.chief_complaint or '—' }}</dd>
+    <dt>Exam Type</dt><dd>{{ exam.exam_type_confirmed or '—' }}</dd>
+    <dt>E/M Code</dt><dd>{% if exam.em_code_confirmed %}<span class="mono-data">{{ exam.em_code_confirmed }}</span>{% if exam.suggested_em_rationale %} <span style="color:var(--ink-muted);font-size:0.85rem">({{ exam.suggested_em_rationale }})</span>{% endif %}{% else %}—{% endif %}</dd>
     <dt>IOP OD/OS</dt><dd>{{ exam.iop_od or '—' }} / {{ exam.iop_os or '—' }} mmHg</dd>
     <dt>Cover Test</dt><dd>{{ exam.cover_test or '—' }}</dd>
     <dt>Dx Codes</dt><dd class="mono-data">{{ exam.diagnosis_codes or '—' }}</dd>

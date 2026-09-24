@@ -71,7 +71,10 @@ async def create_exam(request: Request, db: Session = Depends(get_db)):
         diagnosis_codes=g("diagnosis_codes"), follow_up_weeks=_i(g("follow_up_weeks")),
         follow_up_unit=g("follow_up_unit") or "Week",
         refractive_diagnosis=gl("refractive_diagnosis"), refractive_laterality=g("refractive_laterality"),
-        refractive_stability=g("refractive_stability"), refractive_secondary_findings=gl("refractive_secondary_findings"))
+        refractive_stability=g("refractive_stability"), refractive_secondary_findings=gl("refractive_secondary_findings"),
+        suggested_exam_type=g("suggested_exam_type") or None, exam_type_confirmed=g("exam_type_confirmed") or None,
+        suggested_em_code=g("suggested_em_code") or None, suggested_em_rationale=g("suggested_em_rationale") or None,
+        em_code_confirmed=g("em_code_confirmed") or None)
     db.add(exam); db.flush()
     # Three-step refraction matrix (IHE GEE): habitual (current glasses as worn
     # in), manifest (subjective refinement), cycloplegic (post-dilation). Each

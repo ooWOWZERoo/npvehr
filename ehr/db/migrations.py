@@ -1049,6 +1049,20 @@ def migration_032_follow_up_unit(conn):
     if _table_exists(conn, "eye_exams"):
         _add_column_if_missing(conn, "eye_exams", "follow_up_unit", "VARCHAR DEFAULT 'Week'")
 
+def migration_033_exam_type_and_em_suggestions(conn):
+    """Chief-complaint-driven exam-type suggestion and MDM-based E/M-level
+    (99212/99213/99214) suggestion on the New Exam form -- decision support
+    only, never transmitted or submitted anywhere (this app has no billing/
+    claims infrastructure at all and is explicitly not for use with real
+    patient data). `suggested_*` holds what the client-side scan/scoring
+    produced; `*_confirmed` holds what the clinician actually accepted or
+    typed over it, kept as separate nullable columns so a confirmed value is
+    never silently recomputed out from under them."""
+    if _table_exists(conn, "eye_exams"):
+        for col in ("suggested_exam_type", "exam_type_confirmed", "suggested_em_code",
+                    "suggested_em_rationale", "em_code_confirmed"):
+            _add_column_if_missing(conn, "eye_exams", col, "VARCHAR")
+
 # Ordered list of (id, function). Adding new migrations: append, never edit past entries.
 COLUMN_MIGRATIONS = [
     ("001_appointment_columns", migration_001_appointment_columns),
@@ -1078,6 +1092,7 @@ COLUMN_MIGRATIONS = [
     ("030_portal_settings_and_access_audit", migration_030_portal_settings_and_access_audit),
     ("031_slot_granularity", migration_031_slot_granularity),
     ("032_follow_up_unit", migration_032_follow_up_unit),
+    ("033_exam_type_and_em_suggestions", migration_033_exam_type_and_em_suggestions),
 ]
 POST_CREATE_ALL_MIGRATIONS = [
     ("002_seed_appointment_types", migration_002_seed_appointment_types),

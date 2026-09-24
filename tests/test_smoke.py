@@ -143,6 +143,64 @@ def test_follow_up_unit_save_and_display(logged_in_page, live_server):
     assert "2 weeks" in page.locator("dl.dl-grid").inner_text()
 
 
+def test_chief_complaint_triage_and_em_suggestion(logged_in_page, live_server):
+    """Chief-complaint keyword triage + MDM-based E/M-level suggestion
+    (EyeExam.suggested_exam_type/exam_type_confirmed/suggested_em_code/
+    suggested_em_rationale/em_code_confirmed) -- decision support only,
+    never a submitted claim (this app has no billing/claims infrastructure
+    at all). Covers: a medical-sounding complaint suggests the Medical
+    Established exam type; an urgent complaint outranks a routine one in the
+    same text; two moderate MDM factors (2+ problems and Rx-management
+    language) together suggest 99214 with the right rationale; and a manual
+    override of either suggestion survives a further chief-complaint edit
+    (same edited-flag convention as every other auto-suggested field here)."""
+    page = logged_in_page
+    page.goto(live_server + "/exams/new")
+
+    exam_type = page.locator("#exam_type_confirmed")
+    em_code = page.locator("#em_code_confirmed")
+
+    page.fill("#chief_complaint", "red eye with irritation for 3 days")
+    assert exam_type.input_value() == "Medical Established (Intermediate)"
+
+    # An urgent symptom in the same text outranks the routine one.
+    page.fill("#chief_complaint", "here for annual exam, also sudden vision loss OS")
+    assert exam_type.input_value() == "Emergent/Urgent Medical"
+
+    # Manual override freezes despite a further chief-complaint edit.
+    exam_type.select_option("Routine Vision")
+    page.fill("#chief_complaint", "sudden vision loss, severe pain, red eye")
+    assert exam_type.input_value() == "Routine Vision"
+
+    # E/M suggestion: two moderate MDM factors (2 diagnoses + Rx-management
+    # language) together suggest 99214, not just one bumping to 99213.
+    page.goto(live_server + "/exams/new")
+    page.fill("#diagnosis_codes", "H52.13, H52.203")
+    page.fill("#chief_complaint", "refill latanoprost prescription")
+    assert em_code.input_value() == "99214"
+    assert "2 problems addressed" in page.locator("#em_suggestion_note").inner_text()
+    assert "Rx management noted" in page.locator("#em_suggestion_note").inner_text()
+
+    # A single moderate factor alone only reaches 99213, not 99214 --
+    # confirms the Rx-management hard trigger has real effect on its own
+    # without needing a second factor to also be moderate.
+    page.goto(live_server + "/exams/new")
+    page.fill("#chief_complaint", "refill latanoprost prescription")
+    assert em_code.input_value() == "99213"
+
+    # Manual override of the E/M code freezes despite a further edit.
+    em_code.select_option("99212")
+    page.fill("#chief_complaint", "refill latanoprost prescription, also red eye")
+    assert em_code.input_value() == "99212"
+
+    # Confirmed values save and display on the exam detail page.
+    page.select_option('select[name="provider_id"]', index=1)
+    page.locator('button[type="submit"]', has_text="Save Exam").click()
+    page.wait_for_url(re.compile(r"/exams/\d+"))
+    detail_text = page.locator("dl.dl-grid").first.inner_text()
+    assert "99212" in detail_text
+
+
 def test_visit_focus_toggle_shows_hides_assessment_sections(logged_in_page, live_server):
     """The Visit Focus checkboxes (ehr/templates/exams/form.html) are the one
     behavior curl-based route checks can't confirm -- this is real client-side

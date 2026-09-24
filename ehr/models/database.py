@@ -725,6 +725,19 @@ class EyeExam(Base):
     refractive_laterality = Column(String)  # OD / OS / OU
     refractive_stability = Column(String)  # Stable / Progressing / Improving
     refractive_secondary_findings = Column(String)  # comma-delimited: Amblyopia, Strabismus history, Cataract suspect, Suspect Glaucoma
+    # Chief-complaint-driven exam-type suggestion and MDM-based E/M-level
+    # suggestion (decision support only -- this app has no CPT/billing/claims
+    # infrastructure and is explicitly not for use with real patient data, so
+    # none of this is ever transmitted or submitted anywhere). `suggested_*`
+    # is what the client-side scan/scoring produced; `*_confirmed` is what the
+    # clinician actually accepted or typed over it -- kept separate so a
+    # confirmed value is never silently recomputed out from under them, same
+    # split already used for `follow_up_weeks`'s auto-suggest vs. manual edit.
+    suggested_exam_type = Column(String)
+    exam_type_confirmed = Column(String)
+    suggested_em_code = Column(String)
+    suggested_em_rationale = Column(String)
+    em_code_confirmed = Column(String)
     created_at = Column(DateTime, default=datetime.utcnow)
     patient = relationship("Patient", back_populates="eye_exams")
     provider = relationship("Provider", back_populates="eye_exams")
