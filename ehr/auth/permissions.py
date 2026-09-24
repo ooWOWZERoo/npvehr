@@ -46,11 +46,17 @@ APPOINTMENT_EDIT = set(PATIENT_EDIT)  # same staff who can create/edit patients 
 # JUDGMENT CALL: Front Desk has NO exam access at all per spec (view or edit) --
 # unlike Optician/Billing, who get exam VIEW only "for context". Technician
 # and Optometrist/Provider get full exam edit; Technician's edit access is
-# pretest/data-entry, since there is no exam-signing workflow in this app to
-# distinguish "finalized" from "editable" exams either way.
+# pretest/data-entry -- see EXAM_SIGN below for who can actually sign one.
 EXAM_VIEW = {SYSTEM_ADMINISTRATOR, PRACTICE_ADMINISTRATOR, TECHNICIAN, OPTOMETRIST_PROVIDER,
              OPTICIAN, BILLING_AND_CLAIMS, READ_ONLY_AUDITOR}
 EXAM_EDIT = {SYSTEM_ADMINISTRATOR, PRACTICE_ADMINISTRATOR, TECHNICIAN, OPTOMETRIST_PROVIDER}
+# Clinical Record Sign/Lock/Amend Lifecycle: narrower than EXAM_EDIT on
+# purpose -- signing is a clinical attestation ("I personally reviewed and
+# stand behind this record"), so only a provider (or a system administrator,
+# for the same override-everything reason USER_MANAGEMENT is admin-only) can
+# do it. Technician and Practice Administrator can enter/edit exam data but
+# never sign one themselves.
+EXAM_SIGN = {SYSTEM_ADMINISTRATOR, OPTOMETRIST_PROVIDER}
 
 # JUDGMENT CALL: Front Desk and Technician get NO prescription access at all --
 # prescriptions are not part of either role's listed scope.

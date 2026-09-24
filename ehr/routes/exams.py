@@ -1,14 +1,15 @@
-from datetime import date
-from fastapi import APIRouter, Depends, Request
+from datetime import date, datetime
+from fastapi import APIRouter, Depends, Request, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
-from ehr.models.database import (get_db, EyeExam, Refraction, DryEyeAssessment, AnteriorSegmentAssessment,
+from ehr.models.database import (get_db, EyeExam, EyeExamAddendum, Refraction, DryEyeAssessment, AnteriorSegmentAssessment,
     GlaucomaTracking, BinocularVisionAssessment, SurgeryComanagementTracking, Patient, Provider, Problem, ProblemAddendum,
     DiagnosticTest, DiagnosticOrder)
 from ehr.env_info import EHR_ENV
 from ehr.utils import patient_context
-from ehr.auth.permissions import require_role, EXAM_VIEW, EXAM_EDIT, ROLE_LABELS
+from ehr.auth.deps import get_current_user
+from ehr.auth.permissions import require_role, EXAM_VIEW, EXAM_EDIT, EXAM_SIGN, ROLE_LABELS
 from ehr.auth import csrf
 from ehr.services import cpt_mapper
 from ehr.services import lookback_alerts
@@ -235,3 +236,39 @@ def exam_detail(request: Request, exam_id: int, db: Session = Depends(get_db)):
     return templates.TemplateResponse(request, "exams/detail.html",
         {"exam": e, "context_patient": patient_context(e.patient), "problem_addenda": problem_addenda,
          "cpt_summary": cpt_summary})
+
+
+@router.post("/{exam_id}/sign", dependencies=[Depends(require_role(*EXAM_SIGN))])
+def sign_exam(request: Request, exam_id: int, csrf_token: str = Form(""),
+              db: Session = Depends(get_db), user=Depends(get_current_user)):
+    """Clinical Record Sign/Lock/Amend Lifecycle: an electronic attestation
+    ("I personally reviewed and stand behind this record"), matching the
+    e-signature block real visit-summary documents already carry (spec
+    §37.6/§18.2 item 4's long-tracked gap). Signing is one-way -- there is no
+    unsign route -- and, since this app has no exam edit route at all
+    (create + view-only), the only way to add anything further to a signed
+    exam is EyeExamAddendum below."""
+    csrf.verify_or_403(request.state.csrf_token, csrf_token)
+    e = db.query(EyeExam).filter(EyeExam.id == exam_id).first()
+    if not e: return HTMLResponse("Not found", status_code=404)
+    if e.signed_at:
+        return HTMLResponse("This visit is already signed.", status_code=400)
+    e.signed_at = datetime.utcnow()
+    e.signed_by_user_id = user.id
+    db.commit()
+    return RedirectResponse(f"/exams/{exam_id}", status_code=303)
+
+
+@router.post("/{exam_id}/addenda", dependencies=[Depends(require_role(*EXAM_EDIT))])
+def add_exam_addendum(request: Request, exam_id: int, note: str = Form(...), csrf_token: str = Form(""),
+                       db: Session = Depends(get_db), user=Depends(get_current_user)):
+    csrf.verify_or_403(request.state.csrf_token, csrf_token)
+    e = db.query(EyeExam).filter(EyeExam.id == exam_id).first()
+    if not e: return HTMLResponse("Not found", status_code=404)
+    if not e.signed_at:
+        return HTMLResponse("Only a signed visit can receive an addendum -- this one is still open for direct edits.", status_code=400)
+    note = note.strip()
+    if note:
+        db.add(EyeExamAddendum(exam_id=exam_id, author_user_id=user.id, note=note))
+        db.commit()
+    return RedirectResponse(f"/exams/{exam_id}", status_code=303)

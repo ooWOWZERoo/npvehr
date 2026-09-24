@@ -433,6 +433,73 @@ def update_provider_slot_granularity(request: Request, provider_id: int, slot_gr
     return RedirectResponse("/admin/scheduling/provider-availability", status_code=303)
 
 
+# ---------------------------------------------------------------------------
+# Provider Management UI: before this, a Provider could only be added via
+# ehr/db/seed.py or a direct DB console -- no admin UI existed to create one,
+# edit their name/license/NPI/specialty, or mark one departed. Deactivating
+# (never deleting) is the only lifecycle transition offered, since deleting a
+# Provider row would cascade-orphan every appointment/exam/prescription FK'd
+# to them, destroying real clinical history. Deliberately does NOT filter
+# inactive providers out of any booking dropdown elsewhere in the app this
+# round (appointments/exams/prescriptions/portal booking all still list every
+# provider) -- see the build report for that explicit scoping decision.
+# ---------------------------------------------------------------------------
+
+@router.get("/providers", response_class=HTMLResponse, dependencies=[Depends(require_role(*ADMIN_SCHEDULING_VIEW))])
+def list_providers(request: Request, db: Session = Depends(get_db)):
+    providers = db.query(Provider).order_by(Provider.last_name, Provider.first_name).all()
+    return templates.TemplateResponse(request, "admin/scheduling/providers_list.html", {"providers": providers})
+
+
+@router.post("/providers/new", dependencies=[Depends(require_role(*ADMIN_SCHEDULING_EDIT))])
+def create_provider(request: Request, first_name: str = Form(...), last_name: str = Form(...),
+    license_number: str = Form(""), npi: str = Form(""), specialty: str = Form("Optometry"),
+    csrf_token: str = Form(""), db: Session = Depends(get_db)):
+    csrf.verify_or_403(request.state.csrf_token, csrf_token)
+    db.add(Provider(first_name=first_name.strip(), last_name=last_name.strip(),
+        license_number=license_number.strip() or None, npi=npi.strip() or None,
+        specialty=specialty.strip() or "Optometry", active=True))
+    db.commit()
+    return RedirectResponse("/admin/scheduling/providers", status_code=303)
+
+
+@router.get("/providers/{provider_id}/edit", response_class=HTMLResponse,
+    dependencies=[Depends(require_role(*ADMIN_SCHEDULING_EDIT))])
+def edit_provider_form(request: Request, provider_id: int, db: Session = Depends(get_db)):
+    provider = db.query(Provider).filter(Provider.id == provider_id).first()
+    if not provider:
+        return HTMLResponse("Not found", status_code=404)
+    return templates.TemplateResponse(request, "admin/scheduling/provider_form.html", {"provider": provider, "error": None})
+
+
+@router.post("/providers/{provider_id}/edit", dependencies=[Depends(require_role(*ADMIN_SCHEDULING_EDIT))])
+def update_provider(request: Request, provider_id: int, first_name: str = Form(...), last_name: str = Form(...),
+    license_number: str = Form(""), npi: str = Form(""), specialty: str = Form("Optometry"),
+    csrf_token: str = Form(""), db: Session = Depends(get_db)):
+    csrf.verify_or_403(request.state.csrf_token, csrf_token)
+    provider = db.query(Provider).filter(Provider.id == provider_id).first()
+    if not provider:
+        return HTMLResponse("Not found", status_code=404)
+    provider.first_name = first_name.strip()
+    provider.last_name = last_name.strip()
+    provider.license_number = license_number.strip() or None
+    provider.npi = npi.strip() or None
+    provider.specialty = specialty.strip() or "Optometry"
+    db.commit()
+    return RedirectResponse("/admin/scheduling/providers", status_code=303)
+
+
+@router.post("/providers/{provider_id}/toggle-active", dependencies=[Depends(require_role(*ADMIN_SCHEDULING_EDIT))])
+def toggle_provider_active(request: Request, provider_id: int, csrf_token: str = Form(""), db: Session = Depends(get_db)):
+    csrf.verify_or_403(request.state.csrf_token, csrf_token)
+    provider = db.query(Provider).filter(Provider.id == provider_id).first()
+    if not provider:
+        return HTMLResponse("Not found", status_code=404)
+    provider.active = not provider.active
+    db.commit()
+    return RedirectResponse("/admin/scheduling/providers", status_code=303)
+
+
 @router.get("/holidays", response_class=HTMLResponse, dependencies=[Depends(require_role(*ADMIN_SCHEDULING_VIEW))])
 def list_holidays(request: Request, db: Session = Depends(get_db)):
     closures = db.query(PracticeClosure).order_by(PracticeClosure.closure_date.desc()).all()

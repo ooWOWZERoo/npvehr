@@ -57,6 +57,27 @@ CONDITION_PROFILES = [
         "default_interval_days": 365,
         "severity_interval_days": None,
     },
+    {
+        "icd10_prefixes": ["H35.3"],
+        "label": "Age-Related Macular Degeneration Monitoring",
+        "required_test_codes": ["OCT"],
+        "default_interval_days": 180,
+        "severity_interval_days": {"wet": 60, "exudative": 60},
+    },
+    {
+        "icd10_prefixes": ["E11.3", "E10.3"],
+        "label": "Diabetic Retinopathy Monitoring",
+        "required_test_codes": ["OCT", "OPTOS"],
+        "default_interval_days": 365,
+        "severity_interval_days": {"proliferative": 90, "severe": 90},
+    },
+    {
+        "icd10_prefixes": ["H18.6"],
+        "label": "Keratoconus Monitoring",
+        "required_test_codes": ["CORNEAL_ANALYZER", "PACHYMETRY"],
+        "default_interval_days": 365,
+        "severity_interval_days": {"progressive": 182},
+    },
 ]
 
 

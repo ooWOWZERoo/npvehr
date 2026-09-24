@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Providers &mdash; Admin{% endblock %}
+{% block content %}
+<div class="page-header"><h1>Scheduling Administration</h1></div>
+{% include "admin/scheduling/_nav.html" %}
+<div class="card form-card"><h3>Add Provider</h3>
+  <form method="post" action="/admin/scheduling/providers/new">
+    <div class="form-row cols-4">
+      <div class="form-group"><label>First Name*</label><input name="first_name" required></div>
+      <div class="form-group"><label>Last Name*</label><input name="last_name" required></div>
+      <div class="form-group"><label>License Number</label><input name="license_number"></div>
+      <div class="form-group"><label>NPI</label><input name="npi"></div>
+    </div>
+    <div class="form-row cols-4">
+      <div class="form-group"><label>Specialty</label><input name="specialty" value="Optometry"></div>
+    </div>
+    <button type="submit" class="btn btn-primary">Add Provider</button>
+  </form>
+</div>
+<div class="card" style="margin-top:1rem">
+  <table><thead><tr><th>Name</th><th>Specialty</th><th>License #</th><th>NPI</th><th>Status</th><th></th></tr></thead><tbody>
+  {% for p in providers %}
+    <tr>
+      <td>Dr. {{ p.first_name }} {{ p.last_name }}</td>
+      <td>{{ p.specialty or '—' }}</td>
+      <td>{{ p.license_number or '—' }}</td>
+      <td>{{ p.npi or '—' }}</td>
+      <td><span class="badge {{ 'badge-completed' if p.active else 'badge-cancelled' }}">{{ 'Active' if p.active else 'Inactive' }}</span></td>
+      <td style="display:flex;gap:0.5rem">
+        <a href="/admin/scheduling/providers/{{ p.id }}/edit" class="btn btn-sm btn-secondary">Edit</a>
+        <form method="post" action="/admin/scheduling/providers/{{ p.id }}/toggle-active" onsubmit="return confirm('{{ 'Deactivate' if p.active else 'Reactivate' }} Dr. {{ p.first_name }} {{ p.last_name }}?');">
+          <button type="submit" class="btn btn-sm btn-secondary">{{ 'Deactivate' if p.active else 'Reactivate' }}</button>
+        </form>
+      </td>
+    </tr>
+  {% else %}<tr><td colspan="6" style="text-align:center;color:#64748b">No providers defined yet.</td></tr>
+  {% endfor %}
+  </tbody></table>
+  <p style="font-size:0.8rem;color:#64748b;margin-top:0.75rem">
+    Deactivating a provider does not remove them from any existing appointment, exam, or prescription record --
+    it only marks them as no longer active. Every booking form and availability search across the app still
+    lists all providers regardless of this status this round (a follow-up to actually hide inactive providers
+    from new bookings is tracked in BUILD_BACKLOG.md).
+  </p>
+</div>
+{% endblock %}

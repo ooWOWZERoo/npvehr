@@ -160,6 +160,61 @@ def portal_login_consume(request: Request, token: str, db: Session = Depends(get
     return response
 
 
+@router.get("/register", response_class=HTMLResponse)
+def portal_register_form(request: Request):
+    """Patient Self-Registration (BUILD_BACKLOG.md 5a follow-up): the portal
+    previously only authenticated existing chart-matched emails, with no way
+    for someone with no chart at all to get one. Same passwordless posture as
+    /portal/login -- there is no password to set here either, just a form
+    that (per the POST handler below) always ends in the same magic-link
+    email-confirmation step /portal/login already uses, so identity
+    verification and account activation are the same single step."""
+    login_csrf_token = csrf.generate_login_csrf()
+    response = templates.TemplateResponse(request, "portal/register.html", {"login_csrf_token": login_csrf_token})
+    response.set_cookie(csrf.LOGIN_CSRF_COOKIE_NAME, login_csrf_token, httponly=True,
+                         secure=request.url.scheme == "https", samesite="lax", max_age=600)
+    return response
+
+
+@router.post("/register", response_class=HTMLResponse)
+def portal_register_submit(request: Request, first_name: str = Form(...), last_name: str = Form(...),
+    date_of_birth: str = Form(""), email: str = Form(...), phone: str = Form(""),
+    csrf_token: str = Form(""), db: Session = Depends(get_db)):
+    csrf.verify_login_csrf(request.cookies.get(csrf.LOGIN_CSRF_COOKIE_NAME), csrf_token)
+    first_name, last_name, email, phone = first_name.strip(), last_name.strip(), email.strip(), phone.strip()
+    posted = {"first_name": first_name, "last_name": last_name, "date_of_birth": date_of_birth, "email": email, "phone": phone}
+    if not first_name or not last_name or not email:
+        login_csrf_token = csrf.generate_login_csrf()
+        response = templates.TemplateResponse(request, "portal/register.html", {
+            "error": "First name, last name, and email are all required.",
+            "posted": posted, "login_csrf_token": login_csrf_token,
+        }, status_code=400)
+        response.set_cookie(csrf.LOGIN_CSRF_COOKIE_NAME, login_csrf_token, httponly=True,
+                             secure=request.url.scheme == "https", samesite="lax", max_age=600)
+        return response
+
+    # An email that already matches an existing chart signs that patient in
+    # rather than creating a duplicate one -- and, same as /portal/login,
+    # the response is identical either way, so this page never reveals
+    # whether an address was already on file.
+    patient = db.query(Patient).filter(Patient.email.isnot(None), Patient.email.ilike(email)).first()
+    if not patient:
+        patient = Patient(first_name=first_name, last_name=last_name, date_of_birth=date_of_birth or None,
+            email=email, phone=phone or None, self_registered_at=datetime.utcnow())
+        db.add(patient)
+        db.flush()
+
+    dev_links = []
+    token = issue_login_token(db, patient)
+    db.flush()
+    link_url = str(request.base_url).rstrip("/") + f"/portal/login/{token}"
+    notify.send_portal_login_link(patient, link_url)
+    if EHR_ENV != "production":
+        dev_links.append({"patient": patient, "link_url": link_url})
+    db.commit()
+    return templates.TemplateResponse(request, "portal/check_email.html", {"dev_links": dev_links, "registered": True})
+
+
 @router.post("/logout")
 def portal_logout(request: Request, patient: Patient = Depends(get_current_patient),
                    csrf_token: str = Form(""), db: Session = Depends(get_db)):

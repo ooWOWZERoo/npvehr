@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Edit Provider &mdash; Admin{% endblock %}
+{% block content %}
+<div class="page-header"><h1>Edit Provider: Dr. {{ provider.first_name }} {{ provider.last_name }}</h1>
+  <a href="/admin/scheduling/providers" class="btn btn-secondary">Cancel</a></div>
+{% include "admin/scheduling/_nav.html" %}
+<div class="card form-card">
+  {% if error %}<div class="alert alert-error" style="margin-bottom:1rem">{{ error }}</div>{% endif %}
+  <form method="post" action="/admin/scheduling/providers/{{ provider.id }}/edit">
+    <div class="form-row cols-4">
+      <div class="form-group"><label>First Name*</label><input name="first_name" required value="{{ provider.first_name }}"></div>
+      <div class="form-group"><label>Last Name*</label><input name="last_name" required value="{{ provider.last_name }}"></div>
+      <div class="form-group"><label>License Number</label><input name="license_number" value="{{ provider.license_number or '' }}"></div>
+      <div class="form-group"><label>NPI</label><input name="npi" value="{{ provider.npi or '' }}"></div>
+    </div>
+    <div class="form-row cols-4">
+      <div class="form-group"><label>Specialty</label><input name="specialty" value="{{ provider.specialty or '' }}"></div>
+    </div>
+    <p style="font-size:0.8rem;color:#64748b">
+      Active/inactive status is managed from the <a href="/admin/scheduling/providers">Providers list</a>,
+      and per-provider slot-granularity overrides from <a href="/admin/scheduling/provider-availability">Provider Availability</a> --
+      neither is part of this form.
+    </p>
+    <div class="form-actions"><button type="submit" class="btn btn-primary">Save Changes</button></div>
+  </form>
+</div>
+{% endblock %}

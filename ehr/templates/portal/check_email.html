@@ -26,7 +26,11 @@
   <div class="login-card">
     <span class="login-brand-text">New Path Vision &mdash; Patient Portal</span>
     <h1 style="font-size:1.2rem">Check your email</h1>
+    {% if registered %}
+    <p style="color:var(--ink-muted);font-size:0.85rem">We've sent a one-time sign-in link to confirm your email and finish creating your account. It expires in 15 minutes.</p>
+    {% else %}
     <p style="color:var(--ink-muted);font-size:0.85rem">If that email matches a patient on file, we've sent a one-time sign-in link. It expires in 15 minutes.</p>
+    {% endif %}
     {% if dev_links %}
     <div class="alert" style="margin-top:1rem;background:#fffbeb;border:1px solid #fde68a;color:#92400e;font-size:0.8rem">
       <strong>Dev/test environment only</strong> &mdash; no real email vendor is connected yet, so the link(s) that would have been emailed are shown here directly:

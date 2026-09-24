@@ -1214,6 +1214,48 @@ def migration_037_seed_gonioscopy_pachymetry(conn):
             conn.execute(text("UPDATE diagnostic_tests SET cpt_code = :cpt "
                 "WHERE code = :test_code AND cpt_code IS NULL"), {"cpt": cpt, "test_code": test_code})
 
+def migration_038_patient_self_registered_at(conn):
+    """Patient Self-Registration (BUILD_BACKLOG.md 5a follow-up): flags a
+    chart created by the patient themselves via /portal/register, so staff
+    can tell it apart from a front-desk-entered one (there is no real
+    identity-proofing behind self-registration, only a magic-link email
+    click). Null for every pre-existing patient."""
+    if _table_exists(conn, "patients"):
+        _add_column_if_missing(conn, "patients", "self_registered_at", "TIMESTAMP")
+
+def migration_039_provider_active(conn):
+    """Provider Management UI follow-up: lets staff deactivate a departed
+    provider (never delete -- deleting would cascade-orphan their historical
+    appointments/exams/prescriptions). Defaults every existing provider to
+    active, matching current real-world state before this column existed."""
+    if _table_exists(conn, "providers"):
+        _add_column_if_missing(conn, "providers", "active", "BOOLEAN DEFAULT TRUE")
+
+def migration_040_eye_exam_sign_lock(conn):
+    """Clinical Record Sign/Lock/Amend Lifecycle (spec §37.6/§18.2 item 4's
+    long-tracked gap: "no exam-signing workflow exists to distinguish
+    finalized from editable exams"). Adds signed_at/signed_by_user_id to
+    eye_exams (both null until signed; every pre-existing exam stays
+    unsigned) and a new eye_exam_addenda table, the only way to add anything
+    further to an exam once it's been signed."""
+    if _table_exists(conn, "eye_exams"):
+        _add_column_if_missing(conn, "eye_exams", "signed_at", "TIMESTAMP")
+        _add_column_if_missing(conn, "eye_exams", "signed_by_user_id", "INTEGER")
+    if not _table_exists(conn, "eye_exam_addenda"):
+        conn.execute(text(f"""
+            CREATE TABLE IF NOT EXISTS eye_exam_addenda (
+                id {_pk_ddl(conn)},
+                exam_id INTEGER NOT NULL,
+                author_user_id INTEGER NOT NULL,
+                note TEXT NOT NULL,
+                created_at TIMESTAMP
+            )
+        """))
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_eye_exam_addenda_exam "
+            "ON eye_exam_addenda (exam_id)"
+        ))
+
 # Ordered list of (id, function). Adding new migrations: append, never edit past entries.
 COLUMN_MIGRATIONS = [
     ("001_appointment_columns", migration_001_appointment_columns),
@@ -1246,6 +1288,9 @@ COLUMN_MIGRATIONS = [
     ("033_exam_type_and_em_suggestions", migration_033_exam_type_and_em_suggestions),
     ("034_cpt_and_visit_flow", migration_034_cpt_and_visit_flow),
     ("036_create_diagnostic_orders", migration_036_create_diagnostic_orders),
+    ("038_patient_self_registered_at", migration_038_patient_self_registered_at),
+    ("039_provider_active", migration_039_provider_active),
+    ("040_eye_exam_sign_lock", migration_040_eye_exam_sign_lock),
 ]
 POST_CREATE_ALL_MIGRATIONS = [
     ("002_seed_appointment_types", migration_002_seed_appointment_types),
