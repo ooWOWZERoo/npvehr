@@ -2,7 +2,9 @@
 {% block title %}Eye Exam &mdash; New Path Vision EHR{% endblock %}
 {% block content %}
 <div class="page-header">
-  <h1>Eye Exam &mdash; {{ exam.exam_date }}</h1>
+  <h1>Eye Exam &mdash; {{ exam.exam_date }}
+    {% if exam.signed_at %}<span class="badge badge-completed" style="margin-left:0.5rem;vertical-align:middle">Signed</span>{% endif %}
+  </h1>
   <div style="display:flex;gap:0.5rem">
     <a href="/patients/{{ exam.patient_id }}" class="btn btn-secondary btn-sm">Patient</a>
     <a href="/prescriptions/new?patient_id={{ exam.patient_id }}&exam_id={{ exam.id }}" class="btn btn-primary btn-sm">Write Rx</a>
@@ -346,4 +348,46 @@
     <div><strong>Plan</strong><p>{{ exam.plan or '—' }}</p></div>
   </div>
 </div>
+{% set current_user = request.state.user %}
+<div class="card" style="margin-top:1rem"><h3>Sign &amp; Lock</h3>
+  {% if exam.signed_at %}
+  <p style="color:var(--ink-muted)">
+    Electronically signed by Dr. {{ exam.signed_by.first_name }} {{ exam.signed_by.last_name }}
+    on {{ exam.signed_at.strftime('%B %d, %Y at %I:%M %p') }}.
+    This visit is locked -- further changes must be recorded as an addendum below.
+  </p>
+  {% else %}
+  <p style="color:var(--ink-muted)">Not yet signed. Signing is an electronic attestation that a provider has
+    personally reviewed and stands behind this record; once signed, this visit can no longer be edited directly
+    (see Addenda below) and cannot be un-signed.</p>
+  {% if current_user and current_user.role in ('system_administrator', 'optometrist_provider') %}
+  <form method="post" action="/exams/{{ exam.id }}/sign" onsubmit="return confirm('Sign and lock this visit? This cannot be undone.');">
+    <button type="submit" class="btn btn-primary btn-sm">Sign &amp; Lock This Visit</button>
+  </form>
+  {% endif %}
+  {% endif %}
+</div>
+{% if exam.signed_at or exam.addenda %}
+<div class="card" style="margin-top:1rem"><h3>Addenda</h3>
+  {% if exam.addenda %}
+  <ul style="margin:0 0 0.75rem;padding-left:1.2rem">
+    {% for addendum in exam.addenda %}
+    <li style="margin-bottom:0.4rem">
+      <span class="mono-data" style="color:var(--ink-muted)">{{ addendum.created_at.strftime('%Y-%m-%d %I:%M %p') if addendum.created_at else '' }}</span>
+      &mdash; {{ addendum.note }}
+      <span style="color:var(--ink-muted);font-size:0.8rem">(Dr. {{ addendum.author.first_name }} {{ addendum.author.last_name }})</span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p style="color:var(--ink-muted);font-size:0.9rem">No addenda yet.</p>
+  {% endif %}
+  {% if exam.signed_at %}
+  <form method="post" action="/exams/{{ exam.id }}/addenda" style="display:flex;gap:0.5rem">
+    <input type="text" name="note" placeholder="Add a dated addendum..." style="flex:1" required>
+    <button type="submit" class="btn btn-sm btn-secondary">Add Addendum</button>
+  </form>
+  {% endif %}
+</div>
+{% endif %}
 {% endblock %}

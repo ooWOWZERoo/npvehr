@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Patient Portal Access Log &mdash; Admin{% endblock %}
+{% block content %}
+<div class="page-header"><h1>Scheduling Administration</h1></div>
+{% include "admin/scheduling/_nav.html" %}
+<div class="card"><h3>Patient Portal Access Log (most recent 200)</h3>
+  <p style="font-size:0.8rem;color:#64748b;margin-top:-0.5rem">
+    One row per view a patient makes of their own clinical data through the portal (visit summaries,
+    prescriptions, documents) -- recorded since the portal's clinical-data-view feature shipped;
+    earlier portal activity (booking/cancelling/rescheduling) is not logged here.
+  </p>
+  <div class="table-responsive"><table><thead><tr><th>When</th><th>Patient</th><th>Resource</th><th>Detail</th></tr></thead><tbody>
+  {% for e in events %}
+    <tr>
+      <td>{{ e.viewed_at.strftime('%m/%d/%Y %I:%M %p') if e.viewed_at else '—' }}</td>
+      <td><a href="/patients/{{ e.patient_id }}">{{ e.patient.last_name }}, {{ e.patient.first_name }}</a></td>
+      <td>{{ {'visit_summary': 'Visit Summary', 'prescriptions': 'Prescriptions', 'document': 'Document'}.get(e.resource_type, e.resource_type) }}</td>
+      <td>
+        {% if e.resource_type == 'visit_summary' and e.resource_id %}<a href="/exams/{{ e.resource_id }}">Exam #{{ e.resource_id }}</a>
+        {% elif e.resource_type == 'document' and e.resource_id %}Document #{{ e.resource_id }}
+        {% else %}&mdash;{% endif %}
+      </td>
+    </tr>
+  {% else %}<tr><td colspan="4" style="text-align:center;color:#64748b">No portal access events yet.</td></tr>
+  {% endfor %}
+  </tbody></table></div>
+</div>
+{% endblock %}

@@ -3685,3 +3685,194 @@ No broader audit of every `<select>`-driven edited flag in this form for the sam
 | Test fix (found during verification) | `test_slot_granularity_and_resource_conflict_reconciliation`'s hardcoded 13:00 booking could collide with a seed-data demo appointment planted on a rolling "tomorrow," depending on which date its own search landed on -- fixed to pick an actually-free slot from the real availability results instead, same pattern as v2.39's new test. See §59.3. |
 | Updated | `ehr/templates/exams/form.html`. `tests/test_smoke.py` gained one new test (verified to fail without the fix) and had the pre-existing resource-conflict test's hardcoded booking time replaced with a dynamically discovered free slot. |
 | Explicitly not done | No wider audit of every `<select>`-driven edited flag in this form for the same pattern. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |
+
+## 60. Additional Look-Back Condition Profiles: AMD, Diabetic Retinopathy, Keratoconus (v2.41)
+
+### 60.1 Origin
+
+Named follow-up from the Phase 4 look-back alert engine (v2.38, baseline spec §57): the original request's fuller condition matrix named more chronic conditions than the two (glaucoma, Plaquenil) shipped in that round. Logged in `BUILD_BACKLOG.md` as a straightforward addition in the same `CONDITION_PROFILES` shape, not requiring new schema or engine logic.
+
+### 60.2 What changed
+
+Three new entries added to `ehr/services/lookback_alerts.py`'s `CONDITION_PROFILES` list, using the exact same shape as the existing glaucoma/Plaquenil entries:
+
+- **AMD** (`H35.3` prefix) — requires OCT; 180-day default interval, 60 days when `severity_or_stage` mentions "wet" or "exudative" (more frequent monitoring during active anti-VEGF treatment).
+- **Diabetic Retinopathy** (`E11.3`/`E10.3` prefixes, covering type 2 and type 1) — requires OCT and OPTOS (widefield retinal imaging, for dilated-exam-equivalent documentation); 365-day default (annual, per standard diabetic eye care guidance), 90 days when "proliferative" or "severe".
+- **Keratoconus** (`H18.6` prefix) — requires corneal topography (`CORNEAL_ANALYZER`) and pachymetry; 365-day default, 182 days when "progressive" (closer monitoring for potential cross-linking candidacy).
+
+No engine changes -- `_match_profile`, `_interval_days_for`, and `get_alerts_for_patient` are unchanged; the existing matching/interval/outstanding-order-suppression logic simply now runs against five profiles instead of two.
+
+### 60.3 Verified
+
+`python3 -m py_compile` on the touched service file. New Playwright test `test_lookback_alerts_amd_diabetic_retinopathy_and_keratoconus_profiles`: creates one patient with three Active Problems (AMD/wet, diabetic retinopathy/proliferative, keratoconus/progressive), each with its required test(s) never completed, and confirms exactly five interval-due banners appear with the right condition label and test name pairings -- proving each new profile matches its ICD-10 prefix and required-test list correctly. Does not re-test the shared severity-interval math itself (already covered by the pre-existing glaucoma test). Full suite passed after this change.
+
+### 60.4 Explicitly not done
+
+No further condition profiles beyond the five now covered (glaucoma, Plaquenil, AMD, diabetic retinopathy, keratoconus) -- still a curated, hardcoded list per this app's established narrow-lookup posture, not a configurable rules table. No dedicated severity-interval regression test for the three new profiles specifically (the mechanism is shared and already tested). None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6.
+
+**Version 2.41 change log (relative to v2.40) — Additional Look-Back Condition Profiles:**
+
+| Area | Change |
+| --- | --- |
+| New capability | Three new `CONDITION_PROFILES` entries (AMD, diabetic retinopathy, keratoconus) in `ehr/services/lookback_alerts.py`, using the existing engine unchanged. See §60.2. |
+| Updated | `ehr/services/lookback_alerts.py`. `tests/test_smoke.py` gained one new test. |
+| Explicitly not done | No further profiles beyond these five; still a curated hardcoded list. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |
+
+## 61. Patient Self-Registration (v2.42)
+
+### 61.1 Origin
+
+Named follow-up from Phase 4 of the Calendar & Appointments UX Overhaul (v2.30, baseline spec §49.4): the patient portal has always only authenticated against existing `Patient` rows with a matching email, with no way for someone with no chart at all to get one. Explicitly deferred each round since as "a bigger, separately-scoped identity-verification question" -- this round resolves that scoping question by design rather than deferring further.
+
+### 61.2 What changed
+
+**New `POST /portal/register` flow** (`ehr/routes/portal.py`), reached from a "New patient? Create an account" link on `/portal/login`. The form collects first name, last name, date of birth, email, and phone -- deliberately minimal, matching only the fields `Patient` actually requires (`first_name`/`last_name`) plus what the magic-link flow and a usable chart need. **No new identity-verification mechanism was built** -- there is no notarized ID check, no SSN/insurance-card matching, nothing beyond what this app already has. Instead, registration is designed around the one verification step that already exists and is trustworthy for what it proves (control of an email inbox): submitting the form always ends in the *same* magic-link email-confirmation step `/portal/login` uses, mocked/logged per this app's existing no-real-email-vendor posture. There is no separate password or activation step -- clicking the link both confirms the email and completes registration in one action.
+
+**No duplicate charts.** If the submitted email already matches an existing `Patient` row, registration signs that patient into their existing chart instead of creating a new one -- and, matching `/portal/login`'s own enumeration-safety posture, the confirmation page reads identically either way, so `/portal/register` never reveals whether an email was already on file.
+
+**New `Patient.self_registered_at` column** (migration `038_patient_self_registered_at`, nullable `TIMESTAMP`, null for every pre-existing and every staff-entered patient): set only when a chart originates from this flow. Since there is no real identity-proofing behind it, this is deliberately framed to staff as "not yet reviewed by front desk," not "identity confirmed" -- surfaced as a `⚠ Self-Registered` badge on the patient-context strip (`ehr/templates/base.html`, reusing the existing `.pcs-allergy-flag` warning-style class rather than inventing new color language), visible on every page that shows that patient, exactly like the existing allergy flag.
+
+### 61.3 Verified
+
+`python3 -m py_compile` on every touched Python file. Fresh-SQLite migration boot + idempotent re-run (`ehr.db.seed` run twice against a throwaway DB) confirmed clean. Manual live-instance verification via Playwright: registering a new patient reaches the same dev-only check-email page as login, consuming the magic link signs into a brand-new chart, and the chart shows the Self-Registered badge on the staff side; registering again with the same email produces another sign-in link but a direct DB query confirmed no second `Patient` row was created. New Playwright test `test_patient_self_registration_creates_chart_and_flags_it_for_staff` covers all of the above end to end (register → confirm-email copy → magic link → new chart with the badge → duplicate re-registration confirmed as a no-op via the staff patient-search list). Full suite passed after this change.
+
+### 61.4 Explicitly not done
+
+No real identity-proofing (no ID upload, no insurance-card match, no staff review gate before the chart is usable) -- the email-click is the only verification, same limitation this app already has everywhere email is used as a factor, and consistent with this app's explicit "not for use with real patient data" posture. No staff workflow to review/dismiss the Self-Registered flag once a front-desk staffer has actually verified the patient in person (it simply stays set forever as a historical fact about how the chart originated). No rate-limiting on `/portal/register` itself beyond what the shared login-token issuance path already has -- a determined requester could still create many charts with fake emails; not addressed this round, same accepted-risk posture as the rest of the mocked-email portal. No merge tooling specific to a self-registered chart that turns out to duplicate an existing paper/front-desk chart under a different email -- the existing general-purpose `/patients/merge` tool (baseline spec, Patient Merge) covers that case already. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6.
+
+**Version 2.42 change log (relative to v2.41) — Patient Self-Registration:**
+
+| Area | Change |
+| --- | --- |
+| New capability | `POST /portal/register` creates a new `Patient` chart (or signs into an existing one on an email match, never a duplicate) gated by the same magic-link confirmation `/portal/login` uses; new `Patient.self_registered_at` column flags such charts with a `⚠ Self-Registered` badge on the patient-context strip for staff. See §61.2. |
+| New migration | `038_patient_self_registered_at` (nullable `TIMESTAMP` on `patients`, null for all pre-existing rows). |
+| Updated | `ehr/routes/portal.py`, `ehr/models/database.py`, `ehr/utils.py`, `ehr/templates/base.html`, `ehr/templates/portal/login.html`, `ehr/templates/portal/check_email.html`. New `ehr/templates/portal/register.html`. `tests/test_smoke.py` gained one new test. |
+| Explicitly not done | No real identity-proofing beyond the email-click. No staff workflow to clear the flag after in-person verification. No dedicated rate-limiting on registration itself. No self-registration-specific merge tooling (the existing `/patients/merge` covers it). None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |
+
+## 62. Provider Management UI (v2.43)
+
+### 62.1 Origin
+
+Before this round, a `Provider` row (the clinical/scheduling entity distinct from a staff `User` login account -- the two have no FK link) could only be created via `ehr/db/seed.py` or a direct database console. There was no admin UI to add a new provider, correct a typo'd license number or NPI, or mark one departed -- a real, previously undocumented gap.
+
+### 62.2 What changed
+
+**New "Providers" tab** under Administration &gt; Scheduling (`/admin/scheduling/providers`), following the same single-page create-plus-list pattern already used for Resources (`admin/scheduling/resources.html`): an inline "Add Provider" form (first/last name, license number, NPI, specialty) above a table of every provider with Edit and Activate/Deactivate actions. A separate edit page (`admin/scheduling/provider_form.html`, mirroring the Appointment Type edit-page pattern) handles corrections to an existing provider's fields.
+
+**New `Provider.active` column** (migration `039_provider_active`, `BOOLEAN DEFAULT TRUE`, so every pre-existing provider starts active). Deactivating is the *only* lifecycle transition offered -- there is deliberately no delete action, since deleting a `Provider` row would cascade-orphan every `Appointment`/`EyeExam`/`Prescription` FK'd to them, destroying real clinical and scheduling history. A deactivated provider's historical records are completely untouched.
+
+**Explicit, documented scoping decision**: this round does **not** filter inactive providers out of any booking-related dropdown elsewhere in the app (new appointment, new exam, new Rx, availability search, portal booking, waitlist entry, calendar filters all still list every provider regardless of `active`). Actually enforcing "an inactive provider can't be picked for new work" correctly requires touching roughly nine query call sites across five files, several of which are *shared* between a "new" context (where filtering to active-only is clearly correct) and an "edit an existing record" context (where the currently-assigned provider must keep appearing even if since deactivated, or the dropdown would silently drop the correct selection) -- a materially larger and more error-prone change than the management UI itself. Rather than ship a half-correct filter, this round ships the management capability alone and logs the filtering work as an explicit follow-up (`BUILD_BACKLOG.md`).
+
+### 62.3 Verified
+
+`python3 -m py_compile` on every touched Python file. Fresh-SQLite migration boot + idempotent re-run (`ehr.db.seed` run twice) confirmed clean. Manual live-instance verification via Playwright: created a provider from the admin form, edited its specialty, deactivated it (status badge flips, button relabels to Reactivate), and reactivated it -- all reflected immediately in the list. New Playwright test `test_provider_management_create_edit_and_toggle_active` covers create → edit → deactivate → reactivate end to end. Full suite passed after this change.
+
+### 62.4 Explicitly not done
+
+No filtering of inactive providers from any booking dropdown (see §62.2's scoping decision -- tracked as a follow-up). No email/phone/address fields on `Provider` (out of scope for this round; the model's existing fields were the only ones edited). No link between a `Provider` row and a `User` login account -- that gap already existed and is unchanged by this round. No bulk-import or provider-directory export. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6.
+
+**Version 2.43 change log (relative to v2.42) — Provider Management UI:**
+
+| Area | Change |
+| --- | --- |
+| New capability | `/admin/scheduling/providers` (new "Providers" admin tab): create/edit a provider's name/license/NPI/specialty, and deactivate/reactivate (never delete). New `Provider.active` column. See §62.2. |
+| New migration | `039_provider_active` (`BOOLEAN DEFAULT TRUE` on `providers`, defaulting every pre-existing row to active). |
+| Updated | `ehr/routes/admin_scheduling.py`, `ehr/models/database.py`, `ehr/templates/admin/scheduling/_nav.html`. New `ehr/templates/admin/scheduling/providers_list.html`, `provider_form.html`. `tests/test_smoke.py` gained one new test. |
+| Explicitly not done | No filtering of inactive providers from booking dropdowns app-wide (tracked as a follow-up -- a larger, separately-scoped change). No new Provider contact fields. No User-account link. No bulk import/export. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |
+
+## 63. Clinical Record Sign/Lock/Amend Lifecycle (v2.44)
+
+### 63.1 Origin
+
+Long-tracked gap, first flagged in the v2.20 visit-summary gap analysis and carried in `BUILD_BACKLOG.md`/spec §18.2 item 4/§37.6 ever since: this app has never had any concept of a clinical record being "finalized" versus still open for edits, unlike a real visit-summary document, which always carries an e-signature block. `ehr/auth/permissions.py` itself documented the gap directly, noting Technician's exam-edit access was unrestricted "since there is no exam-signing workflow in this app to distinguish 'finalized' from 'editable' exams."
+
+### 63.2 What changed
+
+**New `EyeExam.signed_at`/`signed_by_user_id` columns** (migration `040_eye_exam_sign_lock`, both nullable, null for every pre-existing exam) and a new **`POST /exams/{id}/sign`** route: an electronic attestation ("I personally reviewed and stand behind this record"), restricted to a new `EXAM_SIGN` permission group (`system_administrator`, `optometrist_provider` only -- narrower than `EXAM_EDIT`, since signing is a clinical judgment call a Technician or Practice Administrator shouldn't be able to make on someone else's exam). Signing is one-way: there is no unsign route, and a second sign attempt on an already-signed exam is rejected (400) both by the UI (the Sign button/form disappears once signed) and server-side (verified independently of the UI).
+
+**What "lock" means here, concretely**: this app's `EyeExam` has never had an edit route at all (creation and view-only, confirmed by inspection before building this) -- so there was no existing "can edit" capability to literally disable. Instead, Sign is given real teeth by gating the *only* way to add anything further to an exam -- a new append-only **`EyeExamAddendum`** table (mirroring the existing `ProblemAddendum` pattern exactly: `exam_id`, `author_user_id`, `note`, `created_at`) -- behind having already signed. `POST /exams/{id}/addenda` (any `EXAM_EDIT` role) is rejected with 400 ("Only a signed visit can receive an addendum") until the exam is signed; once signed, addenda accumulate and display with their author and timestamp, exactly matching real visit-summary documents' own dated-addendum convention.
+
+**Exam detail page** (`ehr/templates/exams/detail.html`) gained a "Signed" badge next to the page title once signed, a "Sign & Lock" card (the Sign button pre-signature, an "Electronically signed by Dr. X on \<date/time\>" attestation line post-signature), and an "Addenda" card (list + inline add-note form, shown only once there's something to show -- either the exam is signed, or it already has addenda from before this UI existed, which is not possible for any pre-existing exam but keeps the condition correct going forward).
+
+### 63.3 Verified
+
+`python3 -m py_compile` on every touched Python file. Fresh-SQLite migration boot + idempotent re-run confirmed clean. Manual live-instance verification via Playwright: created an exam, confirmed the Sign button and absence of any Addenda card pre-signature, signed it (attestation line appears, button disappears), confirmed a forged second sign POST is rejected with the same 400 message a real double-click would get, confirmed a forged addendum POST against an *unsigned* exam is rejected, then added a real addendum post-signature and confirmed it displays with author and timestamp. New Playwright test `test_exam_sign_lock_and_addendum_lifecycle` covers all of the above end to end. Full suite passed after this change.
+
+### 63.4 Explicitly not done
+
+No unsign/reopen workflow -- a signed exam stays signed forever, matching real clinical documentation practice (corrections go through an addendum, never by editing the original). No lock enforcement on any *other* record type (Problem, Prescription, the five specialty dashboards) -- this round scoped strictly to `EyeExam`, the core visit record; extending the same pattern elsewhere is a natural, separately-scoped follow-up if needed. No PDF/print rendering of the signed exam with its signature block (this app's only print precedent remains `prescriptions/print.html`'s browser-print-dialog approach). No change to who can *view* a signed exam (`EXAM_VIEW` is unchanged) or edit an *unsigned* one (`EXAM_EDIT` is unchanged) -- only the new sign/addendum actions are gated by the new `EXAM_SIGN` group. Does not address the broader, still-open "who changed this specific field, and to what value" per-field audit trail tracked separately in §37.6 -- this is a visit-level attestation, not a field-level change log. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6.
+
+**Version 2.44 change log (relative to v2.43) — Clinical Record Sign/Lock/Amend Lifecycle:**
+
+| Area | Change |
+| --- | --- |
+| New capability | `EyeExam.signed_at`/`signed_by_user_id` plus a new `EyeExamAddendum` table: `POST /exams/{id}/sign` (new `EXAM_SIGN` permission group: provider or system administrator only) is a one-way electronic attestation; `POST /exams/{id}/addenda` (existing `EXAM_EDIT` group) is the only way to add anything further to an exam once signed. New Sign & Lock / Addenda cards on the exam detail page. See §63.2. |
+| New migration | `040_eye_exam_sign_lock` (`signed_at`/`signed_by_user_id` on `eye_exams`; new `eye_exam_addenda` table). |
+| Updated | `ehr/routes/exams.py`, `ehr/models/database.py`, `ehr/auth/permissions.py`, `ehr/templates/exams/detail.html`. `tests/test_smoke.py` gained one new test. |
+| Explicitly not done | No unsign/reopen workflow. No lock enforcement on any other record type. No PDF/print rendering with a signature block. No change to existing view/edit permissions beyond the new sign/addendum actions. Does not address the separately-tracked per-field audit trail gap (§37.6). None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |
+
+## 64. Hide Inactive Providers From New-Booking Dropdowns (v2.45)
+
+### 64.1 Origin
+
+Follow-up explicitly deferred from the Provider Management UI round (v2.43, baseline spec §62): deactivating a provider there had no effect anywhere else in the app -- every booking-related dropdown (new appointment, new exam, new prescription, availability search, portal booking/waitlist) still offered a deactivated provider for new work, since filtering roughly nine query call sites across five files correctly (some shared between "new" and "edit an existing record" contexts) was judged separately-scoped at the time.
+
+### 64.2 What changed
+
+**New `ehr.services.scheduling.bookable_providers(db, include_id=None)`** helper: returns active providers only, ordered by name, unless `include_id` names a specific provider to include regardless of its active state -- for a form editing or rescheduling an *existing* record, whose already-assigned provider must keep appearing (and stay correctly selected) even if since deactivated.
+
+Applied at every "choosing a new provider" call site: `appointments.py`'s shared new/edit form context (`include_id` set to the existing appointment's provider only when editing), the staff availability-search page, `exams.py`'s new-exam form, `prescriptions.py`'s new-Rx form, `patients.py`'s waitlist-entry-creation context, and `portal.py`'s booking/reschedule slot search (`include_id` set to the appointment's own provider for reschedule) and waitlist-entry context. Left deliberately unfiltered: the admin Provider Availability config page (staff need to see and manage inactive providers there too) and the staff calendar's provider filter dropdown (a *viewing* filter across all providers' appointments, including a departed provider's history, not a new-selection control).
+
+### 64.3 Verified
+
+`python3 -m py_compile` on every touched file. Manual live-instance verification via Playwright: booked an appointment with a freshly-created provider, deactivated them, confirmed they disappeared from the new-appointment, new-exam, new-Rx, and availability-search dropdowns as well as the patient portal's booking dropdown, and confirmed the *existing* appointment's edit form still listed and correctly pre-selected that same provider. New Playwright test `test_inactive_provider_hidden_from_new_bookings_but_shown_on_existing_record` covers the same end to end, using a freshly-created provider (never a seeded one) so it doesn't disturb any other test's assumptions about the two seeded providers' dropdown positions. Full suite passed after this change.
+
+### 64.4 Explicitly not done
+
+No filtering on the admin Provider Availability config page or the staff calendar's provider filter (both deliberately show every provider regardless of status, per §64.2). No retroactive cleanup of any already-booked appointment against a since-deactivated provider (existing bookings are simply untouched, matching this app's general "never silently rewrite history" posture). None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6.
+
+## 65. Staff-Facing Patient Portal Access Log (v2.45)
+
+### 65.1 Origin
+
+Follow-up tracked since the Phase 4 portal round (v2.32, baseline spec §51): every patient view of their own visit summaries, prescriptions, or documents through the portal has been recorded to `PortalAccessAuditEvent` since that round, but nothing ever displayed it -- the data existed with no way for staff to actually see it.
+
+### 65.2 What changed
+
+**New `/admin/scheduling/portal-access-log`** page (new "Patient Portal Access Log" tab, alongside the existing "Patient Portal Settings" tab): the most recent 200 `PortalAccessAuditEvent` rows, newest first, showing when, which patient, which resource type (Visit Summary / Prescriptions / Document), and a direct link to the specific exam for a visit-summary view. No new schema -- purely a read of the table that already existed.
+
+### 65.3 Verified
+
+`python3 -m py_compile` on the touched route file; Jinja parse-check on the new template. Manual live-instance verification: confirmed the empty state before any portal activity, then had a patient view their prescriptions through the portal and confirmed the event appeared on the staff page with the correct patient name and resource type. New Playwright test `test_portal_access_log_records_and_displays_patient_views` covers the same end to end. Full suite passed after this change.
+
+### 65.4 Explicitly not done
+
+No filtering/search/pagination beyond the most-recent-200 cap. No logging of portal booking/cancel/reschedule/waitlist activity here -- this page surfaces only the clinical-data-view events `PortalAccessAuditEvent` was built to record; scheduling-side portal activity is a different, unimplemented tracking concern. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6.
+
+## 66. Prescription Prism/Base and Contact-Lens Display Gap (v2.45)
+
+### 66.1 Origin
+
+Long-tracked gap re-verified this round (spec §18.2 items 8-9): `Prescription.od_prism`/`od_base`/`os_prism`/`os_base` were captured on the Rx form but never shown on either the detail or print page, and the contact-lens parameters (`od_bc`/`od_dia`/`od_brand` and their `os_` equivalents) were entirely absent from the detail page. Print already had a contact-lens block, but gated strictly on `rx_type == 'contacts'` -- inconsistent with the model's own documented "not restricted to rx_type" treatment of those fields (a glasses Rx can, in principle, still carry contact-lens data). Confirmed the v2.10 Lens Design & Follow-Up round never actually touched this gap; it added a different set of fields (lens material/treatments/recall interval).
+
+### 66.2 What changed
+
+**`prescriptions/detail.html`**: added Prism/Base columns to the existing Rx Values table, and a new "Contact Lens Parameters" card (base curve/diameter/brand per eye) shown whenever any of those three fields is set on either eye -- not gated on `rx_type`, matching the model's own scoping.
+
+**`prescriptions/print.html`**: added the same Prism/Base columns to the main table, and changed the contact-lens block's visibility condition from `rx_type == 'contacts'` to "any of the six BC/Dia/Brand fields is set," for the same consistency reason.
+
+### 66.3 Verified
+
+Jinja parse-check on both touched templates. Manual live-instance verification via Playwright: created a contact-lens Rx with prism/base on both eyes and BC/diameter/brand on one eye, confirmed both the detail and print pages show all of it correctly. New Playwright test `test_prescription_prism_base_and_contact_lens_values_display` covers the same end to end. Full suite passed after this change.
+
+### 66.4 Explicitly not done
+
+No change to the Rx *form* itself -- prism/base/contact-lens fields were already there; this round only fixed their *display*. No validation added (e.g. requiring BC/diameter together, or prism requiring a base direction) -- fields remain independently optional, same as every other Rx field in this app. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6.
+
+**Version 2.45 change log (relative to v2.44) — Three Follow-Up Items:**
+
+| Area | Change |
+| --- | --- |
+| New capability | Inactive providers now hidden from every new-booking dropdown app-wide via a new `bookable_providers()` helper, while still correctly shown on an existing record that references them (§64). New staff-facing `/admin/scheduling/portal-access-log` page displays `PortalAccessAuditEvent` for the first time (§65). Prescription detail/print pages now show prism/base and contact-lens parameters, previously captured but never displayed (§66). |
+| Updated | `ehr/services/scheduling.py`, `ehr/routes/{appointments,exams,prescriptions,patients,portal,admin_scheduling}.py`, `ehr/templates/admin/scheduling/_nav.html`, `ehr/templates/prescriptions/{detail,print}.html`. New `ehr/templates/admin/scheduling/portal_access_log.html`. `tests/test_smoke.py` gained three new tests. |
+| Explicitly not done | No filtering on the admin Provider Availability page or calendar filter (§64.4). No search/pagination on the portal access log beyond the 200-row cap, and no logging of scheduling-side portal activity there (§65.4). No Rx form or validation changes -- display only (§66.4). None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |

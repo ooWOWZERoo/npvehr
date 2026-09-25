@@ -36,7 +36,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
-from ehr.models.database import (get_db, Patient, Provider, AppointmentType, AppointmentTypeVersion,
+from ehr.models.database import (get_db, Patient, AppointmentType, AppointmentTypeVersion,
     Appointment, AppointmentStatus, PortalSettings, PatientPortalLoginToken, WaitlistEntry, EyeExam,
     Prescription, PatientDocument, PortalAccessAuditEvent)
 from ehr.services import scheduling as sched
@@ -160,6 +160,61 @@ def portal_login_consume(request: Request, token: str, db: Session = Depends(get
     return response
 
 
+@router.get("/register", response_class=HTMLResponse)
+def portal_register_form(request: Request):
+    """Patient Self-Registration (BUILD_BACKLOG.md 5a follow-up): the portal
+    previously only authenticated existing chart-matched emails, with no way
+    for someone with no chart at all to get one. Same passwordless posture as
+    /portal/login -- there is no password to set here either, just a form
+    that (per the POST handler below) always ends in the same magic-link
+    email-confirmation step /portal/login already uses, so identity
+    verification and account activation are the same single step."""
+    login_csrf_token = csrf.generate_login_csrf()
+    response = templates.TemplateResponse(request, "portal/register.html", {"login_csrf_token": login_csrf_token})
+    response.set_cookie(csrf.LOGIN_CSRF_COOKIE_NAME, login_csrf_token, httponly=True,
+                         secure=request.url.scheme == "https", samesite="lax", max_age=600)
+    return response
+
+
+@router.post("/register", response_class=HTMLResponse)
+def portal_register_submit(request: Request, first_name: str = Form(...), last_name: str = Form(...),
+    date_of_birth: str = Form(""), email: str = Form(...), phone: str = Form(""),
+    csrf_token: str = Form(""), db: Session = Depends(get_db)):
+    csrf.verify_login_csrf(request.cookies.get(csrf.LOGIN_CSRF_COOKIE_NAME), csrf_token)
+    first_name, last_name, email, phone = first_name.strip(), last_name.strip(), email.strip(), phone.strip()
+    posted = {"first_name": first_name, "last_name": last_name, "date_of_birth": date_of_birth, "email": email, "phone": phone}
+    if not first_name or not last_name or not email:
+        login_csrf_token = csrf.generate_login_csrf()
+        response = templates.TemplateResponse(request, "portal/register.html", {
+            "error": "First name, last name, and email are all required.",
+            "posted": posted, "login_csrf_token": login_csrf_token,
+        }, status_code=400)
+        response.set_cookie(csrf.LOGIN_CSRF_COOKIE_NAME, login_csrf_token, httponly=True,
+                             secure=request.url.scheme == "https", samesite="lax", max_age=600)
+        return response
+
+    # An email that already matches an existing chart signs that patient in
+    # rather than creating a duplicate one -- and, same as /portal/login,
+    # the response is identical either way, so this page never reveals
+    # whether an address was already on file.
+    patient = db.query(Patient).filter(Patient.email.isnot(None), Patient.email.ilike(email)).first()
+    if not patient:
+        patient = Patient(first_name=first_name, last_name=last_name, date_of_birth=date_of_birth or None,
+            email=email, phone=phone or None, self_registered_at=datetime.utcnow())
+        db.add(patient)
+        db.flush()
+
+    dev_links = []
+    token = issue_login_token(db, patient)
+    db.flush()
+    link_url = str(request.base_url).rstrip("/") + f"/portal/login/{token}"
+    notify.send_portal_login_link(patient, link_url)
+    if EHR_ENV != "production":
+        dev_links.append({"patient": patient, "link_url": link_url})
+    db.commit()
+    return templates.TemplateResponse(request, "portal/check_email.html", {"dev_links": dev_links, "registered": True})
+
+
 @router.post("/logout")
 def portal_logout(request: Request, patient: Patient = Depends(get_current_patient),
                    csrf_token: str = Form(""), db: Session = Depends(get_db)):
@@ -190,8 +245,8 @@ def portal_dashboard(request: Request, patient: Patient = Depends(get_current_pa
 
 
 def _slot_search_context(db: Session, provider_id, appointment_type_version_id, date_str, patient_id,
-                          exclude_appointment_id=None):
-    providers = db.query(Provider).all()
+                          exclude_appointment_id=None, include_provider_id=None):
+    providers = sched.bookable_providers(db, include_id=include_provider_id)
     types = _patient_bookable_type_versions(db)
     target_date = date.fromisoformat(date_str) if date_str else date.today()
     slots, version, error = [], None, None
@@ -322,7 +377,7 @@ def portal_reschedule_search(request: Request, appt_id: int, provider_id: str = 
     ctx = _slot_search_context(db, _qi(provider_id) or appt.provider_id,
                                 _qi(appointment_type_version_id) or appt.appointment_type_version_id,
                                 date_str or appt.scheduled_at.date().isoformat(), patient.id,
-                                exclude_appointment_id=appt.id)
+                                exclude_appointment_id=appt.id, include_provider_id=appt.provider_id)
     ctx["appt"] = appt
     return templates.TemplateResponse(request, "portal/reschedule.html", ctx)
 
@@ -354,7 +409,7 @@ def portal_reschedule_confirm(request: Request, appt_id: int, provider_id: int =
     def fail(msg, status_code):
         ctx = _slot_search_context(db, provider_id, appointment_type_version_id,
                                     (when or appt.scheduled_at).date().isoformat(), patient.id,
-                                    exclude_appointment_id=appt.id)
+                                    exclude_appointment_id=appt.id, include_provider_id=appt.provider_id)
         ctx["appt"] = appt
         ctx["error"] = msg
         return templates.TemplateResponse(request, "portal/reschedule.html", ctx, status_code=status_code)
@@ -394,7 +449,7 @@ def portal_reschedule_confirm(request: Request, appt_id: int, provider_id: int =
 def portal_waitlist(request: Request, patient: Patient = Depends(get_current_patient), db: Session = Depends(get_db)):
     entries = (db.query(WaitlistEntry).filter(WaitlistEntry.patient_id == patient.id)
                .order_by(WaitlistEntry.status, WaitlistEntry.created_at.desc()).all())
-    providers = db.query(Provider).order_by(Provider.last_name).all()
+    providers = sched.bookable_providers(db)
     types = _patient_bookable_type_versions(db)
     return templates.TemplateResponse(request, "portal/waitlist.html",
         {"entries": entries, "providers": providers, "types": types})

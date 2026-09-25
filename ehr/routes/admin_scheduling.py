@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from ehr.models.database import (get_db, AppointmentType, AppointmentTypeVersion, AppointmentTypeColorRule,
     DiagnosticTest, Resource, AvailabilityTemplate, AppointmentTypeAuditEvent, AppointmentAuditEvent, Appointment,
     PracticeClosure, Provider, ProviderAvailabilityTemplate, PortalSettings, SchedulingSettings,
-    AppointmentTypeResourceRequirement)
+    AppointmentTypeResourceRequirement, PortalAccessAuditEvent)
 from ehr.services import scheduling as sched
 from ehr.env_info import EHR_ENV
 from ehr.auth.permissions import require_role, ADMIN_SCHEDULING_VIEW, ADMIN_SCHEDULING_EDIT, ROLE_LABELS
@@ -433,6 +433,73 @@ def update_provider_slot_granularity(request: Request, provider_id: int, slot_gr
     return RedirectResponse("/admin/scheduling/provider-availability", status_code=303)
 
 
+# ---------------------------------------------------------------------------
+# Provider Management UI: before this, a Provider could only be added via
+# ehr/db/seed.py or a direct DB console -- no admin UI existed to create one,
+# edit their name/license/NPI/specialty, or mark one departed. Deactivating
+# (never deleting) is the only lifecycle transition offered, since deleting a
+# Provider row would cascade-orphan every appointment/exam/prescription FK'd
+# to them, destroying real clinical history. Deliberately does NOT filter
+# inactive providers out of any booking dropdown elsewhere in the app this
+# round (appointments/exams/prescriptions/portal booking all still list every
+# provider) -- see the build report for that explicit scoping decision.
+# ---------------------------------------------------------------------------
+
+@router.get("/providers", response_class=HTMLResponse, dependencies=[Depends(require_role(*ADMIN_SCHEDULING_VIEW))])
+def list_providers(request: Request, db: Session = Depends(get_db)):
+    providers = db.query(Provider).order_by(Provider.last_name, Provider.first_name).all()
+    return templates.TemplateResponse(request, "admin/scheduling/providers_list.html", {"providers": providers})
+
+
+@router.post("/providers/new", dependencies=[Depends(require_role(*ADMIN_SCHEDULING_EDIT))])
+def create_provider(request: Request, first_name: str = Form(...), last_name: str = Form(...),
+    license_number: str = Form(""), npi: str = Form(""), specialty: str = Form("Optometry"),
+    csrf_token: str = Form(""), db: Session = Depends(get_db)):
+    csrf.verify_or_403(request.state.csrf_token, csrf_token)
+    db.add(Provider(first_name=first_name.strip(), last_name=last_name.strip(),
+        license_number=license_number.strip() or None, npi=npi.strip() or None,
+        specialty=specialty.strip() or "Optometry", active=True))
+    db.commit()
+    return RedirectResponse("/admin/scheduling/providers", status_code=303)
+
+
+@router.get("/providers/{provider_id}/edit", response_class=HTMLResponse,
+    dependencies=[Depends(require_role(*ADMIN_SCHEDULING_EDIT))])
+def edit_provider_form(request: Request, provider_id: int, db: Session = Depends(get_db)):
+    provider = db.query(Provider).filter(Provider.id == provider_id).first()
+    if not provider:
+        return HTMLResponse("Not found", status_code=404)
+    return templates.TemplateResponse(request, "admin/scheduling/provider_form.html", {"provider": provider, "error": None})
+
+
+@router.post("/providers/{provider_id}/edit", dependencies=[Depends(require_role(*ADMIN_SCHEDULING_EDIT))])
+def update_provider(request: Request, provider_id: int, first_name: str = Form(...), last_name: str = Form(...),
+    license_number: str = Form(""), npi: str = Form(""), specialty: str = Form("Optometry"),
+    csrf_token: str = Form(""), db: Session = Depends(get_db)):
+    csrf.verify_or_403(request.state.csrf_token, csrf_token)
+    provider = db.query(Provider).filter(Provider.id == provider_id).first()
+    if not provider:
+        return HTMLResponse("Not found", status_code=404)
+    provider.first_name = first_name.strip()
+    provider.last_name = last_name.strip()
+    provider.license_number = license_number.strip() or None
+    provider.npi = npi.strip() or None
+    provider.specialty = specialty.strip() or "Optometry"
+    db.commit()
+    return RedirectResponse("/admin/scheduling/providers", status_code=303)
+
+
+@router.post("/providers/{provider_id}/toggle-active", dependencies=[Depends(require_role(*ADMIN_SCHEDULING_EDIT))])
+def toggle_provider_active(request: Request, provider_id: int, csrf_token: str = Form(""), db: Session = Depends(get_db)):
+    csrf.verify_or_403(request.state.csrf_token, csrf_token)
+    provider = db.query(Provider).filter(Provider.id == provider_id).first()
+    if not provider:
+        return HTMLResponse("Not found", status_code=404)
+    provider.active = not provider.active
+    db.commit()
+    return RedirectResponse("/admin/scheduling/providers", status_code=303)
+
+
 @router.get("/holidays", response_class=HTMLResponse, dependencies=[Depends(require_role(*ADMIN_SCHEDULING_VIEW))])
 def list_holidays(request: Request, db: Session = Depends(get_db)):
     closures = db.query(PracticeClosure).order_by(PracticeClosure.closure_date.desc()).all()
@@ -497,3 +564,14 @@ def update_portal_settings(request: Request, self_service_cutoff_hours: int = Fo
     settings.updated_by_user_id = user.id
     db.commit()
     return RedirectResponse("/admin/scheduling/portal-settings", status_code=303)
+
+
+@router.get("/portal-access-log", response_class=HTMLResponse, dependencies=[Depends(require_role(*ADMIN_SCHEDULING_VIEW))])
+def portal_access_log(request: Request, db: Session = Depends(get_db)):
+    """Staff-facing view of PortalAccessAuditEvent (Phase 4 follow-up,
+    BUILD_BACKLOG.md) -- every view a patient makes of their own visit
+    summaries, prescriptions, or documents through the portal has been
+    recorded since that round, but nothing ever displayed it until now."""
+    events = (db.query(PortalAccessAuditEvent)
+              .order_by(PortalAccessAuditEvent.viewed_at.desc()).limit(200).all())
+    return templates.TemplateResponse(request, "admin/scheduling/portal_access_log.html", {"events": events})

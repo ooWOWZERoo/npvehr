@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Patient Portal Sign In &mdash; New Path Vision EHR</title>
+  <title>Create Account &mdash; New Path Vision EHR</title>
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -14,36 +14,55 @@
     body.login-body {
       min-height: 100vh; display: flex; align-items: center; justify-content: center;
       background: linear-gradient(160deg, var(--primary-strong), var(--primary) 60%, var(--primary-soft));
+      padding: var(--space-6) 0;
     }
     .login-card {
       background: var(--surface); border-radius: 14px; box-shadow: 0 20px 50px rgba(19,36,32,0.25);
-      padding: var(--space-7) var(--space-6); width: 100%; max-width: 380px;
+      padding: var(--space-7) var(--space-6); width: 100%; max-width: 460px;
     }
     .login-brand-text { font-family: var(--font-display); font-size: 1.2rem; font-weight: 700; color: var(--primary-strong); margin-bottom: var(--space-6); display: block; }
     .login-card h1 { font-size: 1.3rem; margin-bottom: var(--space-2); }
     .login-card p.login-sub { color: var(--ink-muted); margin: 0 0 var(--space-5); font-size: 0.85rem; }
     .login-card .btn-primary { width: 100%; justify-content: center; padding: 0.6rem; font-size: 0.9rem; }
     .login-footnote { margin-top: var(--space-5); font-size: 0.75rem; color: var(--ink-muted); text-align: center; }
+    .form-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); }
   </style>
 </head>
 <body class="login-body">
   <div class="login-card">
     <span class="login-brand-text">New Path Vision &mdash; Patient Portal</span>
-    <h1>Sign in</h1>
-    <p class="login-sub">Enter the email on file with your provider. We'll send you a one-time sign-in link &mdash; no password needed.</p>
+    <h1>Create your account</h1>
+    <p class="login-sub">No password needed &mdash; we'll email you a one-time sign-in link to confirm it's really you before your account is active.</p>
     {% if error %}
     <div class="alert alert-error" style="margin-bottom: var(--space-4)">{{ error }}</div>
     {% endif %}
-    <form method="post" action="/portal/login">
+    <form method="post" action="/portal/register">
       <input type="hidden" name="csrf_token" value="{{ login_csrf_token }}">
+      <div class="form-row-2">
+        <div class="form-group">
+          <label for="first_name">First Name</label>
+          <input id="first_name" name="first_name" required autofocus value="{{ posted.first_name if posted else '' }}">
+        </div>
+        <div class="form-group">
+          <label for="last_name">Last Name</label>
+          <input id="last_name" name="last_name" required value="{{ posted.last_name if posted else '' }}">
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="date_of_birth">Date of Birth</label>
+        <input type="date" id="date_of_birth" name="date_of_birth" value="{{ posted.date_of_birth if posted else '' }}">
+      </div>
       <div class="form-group">
         <label for="email">Email</label>
-        <input type="email" id="email" name="email" required autofocus autocomplete="email">
+        <input type="email" id="email" name="email" required autocomplete="email" value="{{ posted.email if posted else '' }}">
       </div>
-      <button type="submit" class="btn btn-primary">Send Sign-In Link</button>
+      <div class="form-group">
+        <label for="phone">Phone</label>
+        <input id="phone" name="phone" autocomplete="tel" value="{{ posted.phone if posted else '' }}">
+      </div>
+      <button type="submit" class="btn btn-primary">Create Account</button>
     </form>
-    <p class="login-footnote">New patient? <a href="/portal/register">Create an account</a>.</p>
-    <p class="login-footnote">Are you a staff member? <a href="/login">Sign in here</a> instead.</p>
+    <p class="login-footnote">Already have an account? <a href="/portal/login">Sign in</a> instead.</p>
   </div>
 </body>
 </html>

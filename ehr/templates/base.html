@@ -187,6 +187,9 @@
           {% if context_patient.has_allergy_flag %}
             <span class="pcs-allergy-flag" title="Allergies: {{ context_patient.allergies_text }}">&#9888; Allergies</span>
           {% endif %}
+          {% if context_patient.self_registered_at %}
+            <span class="pcs-allergy-flag" title="Created by the patient via portal self-registration -- identity confirmed only by an email link click, not verified by front desk">&#9888; Self-Registered</span>
+          {% endif %}
         </div>
         <div class="pcs-side">
           {% if context_patient.balance_state == 'due' %}

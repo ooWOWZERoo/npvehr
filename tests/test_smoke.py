@@ -421,6 +421,56 @@ def test_lookback_alerts_interval_due_and_outstanding_order(logged_in_page, live
     assert "Optical Coherence Tomography" in final_info.first.inner_text()
 
 
+def test_lookback_alerts_amd_diabetic_retinopathy_and_keratoconus_profiles(logged_in_page, live_server):
+    """Three condition profiles added to CONDITION_PROFILES alongside the
+    original glaucoma/Plaquenil pair (BUILD_BACKLOG.md 0a follow-up): AMD
+    (H35.3, OCT), diabetic retinopathy (E11.3/E10.3, OCT+OPTOS), and
+    keratoconus (H18.6, corneal topography + pachymetry). Each Active Problem
+    below has never had its required test(s) completed, so each should
+    surface one .alert-info interval-due banner per required test, matched
+    to the right ICD-10 prefix and test list -- proving the new profiles are
+    wired up correctly without re-testing the shared severity-interval math
+    already covered by the glaucoma test above."""
+    page = logged_in_page
+    page.goto(live_server + "/patients/new")
+    page.fill('input[name="first_name"]', "Lookback")
+    page.fill('input[name="last_name"]', "Threeprofiles")
+    page.locator('button[type="submit"]', has_text="Create Patient").click()
+    page.wait_for_url(re.compile(r"/patients/\d+$"))
+    patient_id = page.url.rstrip("/").split("/")[-1]
+    page.locator('a[href$="/problems"]').click()
+
+    page.fill('input[name="diagnosis_name"]', "Age-Related Macular Degeneration, Wet")
+    page.fill('input[name="icd10_code"]', "H35.3210")
+    page.fill('input[name="severity_or_stage"]', "wet, exudative")
+    page.locator('select[name="laterality"]').select_option("OU")
+    page.locator('button[type="submit"]', has_text="Add Problem").click()
+    page.wait_for_load_state("networkidle")
+
+    page.fill('input[name="diagnosis_name"]', "Diabetic Retinopathy")
+    page.fill('input[name="icd10_code"]', "E11.311")
+    page.fill('input[name="severity_or_stage"]', "proliferative")
+    page.locator('select[name="laterality"]').select_option("OU")
+    page.locator('button[type="submit"]', has_text="Add Problem").click()
+    page.wait_for_load_state("networkidle")
+
+    page.fill('input[name="diagnosis_name"]', "Keratoconus")
+    page.fill('input[name="icd10_code"]', "H18.611")
+    page.fill('input[name="severity_or_stage"]', "progressive")
+    page.locator('select[name="laterality"]').select_option("OD")
+    page.locator('button[type="submit"]', has_text="Add Problem").click()
+    page.wait_for_load_state("networkidle")
+
+    page.goto(live_server + f"/patients/{patient_id}")
+    info_text = page.locator(".alert-info").all_inner_texts()
+    assert page.locator(".alert-info").count() == 5  # AMD:OCT, DR:OCT+OPTOS, Kcon:topo+pachy
+    assert any("Age-Related Macular Degeneration" in t and "Optical Coherence Tomography" in t for t in info_text)
+    assert any("Diabetic Retinopathy" in t and "Optical Coherence Tomography" in t for t in info_text)
+    assert any("Diabetic Retinopathy" in t and "Optos Widefield Retinal Imaging" in t for t in info_text)
+    assert any("Keratoconus" in t and "Corneal Analyzer" in t for t in info_text)
+    assert any("Keratoconus" in t and "Pachymetry" in t for t in info_text)
+
+
 def test_visit_focus_toggle_shows_hides_assessment_sections(logged_in_page, live_server):
     """The Visit Focus checkboxes (ehr/templates/exams/form.html) are the one
     behavior curl-based route checks can't confirm -- this is real client-side
@@ -1521,3 +1571,271 @@ def test_publish_new_version_carries_resource_requirements_forward(logged_in_pag
               f"/appointments/availability?provider_id={other_provider_id}&appointment_type_version_id={new_type_version_id}&relationship=established&date_str={target_date}")
     remaining_times = page.locator(".slot-grid a").all_inner_texts()
     assert chosen_time_label not in remaining_times
+
+
+def test_patient_self_registration_creates_chart_and_flags_it_for_staff(logged_in_page, live_server, page, context):
+    """Patient Self-Registration (BUILD_BACKLOG.md 5a follow-up) -- the portal
+    previously only authenticated existing chart-matched emails with no way
+    for someone with no chart at all to get one. /portal/register collects
+    minimal demographics and, like /portal/login, always ends in the same
+    magic-link email-confirmation step (no real email vendor -- the dev-only
+    check-email page surfaces it directly) before granting portal access, so
+    there is no separate password/activation step. Covers: registering
+    creates a new Patient chart and signs the patient into it; the new
+    chart is flagged self_registered_at so staff can tell it wasn't entered
+    at the front desk (there's no real identity-proofing behind it, only the
+    email click); and registering again with the same email signs back into
+    the same chart rather than creating a duplicate one."""
+    staff_page = logged_in_page
+
+    patient_ctx = context.browser.new_context()
+    patient_page = patient_ctx.new_page()
+    patient_page.goto(live_server + "/portal/register")
+    patient_page.fill("#first_name", "Selfreg")
+    patient_page.fill("#last_name", "Newcomer")
+    patient_page.fill("#date_of_birth", "1998-06-15")
+    patient_page.fill("#email", "selfreg.newcomer@example.com")
+    patient_page.fill("#phone", "555-0177")
+    patient_page.locator('button[type="submit"]', has_text="Create Account").click()
+    patient_page.wait_for_load_state("networkidle")
+    assert "confirm your email" in patient_page.content()
+    login_link = patient_page.locator("a", has_text="Sign in as Selfreg Newcomer")
+    login_link.wait_for(state="visible")
+    href = login_link.get_attribute("href")
+
+    patient_page.goto(href)
+    patient_page.wait_for_url(re.compile(r"/portal/$"))
+    assert patient_page.locator("h1", has_text="Welcome").is_visible()
+
+    # Staff side: exactly one chart exists for this new patient, and it's
+    # flagged as self-registered on the patient-context strip.
+    staff_page.goto(live_server + "/patients/")
+    staff_page.fill('input[name="last_name"]', "Newcomer")
+    staff_page.locator('button', has_text="Search").click()
+    staff_page.wait_for_load_state("networkidle")
+    rows = staff_page.locator("tbody tr")
+    assert rows.count() == 1
+    rows.first.locator("a").first.click()
+    staff_page.wait_for_load_state("networkidle")
+    assert staff_page.locator(".pcs-allergy-flag", has_text="Self-Registered").count() == 1
+
+    # Registering again with the same email signs back into the same chart
+    # instead of creating a second one.
+    patient_page.goto(live_server + "/portal/register")
+    patient_page.fill("#first_name", "Selfreg")
+    patient_page.fill("#last_name", "Newcomer")
+    patient_page.fill("#email", "selfreg.newcomer@example.com")
+    patient_page.locator('button[type="submit"]', has_text="Create Account").click()
+    patient_page.wait_for_load_state("networkidle")
+    second_link = patient_page.locator("a", has_text="Sign in as Selfreg Newcomer")
+    assert second_link.count() == 1
+
+    staff_page.goto(live_server + "/patients/")
+    staff_page.fill('input[name="last_name"]', "Newcomer")
+    staff_page.locator('button', has_text="Search").click()
+    staff_page.wait_for_load_state("networkidle")
+    assert staff_page.locator("tbody tr").count() == 1  # still just the one chart, no duplicate
+
+
+def test_provider_management_create_edit_and_toggle_active(logged_in_page, live_server):
+    """Provider Management UI -- before this, a Provider could only be added
+    via ehr/db/seed.py or a direct DB console, with no admin UI to create
+    one, edit their name/license/NPI/specialty, or mark one departed.
+    Covers: creating a provider from the admin form, editing its specialty,
+    and toggling active/inactive (never deleting -- deleting would
+    cascade-orphan any historical appointment/exam/prescription FK'd to
+    them, which this feature must never risk)."""
+    page = logged_in_page
+    page.goto(live_server + "/admin/scheduling/providers")
+    page.fill('input[name="first_name"]', "Regression")
+    page.fill('input[name="last_name"]', "Testprovider")
+    page.fill('input[name="license_number"]', "LIC-REGTEST")
+    page.fill('input[name="npi"]', "9999999999")
+    page.locator('button[type="submit"]', has_text="Add Provider").click()
+    page.wait_for_load_state("networkidle")
+
+    row = page.locator("tr", has_text="Regression Testprovider")
+    assert row.count() == 1
+    assert "ACTIVE" in row.first.inner_text().upper()
+
+    row.locator("a", has_text="Edit").click()
+    page.wait_for_load_state("networkidle")
+    assert page.locator('input[name="license_number"]').input_value() == "LIC-REGTEST"
+    page.fill('input[name="specialty"]', "Pediatric Optometry")
+    page.locator('button[type="submit"]', has_text="Save Changes").click()
+    page.wait_for_url(re.compile(r"/admin/scheduling/providers$"))
+
+    row = page.locator("tr", has_text="Regression Testprovider")
+    assert "Pediatric Optometry" in row.first.inner_text()
+
+    page.on("dialog", lambda d: d.accept())
+    row.locator("button", has_text="Deactivate").click()
+    page.wait_for_load_state("networkidle")
+    row = page.locator("tr", has_text="Regression Testprovider")
+    assert "INACTIVE" in row.first.inner_text().upper()
+    assert row.locator("button", has_text="Reactivate").count() == 1
+
+    row.locator("button", has_text="Reactivate").click()
+    page.wait_for_load_state("networkidle")
+    row = page.locator("tr", has_text="Regression Testprovider")
+    assert "ACTIVE" in row.first.inner_text().upper() and "INACTIVE" not in row.first.inner_text().upper()
+
+
+def test_exam_sign_lock_and_addendum_lifecycle(logged_in_page, live_server):
+    """Clinical Record Sign/Lock/Amend Lifecycle (spec 37.6/18.2 item 4's
+    long-tracked "no exam-signing workflow" gap) -- this app has no exam edit
+    route at all (create + view-only), so Sign gets real teeth by making
+    EyeExamAddendum the only way to add anything further once signed.
+    Covers: an unsigned exam has no addenda section and shows the Sign
+    button; signing stamps signed_at/signed_by and shows the e-signature
+    block; a second sign attempt on the same exam is rejected server-side;
+    an addendum cannot be added before signing; and once signed, an
+    addendum can be added and appears with its author and timestamp."""
+    page = logged_in_page
+    page.goto(live_server + "/exams/new")
+    page.select_option('select[name="patient_id"]', index=0)
+    page.select_option('select[name="provider_id"]', index=0)
+    page.locator('button[type="submit"]', has_text="Save Exam").click()
+    page.wait_for_url(re.compile(r"/exams/\d+$"))
+    exam_url = page.url
+    exam_id = exam_url.rstrip("/").split("/")[-1]
+
+    # Unsigned: no addenda card at all, and adding one directly is rejected.
+    assert page.locator("h3", has_text="Addenda").count() == 0
+    assert page.locator("form[action$='/sign']").count() == 1
+    token = page.locator('meta[name="csrf-token"]').get_attribute("content")
+    resp = page.request.post(live_server + f"/exams/{exam_id}/addenda",
+        form={"note": "too early", "csrf_token": token})
+    assert resp.status == 400
+
+    page.on("dialog", lambda d: d.accept())
+    page.locator("form[action$='/sign'] button[type=\"submit\"]").click()
+    page.wait_for_load_state("networkidle")
+    assert "Electronically signed" in page.content()
+    assert page.locator("form[action$='/sign']").count() == 0  # can't re-sign from the UI
+
+    # Server-side guard: a forged second sign POST is rejected even though the
+    # button is gone.
+    token = page.locator('meta[name="csrf-token"]').get_attribute("content")
+    resp = page.request.post(live_server + f"/exams/{exam_id}/sign", form={"csrf_token": token})
+    assert resp.status == 400
+
+    # Now signed: the addendum form appears and works.
+    page.fill('input[name="note"]', "Regression test addendum after signing.")
+    page.locator('form[action$="/addenda"] button[type="submit"]').click()
+    page.wait_for_load_state("networkidle")
+    assert "Regression test addendum after signing." in page.content()
+
+
+def test_inactive_provider_hidden_from_new_bookings_but_shown_on_existing_record(logged_in_page, live_server):
+    """Provider Management UI follow-up (BUILD_BACKLOG.md): deactivating a
+    provider now actually hides them from every new-booking dropdown
+    (appointments, exams, prescriptions, availability search) app-wide, while
+    an *existing* record that already references them (an appointment's own
+    edit form) must keep showing and correctly selecting that provider even
+    after deactivation -- otherwise the dropdown would silently drop the
+    right value. Uses a freshly-created provider, never a seeded one, so
+    this doesn't disturb any other test's assumptions about the two seeded
+    providers' dropdown positions."""
+    page = logged_in_page
+    page.goto(live_server + "/admin/scheduling/providers")
+    page.fill('input[name="first_name"]', "Hideme")
+    page.fill('input[name="last_name"]', "Deactivatee")
+    page.locator('button[type="submit"]', has_text="Add Provider").click()
+    page.wait_for_load_state("networkidle")
+
+    page.goto(live_server + "/appointments/new")
+    provider_options = page.locator('select[name="provider_id"] option').all()
+    target = next(o for o in provider_options if "Deactivatee" in (o.inner_text() or ""))
+    target_id, target_label = target.get_attribute("value"), target.inner_text()
+
+    page.select_option('select[name="patient_id"]', index=0)
+    page.select_option('select[name="provider_id"]', target_id)
+    type_options = page.locator('select[name="appointment_type_version_id"] option').all()
+    page.select_option('select[name="appointment_type_version_id"]', type_options[1].get_attribute("value"))
+    from datetime import datetime as _dt, timedelta as _td
+    when = (_dt.utcnow() + _td(days=15)).replace(hour=11, minute=0)
+    page.fill("#scheduled_at", when.strftime("%Y-%m-%dT%H:%M"))
+    page.locator('button[type="submit"]', has_text="Schedule Appointment").click()
+    page.wait_for_url(re.compile(r"/appointments/\d+$"))
+    appt_id = page.url.rstrip("/").split("/")[-1]
+
+    page.goto(live_server + "/admin/scheduling/providers")
+    page.on("dialog", lambda d: d.accept())
+    page.locator("tr", has_text="Hideme Deactivatee").locator("button", has_text="Deactivate").click()
+    page.wait_for_load_state("networkidle")
+
+    for url in ("/appointments/new", "/exams/new", "/prescriptions/new", "/appointments/availability"):
+        page.goto(live_server + url)
+        names = page.locator('select[name="provider_id"] option').all_inner_texts()
+        assert target_label not in names, f"{url} should not offer a deactivated provider"
+
+    page.goto(live_server + f"/appointments/{appt_id}/edit")
+    edit_names = page.locator('select[name="provider_id"] option').all_inner_texts()
+    assert target_label in edit_names
+    assert page.eval_on_selector('select[name="provider_id"]', 'el => el.value') == target_id
+
+
+def test_portal_access_log_records_and_displays_patient_views(logged_in_page, live_server, page, context):
+    """PortalAccessAuditEvent has been recorded since the patient-facing
+    clinical-data-view feature shipped, but nothing ever displayed it until
+    the new /admin/scheduling/portal-access-log page. Covers: a patient
+    viewing their own prescriptions through the portal creates a row that
+    then shows up on the staff-facing log with the right patient and
+    resource type."""
+    staff_page = logged_in_page
+    patient_ctx = context.browser.new_context()
+    patient_page = patient_ctx.new_page()
+    patient_page.goto(live_server + "/portal/login")
+    patient_page.fill("#email", "alice@example.com")
+    patient_page.click('button[type=submit]')
+    patient_page.wait_for_load_state("networkidle")
+    login_link = patient_page.locator("a", has_text="Sign in as Alice Johnson")
+    login_link.wait_for(state="visible")
+    patient_page.goto(login_link.get_attribute("href"))
+    patient_page.wait_for_url(re.compile(r"/portal/$"))
+
+    patient_page.goto(live_server + "/portal/records/prescriptions")
+    patient_page.wait_for_load_state("networkidle")
+
+    staff_page.goto(live_server + "/admin/scheduling/portal-access-log")
+    row = staff_page.locator("tr", has_text="Johnson, Alice")
+    assert row.count() >= 1
+    assert "Prescriptions" in row.first.inner_text()
+
+
+def test_prescription_prism_base_and_contact_lens_values_display(logged_in_page, live_server):
+    """Re-verified gap (spec §18.2 items 8-9): prism/base were entered on the
+    Rx form but never shown on either the detail or print page, and
+    contact-lens parameters (base curve/diameter/brand) were entirely absent
+    from the detail page (print already had them, gated on rx_type ==
+    'contacts'). Both pages now show prism/base for every Rx and a Contact
+    Lens Parameters block whenever any of those three fields are set --
+    matching the model's own "not restricted to rx_type" comment, so this
+    doesn't just re-gate on rx_type the way print used to."""
+    page = logged_in_page
+    page.goto(live_server + "/prescriptions/new")
+    page.select_option('select[name="patient_id"]', index=0)
+    page.select_option('select[name="rx_type"]', "contacts")
+    page.fill('input[name="od_sphere"]', "-2.00")
+    page.fill('input[name="od_prism"]', "1.50")
+    page.fill('input[name="od_base"]', "BD")
+    page.fill('input[name="os_prism"]', "2.00")
+    page.fill('input[name="os_base"]', "BU")
+    page.fill('input[name="od_bc"]', "8.6")
+    page.fill('input[name="od_dia"]', "14.2")
+    page.fill('input[name="od_brand"]', "Acuvue Oasys")
+    page.locator('button[type="submit"]', has_text="Save Prescription").click()
+    page.wait_for_url(re.compile(r"/prescriptions/\d+$"))
+
+    detail_text = page.locator("body").inner_text()
+    assert "PRISM" in detail_text.upper() and "BASE" in detail_text.upper()
+    assert "1.50" in detail_text and "BD" in detail_text
+    assert "Contact Lens Parameters" in detail_text
+    assert "Acuvue Oasys" in detail_text
+
+    rx_id = page.url.rstrip("/").split("/")[-1]
+    page.goto(live_server + f"/prescriptions/{rx_id}/print")
+    print_text = page.locator("body").inner_text()
+    assert "PRISM" in print_text.upper() and "BASE" in print_text.upper()
+    assert "Acuvue Oasys" in print_text

@@ -19,21 +19,43 @@
   <div class="card"><h3>Rx Values</h3>
     <div class="table-responsive">
     <table class="exam-table">
-      <tr><th></th><th>Sph</th><th>Cyl</th><th>Axis</th><th>Add</th></tr>
+      <tr><th></th><th>Sph</th><th>Cyl</th><th>Axis</th><th>Add</th><th>Prism</th><th>Base</th></tr>
       <tr><td>OD</td>
         <td>{{ '%+.2f'|format(rx.od_sphere) if rx.od_sphere is not none else '—' }}</td>
         <td>{{ '%+.2f'|format(rx.od_cylinder) if rx.od_cylinder is not none else '—' }}</td>
         <td>{{ rx.od_axis or '—' }}</td>
         <td>{{ '%+.2f'|format(rx.od_add) if rx.od_add is not none else '—' }}</td>
+        <td>{{ '%.2f'|format(rx.od_prism) if rx.od_prism is not none else '—' }}</td>
+        <td>{{ rx.od_base or '—' }}</td>
       </tr>
       <tr><td>OS</td>
         <td>{{ '%+.2f'|format(rx.os_sphere) if rx.os_sphere is not none else '—' }}</td>
         <td>{{ '%+.2f'|format(rx.os_cylinder) if rx.os_cylinder is not none else '—' }}</td>
         <td>{{ rx.os_axis or '—' }}</td>
         <td>{{ '%+.2f'|format(rx.os_add) if rx.os_add is not none else '—' }}</td>
+        <td>{{ '%.2f'|format(rx.os_prism) if rx.os_prism is not none else '—' }}</td>
+        <td>{{ rx.os_base or '—' }}</td>
       </tr>
     </table>
     </div>
+    {% if rx.od_bc or rx.od_dia or rx.od_brand or rx.os_bc or rx.os_dia or rx.os_brand %}
+    <h3 style="margin-top:1rem">Contact Lens Parameters</h3>
+    <div class="table-responsive">
+    <table class="exam-table">
+      <tr><th></th><th>Base Curve</th><th>Diameter</th><th>Brand</th></tr>
+      <tr><td>OD</td>
+        <td>{{ '%.1f'|format(rx.od_bc) if rx.od_bc is not none else '—' }}</td>
+        <td>{{ '%.1f'|format(rx.od_dia) if rx.od_dia is not none else '—' }}</td>
+        <td>{{ rx.od_brand or '—' }}</td>
+      </tr>
+      <tr><td>OS</td>
+        <td>{{ '%.1f'|format(rx.os_bc) if rx.os_bc is not none else '—' }}</td>
+        <td>{{ '%.1f'|format(rx.os_dia) if rx.os_dia is not none else '—' }}</td>
+        <td>{{ rx.os_brand or '—' }}</td>
+      </tr>
+    </table>
+    </div>
+    {% endif %}
     {% if rx.lens_type or rx.lens_material or rx.lens_treatments or rx.recall_interval or rx.patient_education_tags %}
     <h3 style="margin-top:1rem">Lens Design &amp; Follow-Up</h3>
     <dl class="dl-grid">

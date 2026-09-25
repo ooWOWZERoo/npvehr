@@ -273,7 +273,7 @@ def _form_context(db: Session, patient_id=None, prefill_date=None, appt: Appoint
         ctx_patient = patient_context(db.query(Patient).filter(Patient.id == patient_id).first())
     return {
         "patients": db.query(Patient).order_by(Patient.last_name).all(),
-        "providers": db.query(Provider).all(),
+        "providers": sched.bookable_providers(db, include_id=appt.provider_id if appt else None),
         "types": _bookable_type_versions(db),
         "tests": _diagnostic_tests(db),
         "selected_patient_id": patient_id,
@@ -451,7 +451,7 @@ def availability(request: Request, provider_id: int = None, appointment_type_ver
     never actually receives a value (a GET <form> submits the query string,
     not a request body, which is what Form() reads) -- these are now plain
     query parameters, which FastAPI binds from the query string by default."""
-    providers = db.query(Provider).all()
+    providers = sched.bookable_providers(db)
     types = _bookable_type_versions(db)
     target_date = date.fromisoformat(date_str) if date_str else date.today()
     slots, version, error = [], None, None

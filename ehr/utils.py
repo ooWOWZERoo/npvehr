@@ -74,6 +74,7 @@ def patient_context(patient):
         "allergies_text": patient.allergies,
         "balance_due": patient.balance_due,
         "balance_state": balance_state(patient.balance_due),
+        "self_registered_at": patient.self_registered_at,
     }
 
 

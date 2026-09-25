@@ -74,6 +74,14 @@ class Patient(Base):
     # round (no real SMS/email vendor wired up yet).
     sms_opt_in = Column(Boolean, default=False, nullable=False)
     email_opt_in = Column(Boolean, default=False, nullable=False)
+    # Patient Self-Registration (BUILD_BACKLOG.md 5a follow-up): set only when
+    # this chart was created by the patient themselves via /portal/register,
+    # never for a staff-entered patient (null there). There is no real
+    # identity-proofing step behind self-registration -- the magic-link email
+    # click is the only verification -- so this stays visible to staff as a
+    # flag meaning "not yet reviewed by front desk," not a claim that the
+    # identity has been confirmed.
+    self_registered_at = Column(DateTime)
     created_at = Column(DateTime, default=datetime.utcnow)
     appointments = relationship("Appointment", back_populates="patient", cascade="all, delete-orphan")
     eye_exams = relationship("EyeExam", back_populates="patient", cascade="all, delete-orphan")
@@ -196,6 +204,13 @@ class Provider(Base):
     # real conflict or offer an unsafe time; see ehr.services.scheduling.
     # get_effective_slot_granularity.
     slot_granularity_minutes = Column(Integer)
+    # Provider Management UI (BUILD_BACKLOG.md follow-up): before this, a
+    # provider could only be added via ehr/db/seed.py or a direct DB console,
+    # with no way to mark one departed short of deleting the row (which would
+    # cascade-orphan every appointment/exam/prescription FK'd to them, wiping
+    # real clinical history). A departed provider is instead deactivated,
+    # never deleted -- their historical records are untouched either way.
+    active = Column(Boolean, default=True, nullable=False)
     appointments = relationship("Appointment", back_populates="provider")
     eye_exams = relationship("EyeExam", back_populates="provider")
     prescriptions = relationship("Prescription", back_populates="provider")
@@ -842,10 +857,21 @@ class EyeExam(Base):
     suggested_em_code = Column(String)
     suggested_em_rationale = Column(String)
     em_code_confirmed = Column(String)
+    # Clinical Record Sign/Lock/Amend Lifecycle (BUILD_BACKLOG.md, spec
+    # §37.6/§18.2 item 4's long-tracked "no exam-signing workflow" gap):
+    # this app has never had an exam edit route at all (create + view-only
+    # today), so "locking" a signed exam does not need to block a form that
+    # doesn't exist -- it instead gives Sign real teeth by making
+    # EyeExamAddendum (below) the only way to add anything further once
+    # signed, exactly the real-world reason addenda exist in the first
+    # place. Both null until signed; a signed exam is never un-signed.
+    signed_at = Column(DateTime)
+    signed_by_user_id = Column(Integer, ForeignKey("users.id"))
     created_at = Column(DateTime, default=datetime.utcnow)
     patient = relationship("Patient", back_populates="eye_exams")
     provider = relationship("Provider", back_populates="eye_exams")
     appointment = relationship("Appointment")
+    signed_by = relationship("User", foreign_keys=[signed_by_user_id])
     refractions = relationship("Refraction", back_populates="exam", cascade="all, delete-orphan")
     prescriptions = relationship("Prescription", back_populates="exam")
     dry_eye_assessments = relationship("DryEyeAssessment", back_populates="exam", cascade="all, delete-orphan")
@@ -853,6 +879,21 @@ class EyeExam(Base):
     glaucoma_trackings = relationship("GlaucomaTracking", back_populates="exam", cascade="all, delete-orphan")
     binocular_vision_assessments = relationship("BinocularVisionAssessment", back_populates="exam", cascade="all, delete-orphan")
     surgery_comanagement_trackings = relationship("SurgeryComanagementTracking", back_populates="exam", cascade="all, delete-orphan")
+    addenda = relationship("EyeExamAddendum", back_populates="exam", cascade="all, delete-orphan",
+                            order_by="EyeExamAddendum.created_at")
+
+class EyeExamAddendum(Base):
+    """An append-only dated note on a signed EyeExam -- the only way to add
+    anything further to a visit once it's been signed (see EyeExam.signed_at
+    above). Same append-only, never-edited convention as ProblemAddendum."""
+    __tablename__ = "eye_exam_addenda"
+    id = Column(Integer, primary_key=True, index=True)
+    exam_id = Column(Integer, ForeignKey("eye_exams.id"), nullable=False)
+    author_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    note = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    exam = relationship("EyeExam", back_populates="addenda", foreign_keys=[exam_id])
+    author = relationship("User", foreign_keys=[author_user_id])
 
 class Refraction(Base):
     __tablename__ = "refractions"
