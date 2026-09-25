@@ -1256,6 +1256,58 @@ def migration_040_eye_exam_sign_lock(conn):
             "ON eye_exam_addenda (exam_id)"
         ))
 
+def migration_041_prescription_sign_lock(conn):
+    """Clinical Record Sign/Lock/Amend Lifecycle extended to Prescription
+    (BUILD_BACKLOG.md follow-up from migration_040) -- same shape:
+    signed_at/signed_by_user_id on prescriptions (null until signed) and a
+    new prescription_addenda table, the only way to add anything further to
+    a prescription once it's been signed."""
+    if _table_exists(conn, "prescriptions"):
+        _add_column_if_missing(conn, "prescriptions", "signed_at", "TIMESTAMP")
+        _add_column_if_missing(conn, "prescriptions", "signed_by_user_id", "INTEGER")
+    if not _table_exists(conn, "prescription_addenda"):
+        conn.execute(text(f"""
+            CREATE TABLE IF NOT EXISTS prescription_addenda (
+                id {_pk_ddl(conn)},
+                rx_id INTEGER NOT NULL,
+                author_user_id INTEGER NOT NULL,
+                note TEXT NOT NULL,
+                created_at TIMESTAMP
+            )
+        """))
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_prescription_addenda_rx "
+            "ON prescription_addenda (rx_id)"
+        ))
+
+def migration_042_create_field_change_audit_events(conn):
+    """Per-record "who changed this field" audit trail (spec §37.1/§37.6),
+    a generic table keyed by (table_name, record_id) rather than one table
+    per model -- see the FieldChangeAuditEvent model docstring for the full
+    scoping rationale. Wired into Patient and Provider edits this round,
+    the two records that had no change tracking of any kind."""
+    if not _table_exists(conn, "field_change_audit_events"):
+        conn.execute(text(f"""
+            CREATE TABLE IF NOT EXISTS field_change_audit_events (
+                id {_pk_ddl(conn)},
+                table_name VARCHAR NOT NULL,
+                record_id INTEGER NOT NULL,
+                field_name VARCHAR NOT NULL,
+                old_value TEXT,
+                new_value TEXT,
+                changed_by_user_id INTEGER NOT NULL,
+                changed_at TIMESTAMP
+            )
+        """))
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_field_change_audit_record "
+            "ON field_change_audit_events (table_name, record_id)"
+        ))
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_field_change_audit_changed_at "
+            "ON field_change_audit_events (changed_at)"
+        ))
+
 # Ordered list of (id, function). Adding new migrations: append, never edit past entries.
 COLUMN_MIGRATIONS = [
     ("001_appointment_columns", migration_001_appointment_columns),
@@ -1291,6 +1343,8 @@ COLUMN_MIGRATIONS = [
     ("038_patient_self_registered_at", migration_038_patient_self_registered_at),
     ("039_provider_active", migration_039_provider_active),
     ("040_eye_exam_sign_lock", migration_040_eye_exam_sign_lock),
+    ("041_prescription_sign_lock", migration_041_prescription_sign_lock),
+    ("042_create_field_change_audit_events", migration_042_create_field_change_audit_events),
 ]
 POST_CREATE_ALL_MIGRATIONS = [
     ("002_seed_appointment_types", migration_002_seed_appointment_types),

@@ -1,12 +1,13 @@
-from datetime import date
-from fastapi import APIRouter, Depends, Request
+from datetime import date, datetime
+from fastapi import APIRouter, Depends, Request, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
-from ehr.models.database import get_db, Prescription, Patient
+from ehr.models.database import get_db, Prescription, PrescriptionAddendum, Patient
 from ehr.env_info import EHR_ENV
 from ehr.utils import patient_context
-from ehr.auth.permissions import require_role, RX_VIEW, RX_EDIT, ROLE_LABELS
+from ehr.auth.deps import get_current_user
+from ehr.auth.permissions import require_role, RX_VIEW, RX_EDIT, RX_SIGN, ROLE_LABELS
 from ehr.auth import csrf
 from ehr.services import scheduling as sched
 
@@ -64,3 +65,36 @@ def rx_print(request: Request, rx_id: int, db: Session = Depends(get_db)):
     rx = db.query(Prescription).filter(Prescription.id == rx_id).first()
     if not rx: return HTMLResponse("Not found", status_code=404)
     return templates.TemplateResponse(request, "prescriptions/print.html", {"rx": rx})
+
+
+@router.post("/{rx_id}/sign", dependencies=[Depends(require_role(*RX_SIGN))])
+def sign_rx(request: Request, rx_id: int, csrf_token: str = Form(""),
+            db: Session = Depends(get_db), user=Depends(get_current_user)):
+    """Clinical Record Sign/Lock/Amend Lifecycle, extended from EyeExam
+    (ehr/routes/exams.py's sign_exam) -- same one-way electronic
+    attestation, same PrescriptionAddendum-is-the-only-way-to-add-more
+    pattern, since Prescription is create-only just like EyeExam."""
+    csrf.verify_or_403(request.state.csrf_token, csrf_token)
+    rx = db.query(Prescription).filter(Prescription.id == rx_id).first()
+    if not rx: return HTMLResponse("Not found", status_code=404)
+    if rx.signed_at:
+        return HTMLResponse("This prescription is already signed.", status_code=400)
+    rx.signed_at = datetime.utcnow()
+    rx.signed_by_user_id = user.id
+    db.commit()
+    return RedirectResponse(f"/prescriptions/{rx_id}", status_code=303)
+
+
+@router.post("/{rx_id}/addenda", dependencies=[Depends(require_role(*RX_EDIT))])
+def add_rx_addendum(request: Request, rx_id: int, note: str = Form(...), csrf_token: str = Form(""),
+                     db: Session = Depends(get_db), user=Depends(get_current_user)):
+    csrf.verify_or_403(request.state.csrf_token, csrf_token)
+    rx = db.query(Prescription).filter(Prescription.id == rx_id).first()
+    if not rx: return HTMLResponse("Not found", status_code=404)
+    if not rx.signed_at:
+        return HTMLResponse("Only a signed prescription can receive an addendum -- this one is still open for direct edits.", status_code=400)
+    note = note.strip()
+    if note:
+        db.add(PrescriptionAddendum(rx_id=rx_id, author_user_id=user.id, note=note))
+        db.commit()
+    return RedirectResponse(f"/prescriptions/{rx_id}", status_code=303)

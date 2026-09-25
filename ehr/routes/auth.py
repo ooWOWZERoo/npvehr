@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Request, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
-from ehr.models.database import get_db, User, UserSession, AuthAuditEvent
+from ehr.models.database import get_db, User, UserSession, AuthAuditEvent, FieldChangeAuditEvent
 from ehr.auth.security import hash_password, verify_password, new_session_token
 from ehr.auth.deps import get_current_user, SESSION_COOKIE_NAME, SESSION_LIFETIME
 from ehr.auth.permissions import require_role, USER_MANAGEMENT, AUTH_AUDIT_VIEW, ALL_ROLES, ROLE_LABELS
@@ -164,3 +164,18 @@ def auth_audit_log(request: Request, db: Session = Depends(get_db), _user=Depend
     events = db.query(AuthAuditEvent).order_by(AuthAuditEvent.occurred_at.desc()).limit(300).all()
     users_by_id = {u.id: u for u in db.query(User).all()}
     return templates.TemplateResponse(request, "admin/audit.html", {"events": events, "users_by_id": users_by_id})
+
+
+@router.get("/admin/field-audit", response_class=HTMLResponse)
+def field_change_audit_log(request: Request, db: Session = Depends(get_db), _user=Depends(get_current_user),
+                            _role=Depends(require_role(*AUTH_AUDIT_VIEW))):
+    """Per-record "who changed this field" audit trail (spec §37.1/§37.6
+    follow-up) -- currently populated only for Patient and Provider edits,
+    the two records that had no change tracking of any kind before this.
+    AppointmentAuditEvent/AppointmentTypeAuditEvent cover their own tables
+    separately (Administration > Scheduling > Audit Log)."""
+    events = (db.query(FieldChangeAuditEvent)
+              .order_by(FieldChangeAuditEvent.changed_at.desc()).limit(300).all())
+    users_by_id = {u.id: u for u in db.query(User).all()}
+    return templates.TemplateResponse(request, "admin/field_audit.html",
+        {"events": events, "users_by_id": users_by_id})

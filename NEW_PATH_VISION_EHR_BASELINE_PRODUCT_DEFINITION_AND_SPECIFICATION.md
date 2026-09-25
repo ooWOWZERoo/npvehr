@@ -3876,3 +3876,58 @@ No change to the Rx *form* itself -- prism/base/contact-lens fields were already
 | New capability | Inactive providers now hidden from every new-booking dropdown app-wide via a new `bookable_providers()` helper, while still correctly shown on an existing record that references them (§64). New staff-facing `/admin/scheduling/portal-access-log` page displays `PortalAccessAuditEvent` for the first time (§65). Prescription detail/print pages now show prism/base and contact-lens parameters, previously captured but never displayed (§66). |
 | Updated | `ehr/services/scheduling.py`, `ehr/routes/{appointments,exams,prescriptions,patients,portal,admin_scheduling}.py`, `ehr/templates/admin/scheduling/_nav.html`, `ehr/templates/prescriptions/{detail,print}.html`. New `ehr/templates/admin/scheduling/portal_access_log.html`. `tests/test_smoke.py` gained three new tests. |
 | Explicitly not done | No filtering on the admin Provider Availability page or calendar filter (§64.4). No search/pagination on the portal access log beyond the 200-row cap, and no logging of scheduling-side portal activity there (§65.4). No Rx form or validation changes -- display only (§66.4). None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |
+
+## 67. Clinical Record Sign/Lock/Amend Lifecycle Extended to Prescription (v2.46)
+
+### 67.1 Origin
+
+Direct follow-up to §63 (v2.44): that round explicitly scoped the sign/lock/amend lifecycle to `EyeExam` only, logging `Prescription`'s equivalent lack of any change-tracking or finalization concept as a named next step (`BUILD_BACKLOG.md` §6). Confirmed before starting that `Prescription` has the identical shape that made the `EyeExam` design work in the first place: create-only (`GET/POST /new`, `GET /{id}`, `GET /{id}/print` -- no edit route at all).
+
+### 67.2 What changed
+
+**New `Prescription.signed_at`/`signed_by_user_id` columns** (migration `041_prescription_sign_lock`, both nullable) and a new **`POST /prescriptions/{id}/sign`** route, gated by a new **`RX_SIGN`** permission group (`system_administrator`, `optometrist_provider` only -- same narrower-than-EDIT posture as `EXAM_SIGN`: `RX_EDIT` also includes Practice Administrator and Optician, neither of whom should be able to attest a prescription clinically). Signing is one-way, exactly like `EyeExam`: no unsign route, a second sign attempt rejected with 400 both from the UI (button disappears once signed) and independently server-side.
+
+**New append-only `PrescriptionAddendum`** table (`rx_id`, `author_user_id`, `note`, `created_at` -- identical shape to `EyeExamAddendum`/`ProblemAddendum`), the only way to add anything further to a prescription once signed. `POST /prescriptions/{id}/addenda` (existing `RX_EDIT` group) is rejected with 400 until the prescription is signed.
+
+**Prescription detail page** gained the identical "Signed" badge, "Sign & Lock" card, and "Addenda" card `EyeExam`'s detail page already has, reusing the exact same markup/CSS pattern for a consistent staff experience across both record types.
+
+### 67.3 Verified
+
+`python3 -m py_compile` on every touched file. Fresh-SQLite migration boot + idempotent re-run confirmed clean. Manual live-instance verification via Playwright: confirmed the addenda card is absent and an addendum POST is rejected pre-signature, signed a prescription (attestation line appears, button disappears), confirmed a forged second sign POST and a forged pre-signature addendum POST are both rejected with 400, then added a real addendum post-signature and confirmed it displays correctly. New Playwright test `test_prescription_sign_lock_and_addendum_lifecycle` covers the same end to end. Full suite passed after this change.
+
+### 67.4 Explicitly not done
+
+Same scope boundaries as §63.4: no unsign/reopen workflow, no PDF/print rendering with a signature block, no change to existing `RX_VIEW`/`RX_EDIT` permissions beyond the new sign/addendum actions. Does not address the separately-tracked per-field audit trail gap (§68 below covers a different, narrower slice of that). None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6.
+
+## 68. Per-Record Field-Change Audit Trail (v2.47)
+
+### 68.1 Origin
+
+Long-tracked gap (spec §37.1/§37.6, logged since the v2.4 auth pass): `AuthAuditEvent` covers authentication/access events only, by explicit design -- a full "who changed this specific field, and to what value" trail across editable records was out of scope for that round and has stayed an open item since. Confirmed before starting that `Patient` and `Provider` were the two records editable with genuinely zero change tracking of any kind (`Appointment`/`AppointmentType` already have their own dedicated `AppointmentAuditEvent`/`AppointmentTypeAuditEvent` tables from earlier rounds).
+
+### 68.2 What changed
+
+**New generic `FieldChangeAuditEvent` table** (migration `042_create_field_change_audit_events`), keyed by `(table_name, record_id)` rather than one audit table per model: `field_name`, `old_value`/`new_value` (both plain strings, `str(value)` or `None` -- a legible change log for staff to read, matching `AppointmentAuditEvent`'s own string-typed old/new columns, not a typed diff), `changed_by_user_id`, `changed_at`. New `ehr.services.field_audit.record_field_changes(db, table_name, record_id, before, after, user_id)` helper: compares two `{field_name: value}` snapshots and inserts one row per field that actually changed.
+
+**Wired into `update_patient`** (`ehr/routes/patients.py`, snapshotting before/after across every substantive Patient field except `photo_path`, which has its own file-management logic and isn't a meaningful "old value -> new value" to show) and **`update_provider`/`toggle_provider_active`** (`ehr/routes/admin_scheduling.py`, covering name/license/NPI/specialty and the active/inactive flag).
+
+**New staff-facing `/admin/field-audit`** page ("Field Change Log" nav entry, alongside the existing Auth Audit Log), listing the most recent 300 changes with a direct link back to the patient or provider record, the field, old/new values, and who made the change.
+
+**Deliberately narrow, not a blanket instrumentation**: this round wires the primitive into exactly the two previously-untracked records. `AppointmentAuditEvent`/`AppointmentTypeAuditEvent` are left completely as-is -- migrating their already-working, already-tested logic onto this generic table would be pure churn with no functional gain.
+
+### 68.3 Verified
+
+`python3 -m py_compile` on every touched file. Fresh-SQLite migration boot + idempotent re-run confirmed clean. Manual live-instance verification via Playwright: edited a patient's phone number and a provider's specialty, confirmed both changes appear on `/admin/field-audit` with the correct field name, old/new value, record link, and editing user. (Incidentally surfaced a genuine pre-existing quirk, not a bug in this round: some `Patient` fields normalize a blank form submission to `None` on save while others store `""` as-is, so a still-blank field's very first edit through this route can log a `None -> ""` row -- an accurate reflection of how the underlying data already behaves, not something this audit feature should paper over.) New Playwright test `test_field_change_audit_log_records_patient_and_provider_edits` covers both record types end to end, using freshly-created records so it doesn't depend on or disturb any other test's data. Full suite passed after this change.
+
+### 68.4 Explicitly not done
+
+No blanket roll-out to every model in the app -- only `Patient` and `Provider`, the two previously-untracked records (a natural, separately-scoped follow-up if another model needs the same treatment). No migration of `AppointmentAuditEvent`/`AppointmentTypeAuditEvent` onto this generic table. No search/filter/pagination on `/admin/field-audit` beyond the 300-row cap. No record-level authorization (this remains a distinct, still-open gap per §37.6). None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6.
+
+**Version 2.46-2.47 change log — Prescription Sign/Lock/Amend and Field-Change Audit Trail:**
+
+| Area | Change |
+| --- | --- |
+| New capability | Prescription gains the same sign/lock/amend lifecycle EyeExam already had (new `RX_SIGN` permission group, `PrescriptionAddendum` table) (§67). New generic `FieldChangeAuditEvent` table + `/admin/field-audit` page, wired into Patient and Provider edits -- the two previously-untracked records (§68). |
+| New migrations | `041_prescription_sign_lock` (Prescription `signed_at`/`signed_by_user_id`; new `prescription_addenda` table). `042_create_field_change_audit_events` (new generic audit table). |
+| Updated | `ehr/routes/prescriptions.py`, `ehr/models/database.py`, `ehr/auth/permissions.py`, `ehr/templates/prescriptions/detail.html` (§67). `ehr/routes/{patients,admin_scheduling,auth}.py`, `ehr/templates/{base,admin/audit}.html`. New `ehr/services/field_audit.py`, `ehr/templates/admin/field_audit.html` (§68). `tests/test_smoke.py` gained two new tests. |
+| Explicitly not done | No unsign/reopen for either sign/lock lifecycle. No blanket field-audit roll-out beyond Patient/Provider. No migration of existing Appointment-side audit tables onto the new generic one. No search/pagination on the new audit page. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |

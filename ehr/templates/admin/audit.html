@@ -2,7 +2,7 @@
 {% block title %}Authentication Audit Log &mdash; New Path Vision EHR{% endblock %}
 {% block content %}
 <h1>Authentication Audit Log</h1>
-<p style="color:var(--ink-muted);margin-top:-0.75rem">Login/logout, access-denied, and account-admin events (most recent 300). This log covers authentication/access events only -- clinical and scheduling data changes are logged separately (Appointment Audit Log under Administration &gt; Scheduling).</p>
+<p style="color:var(--ink-muted);margin-top:-0.75rem">Login/logout, access-denied, and account-admin events (most recent 300). This log covers authentication/access events only -- scheduling data changes have their own log (Administration &gt; Scheduling &gt; Audit Log), and per-field patient/provider record changes have their own (Field Change Log).</p>
 <div class="card">
   <div class="table-responsive">
   <table>

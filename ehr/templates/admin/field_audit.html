@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Field Change Audit Log &mdash; New Path Vision EHR{% endblock %}
+{% block content %}
+<h1>Field Change Audit Log</h1>
+<p style="color:var(--ink-muted);margin-top:-0.75rem">Per-field "who changed this, and to what value" trail (most recent 300), currently populated for patient and provider record edits only. Authentication/access events are logged separately (Auth Audit Log), and appointment/appointment-type changes have their own dedicated log (Administration &gt; Scheduling &gt; Audit Log).</p>
+<div class="card">
+  <div class="table-responsive">
+  <table>
+    <thead><tr><th>When</th><th>Record</th><th>Field</th><th>Old Value</th><th>New Value</th><th>Changed By</th></tr></thead>
+    <tbody>
+    {% for e in events %}
+      <tr>
+        <td>{{ e.changed_at.strftime('%Y-%m-%d %H:%M:%S') if e.changed_at else '—' }}</td>
+        <td>
+          {% if e.table_name == 'patients' %}<a href="/patients/{{ e.record_id }}">Patient #{{ e.record_id }}</a>
+          {% elif e.table_name == 'providers' %}<a href="/admin/scheduling/providers/{{ e.record_id }}/edit">Provider #{{ e.record_id }}</a>
+          {% else %}{{ e.table_name }} #{{ e.record_id }}{% endif %}
+        </td>
+        <td class="mono-data">{{ e.field_name }}</td>
+        <td>{{ e.old_value if e.old_value is not none else '—' }}</td>
+        <td>{{ e.new_value if e.new_value is not none else '—' }}</td>
+        <td>{% if e.changed_by_user_id and users_by_id.get(e.changed_by_user_id) %}{{ users_by_id[e.changed_by_user_id].first_name }} {{ users_by_id[e.changed_by_user_id].last_name }}{% else %}—{% endif %}</td>
+      </tr>
+    {% else %}<tr><td colspan="6" style="text-align:center;color:#64748b">No field changes recorded yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+{% endblock %}
