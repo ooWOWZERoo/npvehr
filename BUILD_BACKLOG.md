@@ -143,9 +143,9 @@ User asked for a deep-dive rethink of the calendar/scheduling UX against ten spe
 
 ## 6. Clinical Workflow Gaps (spec §18.2, §37.6)
 
-- [ ] Clinical records (exams, prescriptions) **cannot be edited, signed, corrected, or appended** — both are create-only today, confirmed repeatedly this session (§18.2 item 4). This is a foundational gap for real clinical use: no draft → sign → lock → amend lifecycle exists at all.
-- [ ] Appointment and exam records are not explicitly linked (§18.2 item 1) — worth re-verifying current truth before treating as still-open, since significant appointment-module work has happened since this was written
-- [ ] Provider records cannot be managed in the application (no add/edit provider UI) — re-verify current truth (§18.2 item 3)
+- [x] Clinical records (exams) **cannot be edited, signed, corrected, or appended** — both are create-only today (§18.2 item 4). **Partially resolved, v2.44**: `EyeExam` now has a sign/lock/amend lifecycle (`signed_at`/`signed_by_user_id` + `EyeExamAddendum`) — see baseline spec §63. Still open: exams remain create-only pre-signature (no direct edit route at all, signed or not) and `Prescription` has no equivalent lifecycle yet.
+- [x] Appointment and exam records are not explicitly linked (§18.2 item 1) — resolved by the CPT Mapping round (v2.36, baseline spec §55): `EyeExam.appointment_id` now links the two.
+- [x] Provider records cannot be managed in the application (no add/edit provider UI) — resolved, v2.43: `/admin/scheduling/providers` (see baseline spec §62). Still open: inactive providers aren't yet filtered out of booking dropdowns (tracked separately above).
 - [ ] Prescription relationships not validated for patient/provider/exam consistency (§18.2 item 2)
 - [ ] Prism/base omitted from normal and printable prescription displays; contact-lens values omitted from normal prescription detail (§18.2 items 8-9) — re-verify against the v2.10 Lens Design & Follow-Up work, which may have already narrowed this
 - [x] **`follow_up_unit` (v2.34) has the same latent edited-flag ordering bug fixed for the new suggestion fields in v2.35** (baseline spec §54.2): a `<select>` fires `input` before `change`, and the generic form-recompute wiring listens for both, so an edited-flag set only on `change` lets the `input`-triggered recompute fire first and silently revert a clinician's manual unit selection. Fixed the same way (also set the flag on `input`); a new regression test confirms it (verified to fail without the fix). **Done, v2.40** — see baseline spec §59.
