@@ -1725,3 +1725,117 @@ def test_exam_sign_lock_and_addendum_lifecycle(logged_in_page, live_server):
     page.locator('form[action$="/addenda"] button[type="submit"]').click()
     page.wait_for_load_state("networkidle")
     assert "Regression test addendum after signing." in page.content()
+
+
+def test_inactive_provider_hidden_from_new_bookings_but_shown_on_existing_record(logged_in_page, live_server):
+    """Provider Management UI follow-up (BUILD_BACKLOG.md): deactivating a
+    provider now actually hides them from every new-booking dropdown
+    (appointments, exams, prescriptions, availability search) app-wide, while
+    an *existing* record that already references them (an appointment's own
+    edit form) must keep showing and correctly selecting that provider even
+    after deactivation -- otherwise the dropdown would silently drop the
+    right value. Uses a freshly-created provider, never a seeded one, so
+    this doesn't disturb any other test's assumptions about the two seeded
+    providers' dropdown positions."""
+    page = logged_in_page
+    page.goto(live_server + "/admin/scheduling/providers")
+    page.fill('input[name="first_name"]', "Hideme")
+    page.fill('input[name="last_name"]', "Deactivatee")
+    page.locator('button[type="submit"]', has_text="Add Provider").click()
+    page.wait_for_load_state("networkidle")
+
+    page.goto(live_server + "/appointments/new")
+    provider_options = page.locator('select[name="provider_id"] option').all()
+    target = next(o for o in provider_options if "Deactivatee" in (o.inner_text() or ""))
+    target_id, target_label = target.get_attribute("value"), target.inner_text()
+
+    page.select_option('select[name="patient_id"]', index=0)
+    page.select_option('select[name="provider_id"]', target_id)
+    type_options = page.locator('select[name="appointment_type_version_id"] option').all()
+    page.select_option('select[name="appointment_type_version_id"]', type_options[1].get_attribute("value"))
+    from datetime import datetime as _dt, timedelta as _td
+    when = (_dt.utcnow() + _td(days=15)).replace(hour=11, minute=0)
+    page.fill("#scheduled_at", when.strftime("%Y-%m-%dT%H:%M"))
+    page.locator('button[type="submit"]', has_text="Schedule Appointment").click()
+    page.wait_for_url(re.compile(r"/appointments/\d+$"))
+    appt_id = page.url.rstrip("/").split("/")[-1]
+
+    page.goto(live_server + "/admin/scheduling/providers")
+    page.on("dialog", lambda d: d.accept())
+    page.locator("tr", has_text="Hideme Deactivatee").locator("button", has_text="Deactivate").click()
+    page.wait_for_load_state("networkidle")
+
+    for url in ("/appointments/new", "/exams/new", "/prescriptions/new", "/appointments/availability"):
+        page.goto(live_server + url)
+        names = page.locator('select[name="provider_id"] option').all_inner_texts()
+        assert target_label not in names, f"{url} should not offer a deactivated provider"
+
+    page.goto(live_server + f"/appointments/{appt_id}/edit")
+    edit_names = page.locator('select[name="provider_id"] option').all_inner_texts()
+    assert target_label in edit_names
+    assert page.eval_on_selector('select[name="provider_id"]', 'el => el.value') == target_id
+
+
+def test_portal_access_log_records_and_displays_patient_views(logged_in_page, live_server, page, context):
+    """PortalAccessAuditEvent has been recorded since the patient-facing
+    clinical-data-view feature shipped, but nothing ever displayed it until
+    the new /admin/scheduling/portal-access-log page. Covers: a patient
+    viewing their own prescriptions through the portal creates a row that
+    then shows up on the staff-facing log with the right patient and
+    resource type."""
+    staff_page = logged_in_page
+    patient_ctx = context.browser.new_context()
+    patient_page = patient_ctx.new_page()
+    patient_page.goto(live_server + "/portal/login")
+    patient_page.fill("#email", "alice@example.com")
+    patient_page.click('button[type=submit]')
+    patient_page.wait_for_load_state("networkidle")
+    login_link = patient_page.locator("a", has_text="Sign in as Alice Johnson")
+    login_link.wait_for(state="visible")
+    patient_page.goto(login_link.get_attribute("href"))
+    patient_page.wait_for_url(re.compile(r"/portal/$"))
+
+    patient_page.goto(live_server + "/portal/records/prescriptions")
+    patient_page.wait_for_load_state("networkidle")
+
+    staff_page.goto(live_server + "/admin/scheduling/portal-access-log")
+    row = staff_page.locator("tr", has_text="Johnson, Alice")
+    assert row.count() >= 1
+    assert "Prescriptions" in row.first.inner_text()
+
+
+def test_prescription_prism_base_and_contact_lens_values_display(logged_in_page, live_server):
+    """Re-verified gap (spec §18.2 items 8-9): prism/base were entered on the
+    Rx form but never shown on either the detail or print page, and
+    contact-lens parameters (base curve/diameter/brand) were entirely absent
+    from the detail page (print already had them, gated on rx_type ==
+    'contacts'). Both pages now show prism/base for every Rx and a Contact
+    Lens Parameters block whenever any of those three fields are set --
+    matching the model's own "not restricted to rx_type" comment, so this
+    doesn't just re-gate on rx_type the way print used to."""
+    page = logged_in_page
+    page.goto(live_server + "/prescriptions/new")
+    page.select_option('select[name="patient_id"]', index=0)
+    page.select_option('select[name="rx_type"]', "contacts")
+    page.fill('input[name="od_sphere"]', "-2.00")
+    page.fill('input[name="od_prism"]', "1.50")
+    page.fill('input[name="od_base"]', "BD")
+    page.fill('input[name="os_prism"]', "2.00")
+    page.fill('input[name="os_base"]', "BU")
+    page.fill('input[name="od_bc"]', "8.6")
+    page.fill('input[name="od_dia"]', "14.2")
+    page.fill('input[name="od_brand"]', "Acuvue Oasys")
+    page.locator('button[type="submit"]', has_text="Save Prescription").click()
+    page.wait_for_url(re.compile(r"/prescriptions/\d+$"))
+
+    detail_text = page.locator("body").inner_text()
+    assert "PRISM" in detail_text.upper() and "BASE" in detail_text.upper()
+    assert "1.50" in detail_text and "BD" in detail_text
+    assert "Contact Lens Parameters" in detail_text
+    assert "Acuvue Oasys" in detail_text
+
+    rx_id = page.url.rstrip("/").split("/")[-1]
+    page.goto(live_server + f"/prescriptions/{rx_id}/print")
+    print_text = page.locator("body").inner_text()
+    assert "PRISM" in print_text.upper() and "BASE" in print_text.upper()
+    assert "Acuvue Oasys" in print_text

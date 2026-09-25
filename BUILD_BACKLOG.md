@@ -1,6 +1,6 @@
 # New Path Vision EHR — Master Build Backlog
 
-**Status:** Living tracking document. **Baseline as of:** spec v2.44 / research doc v2.24 (2026-09-24).
+**Status:** Living tracking document. **Baseline as of:** spec v2.45 / research doc v2.24 (2026-09-25).
 
 ## Purpose and how to use this document
 
@@ -135,8 +135,8 @@ User asked for a deep-dive rethink of the calendar/scheduling UX against ten spe
 - [x] **Phase 4 portal follow-ups (round 1)**: reschedule can now change provider/type (not just time); the self-service cutoff is a staff-configurable `PortalSettings` setting (`admin/scheduling/portal-settings`) instead of a hardcoded constant; login-link requests are rate-limited (3 per 15 min per matched patient); waitlist self-service (`/portal/waitlist`); a patient-facing clinical data view (visit summaries, prescriptions, documents at `/portal/records/*`, each view logged to `PortalAccessAuditEvent`). **Done, v2.32** — see baseline spec §51.
 - [x] Patient self-registration -- `/portal/register` creates a new `Patient` chart (or signs into an existing one if the email already matches, never a duplicate), gated by the same magic-link email-confirmation step `/portal/login` already uses (no real identity-proofing exists, so the new chart is flagged `self_registered_at` for staff visibility on the patient-context strip). **Done, v2.42** — see baseline spec §61.
 - [x] Provider management UI -- `/admin/scheduling/providers` (new "Providers" tab): create/edit a `Provider`'s name/license/NPI/specialty, and deactivate/reactivate (never delete, to avoid cascade-orphaning historical appointments/exams/prescriptions). Deliberately does not yet filter inactive providers out of any booking dropdown elsewhere in the app -- tracked as a follow-up below. **Done, v2.43** — see baseline spec §62.
-- [ ] Follow-up: hide inactive providers from new-booking dropdowns (appointments/exams/prescriptions/portal booking) app-wide, while still showing them correctly on an *existing* record that already references one (an edit/reschedule form must keep showing its own already-assigned provider even if since deactivated). Deferred from the Provider Management UI round (v2.43) as a separately-scoped, more invasive change touching ~9 query call sites across 5 files.
-- [ ] **Portal follow-ups still open**: a staff-facing audit page surfacing `PortalAccessAuditEvent` (recorded but not yet displayed anywhere); edit of a patient-created waitlist entry after creation (cancel-and-recreate only today). (The real-email-vendor item that used to live here is consolidated into the Real SMS/email vendor integration item above, since it's the same underlying `ehr/services/notifications.py` swap.)
+- [x] Follow-up: hide inactive providers from new-booking dropdowns (appointments/exams/prescriptions/portal booking) app-wide, while still showing them correctly on an *existing* record that already references one (an edit/reschedule form still shows its own already-assigned provider even if since deactivated). New `ehr.services.scheduling.bookable_providers(db, include_id=None)` helper used at every call site that offers a *new* provider selection. **Done, v2.45** — see baseline spec §64.
+- [x] Staff-facing audit page surfacing `PortalAccessAuditEvent` — `/admin/scheduling/portal-access-log` (new "Patient Portal Access Log" admin tab). **Done, v2.45** — see baseline spec §65. Still open: edit of a patient-created waitlist entry after creation (cancel-and-recreate only today).
 - Explicitly **not** rescheduled by this round: EHR/billing integration (Appointment→Exam linkage still needs re-verification per the item above; real billing/claims stays gated behind §2's clearinghouse/compliance/BAA prerequisites, unchanged by this plan).
 
 ---
@@ -147,7 +147,7 @@ User asked for a deep-dive rethink of the calendar/scheduling UX against ten spe
 - [x] Appointment and exam records are not explicitly linked (§18.2 item 1) — resolved by the CPT Mapping round (v2.36, baseline spec §55): `EyeExam.appointment_id` now links the two.
 - [x] Provider records cannot be managed in the application (no add/edit provider UI) — resolved, v2.43: `/admin/scheduling/providers` (see baseline spec §62). Still open: inactive providers aren't yet filtered out of booking dropdowns (tracked separately above).
 - [ ] Prescription relationships not validated for patient/provider/exam consistency (§18.2 item 2)
-- [ ] Prism/base omitted from normal and printable prescription displays; contact-lens values omitted from normal prescription detail (§18.2 items 8-9) — re-verify against the v2.10 Lens Design & Follow-Up work, which may have already narrowed this
+- [x] Prism/base omitted from normal and printable prescription displays; contact-lens values omitted from normal prescription detail (§18.2 items 8-9) — re-verified: the v2.10 Lens Design & Follow-Up work never actually addressed this (it added lens-material/treatment/recall fields, a separate concern). **Done, v2.45** — see baseline spec §66.
 - [x] **`follow_up_unit` (v2.34) has the same latent edited-flag ordering bug fixed for the new suggestion fields in v2.35** (baseline spec §54.2): a `<select>` fires `input` before `change`, and the generic form-recompute wiring listens for both, so an edited-flag set only on `change` lets the `input`-triggered recompute fire first and silently revert a clinician's manual unit selection. Fixed the same way (also set the flag on `input`); a new regression test confirms it (verified to fail without the fix). **Done, v2.40** — see baseline spec §59.
 
 ---

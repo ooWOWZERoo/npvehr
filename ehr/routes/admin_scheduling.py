@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from ehr.models.database import (get_db, AppointmentType, AppointmentTypeVersion, AppointmentTypeColorRule,
     DiagnosticTest, Resource, AvailabilityTemplate, AppointmentTypeAuditEvent, AppointmentAuditEvent, Appointment,
     PracticeClosure, Provider, ProviderAvailabilityTemplate, PortalSettings, SchedulingSettings,
-    AppointmentTypeResourceRequirement)
+    AppointmentTypeResourceRequirement, PortalAccessAuditEvent)
 from ehr.services import scheduling as sched
 from ehr.env_info import EHR_ENV
 from ehr.auth.permissions import require_role, ADMIN_SCHEDULING_VIEW, ADMIN_SCHEDULING_EDIT, ROLE_LABELS
@@ -564,3 +564,14 @@ def update_portal_settings(request: Request, self_service_cutoff_hours: int = Fo
     settings.updated_by_user_id = user.id
     db.commit()
     return RedirectResponse("/admin/scheduling/portal-settings", status_code=303)
+
+
+@router.get("/portal-access-log", response_class=HTMLResponse, dependencies=[Depends(require_role(*ADMIN_SCHEDULING_VIEW))])
+def portal_access_log(request: Request, db: Session = Depends(get_db)):
+    """Staff-facing view of PortalAccessAuditEvent (Phase 4 follow-up,
+    BUILD_BACKLOG.md) -- every view a patient makes of their own visit
+    summaries, prescriptions, or documents through the portal has been
+    recorded since that round, but nothing ever displayed it until now."""
+    events = (db.query(PortalAccessAuditEvent)
+              .order_by(PortalAccessAuditEvent.viewed_at.desc()).limit(200).all())
+    return templates.TemplateResponse(request, "admin/scheduling/portal_access_log.html", {"events": events})

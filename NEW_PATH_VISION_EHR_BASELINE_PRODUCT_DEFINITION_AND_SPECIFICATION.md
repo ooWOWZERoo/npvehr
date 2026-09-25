@@ -3810,3 +3810,69 @@ No unsign/reopen workflow -- a signed exam stays signed forever, matching real c
 | New migration | `040_eye_exam_sign_lock` (`signed_at`/`signed_by_user_id` on `eye_exams`; new `eye_exam_addenda` table). |
 | Updated | `ehr/routes/exams.py`, `ehr/models/database.py`, `ehr/auth/permissions.py`, `ehr/templates/exams/detail.html`. `tests/test_smoke.py` gained one new test. |
 | Explicitly not done | No unsign/reopen workflow. No lock enforcement on any other record type. No PDF/print rendering with a signature block. No change to existing view/edit permissions beyond the new sign/addendum actions. Does not address the separately-tracked per-field audit trail gap (§37.6). None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |
+
+## 64. Hide Inactive Providers From New-Booking Dropdowns (v2.45)
+
+### 64.1 Origin
+
+Follow-up explicitly deferred from the Provider Management UI round (v2.43, baseline spec §62): deactivating a provider there had no effect anywhere else in the app -- every booking-related dropdown (new appointment, new exam, new prescription, availability search, portal booking/waitlist) still offered a deactivated provider for new work, since filtering roughly nine query call sites across five files correctly (some shared between "new" and "edit an existing record" contexts) was judged separately-scoped at the time.
+
+### 64.2 What changed
+
+**New `ehr.services.scheduling.bookable_providers(db, include_id=None)`** helper: returns active providers only, ordered by name, unless `include_id` names a specific provider to include regardless of its active state -- for a form editing or rescheduling an *existing* record, whose already-assigned provider must keep appearing (and stay correctly selected) even if since deactivated.
+
+Applied at every "choosing a new provider" call site: `appointments.py`'s shared new/edit form context (`include_id` set to the existing appointment's provider only when editing), the staff availability-search page, `exams.py`'s new-exam form, `prescriptions.py`'s new-Rx form, `patients.py`'s waitlist-entry-creation context, and `portal.py`'s booking/reschedule slot search (`include_id` set to the appointment's own provider for reschedule) and waitlist-entry context. Left deliberately unfiltered: the admin Provider Availability config page (staff need to see and manage inactive providers there too) and the staff calendar's provider filter dropdown (a *viewing* filter across all providers' appointments, including a departed provider's history, not a new-selection control).
+
+### 64.3 Verified
+
+`python3 -m py_compile` on every touched file. Manual live-instance verification via Playwright: booked an appointment with a freshly-created provider, deactivated them, confirmed they disappeared from the new-appointment, new-exam, new-Rx, and availability-search dropdowns as well as the patient portal's booking dropdown, and confirmed the *existing* appointment's edit form still listed and correctly pre-selected that same provider. New Playwright test `test_inactive_provider_hidden_from_new_bookings_but_shown_on_existing_record` covers the same end to end, using a freshly-created provider (never a seeded one) so it doesn't disturb any other test's assumptions about the two seeded providers' dropdown positions. Full suite passed after this change.
+
+### 64.4 Explicitly not done
+
+No filtering on the admin Provider Availability config page or the staff calendar's provider filter (both deliberately show every provider regardless of status, per §64.2). No retroactive cleanup of any already-booked appointment against a since-deactivated provider (existing bookings are simply untouched, matching this app's general "never silently rewrite history" posture). None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6.
+
+## 65. Staff-Facing Patient Portal Access Log (v2.45)
+
+### 65.1 Origin
+
+Follow-up tracked since the Phase 4 portal round (v2.32, baseline spec §51): every patient view of their own visit summaries, prescriptions, or documents through the portal has been recorded to `PortalAccessAuditEvent` since that round, but nothing ever displayed it -- the data existed with no way for staff to actually see it.
+
+### 65.2 What changed
+
+**New `/admin/scheduling/portal-access-log`** page (new "Patient Portal Access Log" tab, alongside the existing "Patient Portal Settings" tab): the most recent 200 `PortalAccessAuditEvent` rows, newest first, showing when, which patient, which resource type (Visit Summary / Prescriptions / Document), and a direct link to the specific exam for a visit-summary view. No new schema -- purely a read of the table that already existed.
+
+### 65.3 Verified
+
+`python3 -m py_compile` on the touched route file; Jinja parse-check on the new template. Manual live-instance verification: confirmed the empty state before any portal activity, then had a patient view their prescriptions through the portal and confirmed the event appeared on the staff page with the correct patient name and resource type. New Playwright test `test_portal_access_log_records_and_displays_patient_views` covers the same end to end. Full suite passed after this change.
+
+### 65.4 Explicitly not done
+
+No filtering/search/pagination beyond the most-recent-200 cap. No logging of portal booking/cancel/reschedule/waitlist activity here -- this page surfaces only the clinical-data-view events `PortalAccessAuditEvent` was built to record; scheduling-side portal activity is a different, unimplemented tracking concern. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6.
+
+## 66. Prescription Prism/Base and Contact-Lens Display Gap (v2.45)
+
+### 66.1 Origin
+
+Long-tracked gap re-verified this round (spec §18.2 items 8-9): `Prescription.od_prism`/`od_base`/`os_prism`/`os_base` were captured on the Rx form but never shown on either the detail or print page, and the contact-lens parameters (`od_bc`/`od_dia`/`od_brand` and their `os_` equivalents) were entirely absent from the detail page. Print already had a contact-lens block, but gated strictly on `rx_type == 'contacts'` -- inconsistent with the model's own documented "not restricted to rx_type" treatment of those fields (a glasses Rx can, in principle, still carry contact-lens data). Confirmed the v2.10 Lens Design & Follow-Up round never actually touched this gap; it added a different set of fields (lens material/treatments/recall interval).
+
+### 66.2 What changed
+
+**`prescriptions/detail.html`**: added Prism/Base columns to the existing Rx Values table, and a new "Contact Lens Parameters" card (base curve/diameter/brand per eye) shown whenever any of those three fields is set on either eye -- not gated on `rx_type`, matching the model's own scoping.
+
+**`prescriptions/print.html`**: added the same Prism/Base columns to the main table, and changed the contact-lens block's visibility condition from `rx_type == 'contacts'` to "any of the six BC/Dia/Brand fields is set," for the same consistency reason.
+
+### 66.3 Verified
+
+Jinja parse-check on both touched templates. Manual live-instance verification via Playwright: created a contact-lens Rx with prism/base on both eyes and BC/diameter/brand on one eye, confirmed both the detail and print pages show all of it correctly. New Playwright test `test_prescription_prism_base_and_contact_lens_values_display` covers the same end to end. Full suite passed after this change.
+
+### 66.4 Explicitly not done
+
+No change to the Rx *form* itself -- prism/base/contact-lens fields were already there; this round only fixed their *display*. No validation added (e.g. requiring BC/diameter together, or prism requiring a base direction) -- fields remain independently optional, same as every other Rx field in this app. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6.
+
+**Version 2.45 change log (relative to v2.44) — Three Follow-Up Items:**
+
+| Area | Change |
+| --- | --- |
+| New capability | Inactive providers now hidden from every new-booking dropdown app-wide via a new `bookable_providers()` helper, while still correctly shown on an existing record that references them (§64). New staff-facing `/admin/scheduling/portal-access-log` page displays `PortalAccessAuditEvent` for the first time (§65). Prescription detail/print pages now show prism/base and contact-lens parameters, previously captured but never displayed (§66). |
+| Updated | `ehr/services/scheduling.py`, `ehr/routes/{appointments,exams,prescriptions,patients,portal,admin_scheduling}.py`, `ehr/templates/admin/scheduling/_nav.html`, `ehr/templates/prescriptions/{detail,print}.html`. New `ehr/templates/admin/scheduling/portal_access_log.html`. `tests/test_smoke.py` gained three new tests. |
+| Explicitly not done | No filtering on the admin Provider Availability page or calendar filter (§64.4). No search/pagination on the portal access log beyond the 200-row cap, and no logging of scheduling-side portal activity there (§65.4). No Rx form or validation changes -- display only (§66.4). None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |

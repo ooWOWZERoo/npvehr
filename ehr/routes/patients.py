@@ -6,10 +6,11 @@ from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from ehr.models.database import (get_db, Patient, Appointment, EyeExam, Prescription, AppointmentStatus,
-    PatientDocument, Problem, ProblemAddendum, WaitlistEntry, Provider, AppointmentTypeVersion, AppointmentType,
+    PatientDocument, Problem, ProblemAddendum, WaitlistEntry, AppointmentTypeVersion, AppointmentType,
     PatientInsurancePlan, DiagnosticOrder, DiagnosticTest)
 from ehr.services import diagnostic_orders as diag_orders
 from ehr.services import lookback_alerts
+from ehr.services import scheduling as sched
 from ehr.env_info import EHR_ENV
 from ehr.utils import patient_context, compute_age, display_name
 from ehr.auth.permissions import require_role, PATIENT_EDIT, ROLE_LABELS
@@ -695,7 +696,7 @@ def patient_waitlist(request: Request, patient_id: int, db: Session = Depends(ge
     entries = (db.query(WaitlistEntry).filter(WaitlistEntry.patient_id == patient_id)
                .order_by(WaitlistEntry.status, WaitlistEntry.created_at.desc()).all())
     ctx["entries"] = entries
-    ctx["providers"] = db.query(Provider).order_by(Provider.last_name).all()
+    ctx["providers"] = sched.bookable_providers(db)
     ctx["types"] = (db.query(AppointmentTypeVersion)
                      .join(AppointmentType, AppointmentType.id == AppointmentTypeVersion.appointment_type_id)
                      .filter(AppointmentTypeVersion.active == True, AppointmentType.is_system_seeded == False)

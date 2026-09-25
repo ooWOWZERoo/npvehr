@@ -81,6 +81,24 @@ def intervals_overlap(start1, end1, start2, end2) -> bool:
 ACTIVE_STATUSES = {"scheduled", "checked_in", "in_progress"}  # spec 12.3
 
 
+def bookable_providers(db, include_id: int = None):
+    """Providers offered for a *new* selection (booking, exam, prescription,
+    waitlist entry) -- Provider Management UI follow-up (BUILD_BACKLOG.md):
+    filters to active providers only, since staff shouldn't be able to pick
+    a departed one for new work. `include_id`, when given, guarantees that
+    specific provider appears even if inactive -- for a form that's editing
+    or rescheduling an *existing* record, whose already-assigned provider
+    must keep showing correctly (and stay selected) even if since
+    deactivated, or the dropdown would silently drop the right value."""
+    from ehr.models.database import Provider  # local import avoids a cycle
+    q = db.query(Provider)
+    if include_id is not None:
+        q = q.filter((Provider.active == True) | (Provider.id == include_id))
+    else:
+        q = q.filter(Provider.active == True)
+    return q.order_by(Provider.last_name, Provider.first_name).all()
+
+
 def find_provider_conflict(db, provider_id: int, occupied_start: datetime, occupied_end: datetime,
                             exclude_appointment_id: int = None):
     """Provider-only conflict detection (spec 12.1 says schema must support more

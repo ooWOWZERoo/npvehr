@@ -3,11 +3,12 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
-from ehr.models.database import get_db, Prescription, Patient, Provider
+from ehr.models.database import get_db, Prescription, Patient
 from ehr.env_info import EHR_ENV
 from ehr.utils import patient_context
 from ehr.auth.permissions import require_role, RX_VIEW, RX_EDIT, ROLE_LABELS
 from ehr.auth import csrf
+from ehr.services import scheduling as sched
 
 router = APIRouter(prefix="/prescriptions", tags=["prescriptions"])
 templates = Jinja2Templates(directory="ehr/templates")
@@ -26,7 +27,7 @@ def new_rx_form(request: Request, patient_id: int = None, exam_id: int = None, d
     ctx_patient = patient_context(db.query(Patient).filter(Patient.id == patient_id).first()) if patient_id else None
     return templates.TemplateResponse(request, "prescriptions/form.html", {
         "patients": db.query(Patient).order_by(Patient.last_name).all(),
-        "providers": db.query(Provider).all(),
+        "providers": sched.bookable_providers(db),
         "selected_patient_id": patient_id, "selected_exam_id": exam_id, "today": str(date.today()),
         "context_patient": ctx_patient})
 

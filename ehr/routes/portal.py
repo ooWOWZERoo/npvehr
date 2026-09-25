@@ -36,7 +36,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
-from ehr.models.database import (get_db, Patient, Provider, AppointmentType, AppointmentTypeVersion,
+from ehr.models.database import (get_db, Patient, AppointmentType, AppointmentTypeVersion,
     Appointment, AppointmentStatus, PortalSettings, PatientPortalLoginToken, WaitlistEntry, EyeExam,
     Prescription, PatientDocument, PortalAccessAuditEvent)
 from ehr.services import scheduling as sched
@@ -245,8 +245,8 @@ def portal_dashboard(request: Request, patient: Patient = Depends(get_current_pa
 
 
 def _slot_search_context(db: Session, provider_id, appointment_type_version_id, date_str, patient_id,
-                          exclude_appointment_id=None):
-    providers = db.query(Provider).all()
+                          exclude_appointment_id=None, include_provider_id=None):
+    providers = sched.bookable_providers(db, include_id=include_provider_id)
     types = _patient_bookable_type_versions(db)
     target_date = date.fromisoformat(date_str) if date_str else date.today()
     slots, version, error = [], None, None
@@ -377,7 +377,7 @@ def portal_reschedule_search(request: Request, appt_id: int, provider_id: str = 
     ctx = _slot_search_context(db, _qi(provider_id) or appt.provider_id,
                                 _qi(appointment_type_version_id) or appt.appointment_type_version_id,
                                 date_str or appt.scheduled_at.date().isoformat(), patient.id,
-                                exclude_appointment_id=appt.id)
+                                exclude_appointment_id=appt.id, include_provider_id=appt.provider_id)
     ctx["appt"] = appt
     return templates.TemplateResponse(request, "portal/reschedule.html", ctx)
 
@@ -409,7 +409,7 @@ def portal_reschedule_confirm(request: Request, appt_id: int, provider_id: int =
     def fail(msg, status_code):
         ctx = _slot_search_context(db, provider_id, appointment_type_version_id,
                                     (when or appt.scheduled_at).date().isoformat(), patient.id,
-                                    exclude_appointment_id=appt.id)
+                                    exclude_appointment_id=appt.id, include_provider_id=appt.provider_id)
         ctx["appt"] = appt
         ctx["error"] = msg
         return templates.TemplateResponse(request, "portal/reschedule.html", ctx, status_code=status_code)
@@ -449,7 +449,7 @@ def portal_reschedule_confirm(request: Request, appt_id: int, provider_id: int =
 def portal_waitlist(request: Request, patient: Patient = Depends(get_current_patient), db: Session = Depends(get_db)):
     entries = (db.query(WaitlistEntry).filter(WaitlistEntry.patient_id == patient.id)
                .order_by(WaitlistEntry.status, WaitlistEntry.created_at.desc()).all())
-    providers = db.query(Provider).order_by(Provider.last_name).all()
+    providers = sched.bookable_providers(db)
     types = _patient_bookable_type_versions(db)
     return templates.TemplateResponse(request, "portal/waitlist.html",
         {"entries": entries, "providers": providers, "types": types})
