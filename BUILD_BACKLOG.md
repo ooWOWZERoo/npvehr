@@ -1,6 +1,6 @@
 # New Path Vision EHR — Master Build Backlog
 
-**Status:** Living tracking document. **Baseline as of:** spec v2.45 / research doc v2.24 (2026-09-25).
+**Status:** Living tracking document. **Baseline as of:** spec v2.47 / research doc v2.24 (2026-09-25).
 
 ## Purpose and how to use this document
 
@@ -143,7 +143,7 @@ User asked for a deep-dive rethink of the calendar/scheduling UX against ten spe
 
 ## 6. Clinical Workflow Gaps (spec §18.2, §37.6)
 
-- [x] Clinical records (exams) **cannot be edited, signed, corrected, or appended** — both are create-only today (§18.2 item 4). **Partially resolved, v2.44**: `EyeExam` now has a sign/lock/amend lifecycle (`signed_at`/`signed_by_user_id` + `EyeExamAddendum`) — see baseline spec §63. Still open: exams remain create-only pre-signature (no direct edit route at all, signed or not) and `Prescription` has no equivalent lifecycle yet.
+- [x] Clinical records (exams, prescriptions) **cannot be edited, signed, corrected, or appended** — both are create-only today (§18.2 item 4). **Resolved, v2.44/v2.46**: both `EyeExam` and `Prescription` now have a sign/lock/amend lifecycle (`signed_at`/`signed_by_user_id` + a per-record addenda table) — see baseline spec §63, §67. Still open: neither record gets a direct edit route pre-signature (create-only either way, signed or not).
 - [x] Appointment and exam records are not explicitly linked (§18.2 item 1) — resolved by the CPT Mapping round (v2.36, baseline spec §55): `EyeExam.appointment_id` now links the two.
 - [x] Provider records cannot be managed in the application (no add/edit provider UI) — resolved, v2.43: `/admin/scheduling/providers` (see baseline spec §62). Still open: inactive providers aren't yet filtered out of booking dropdowns (tracked separately above).
 - [ ] Prescription relationships not validated for patient/provider/exam consistency (§18.2 item 2)
@@ -156,7 +156,7 @@ User asked for a deep-dive rethink of the calendar/scheduling UX against ten spe
 
 - [x] **CSRF protection. Done, v2.19** — a pre-existing, long-tracked gap, present in every version's open-gaps list (spec §15.1, §26.10 item 4, §36.5 item 3, §37.6). See baseline spec §37.7: a session-bound synchronizer token verified on all 27 POST routes, delivered via a JS-injected hidden field, plus this app's first server-side secret (`SECRET_KEY`).
 - [ ] Down-migration/rollback capability in the migration runner — it only ever adds, never reverses (§25.15, §36.5 item 4)
-- [ ] Per-record "who changed this specific clinical/administrative field" audit trail, beyond `AuthAuditEvent`'s authentication/access-event scope (§37.1, §37.6, §36.5 item 1's note)
+- [x] Per-record "who changed this specific clinical/administrative field" audit trail, beyond `AuthAuditEvent`'s authentication/access-event scope (§37.1, §37.6, §36.5 item 1's note). New generic `FieldChangeAuditEvent` table (keyed by table_name/record_id) wired into Patient and Provider edits -- the two records that had no change tracking at all. `AppointmentAuditEvent`/`AppointmentTypeAuditEvent` are left as their own separate, already-working thing, not migrated onto this. New `/admin/field-audit` staff page. **Done, v2.47** — see baseline spec §68.
 - [ ] Record-level authorization (e.g. restricting a provider to only their own patients) — current model is role-level only (§37.6)
 - [ ] MFA/SSO, self-service password reset, password-complexity policy beyond a sane minimum, account lockout/rate-limiting — all explicitly scoped out of the v2.4 auth build as "solid baseline, not enterprise list" (§37.6); revisit only if requirements change
 
@@ -216,7 +216,7 @@ A real visit-summary document export prompted a full component-by-component gap 
 - [ ] Structured review of systems (the source document's large systemic-symptom checklist)
 - [ ] Structured social history (alcohol/tobacco screening) — no fields exist on `Patient` at all
 - [ ] Diagnostic-imaging order + structured result tracking (fundus photos, OCT) — no order/result model exists; Order Management remains a placeholder (§3 above)
-- [x] E-signature / sign-lock-amend workflow -- `EyeExam.signed_at`/`signed_by_user_id` plus a new `EyeExamAddendum` table: a provider (or system administrator) signs a visit as an electronic attestation, after which the only way to add anything further is a dated, authored addendum (this app never had an exam edit route to begin with, so "lock" makes Sign meaningful by gating the addendum path on it). **Done, v2.44** — see baseline spec §63. "Staff present at this visit" attribution beyond the single `Provider` on an exam remains open (§6 above, spec §18.2 item 4/§37.6).
+- [x] E-signature / sign-lock-amend workflow -- `EyeExam.signed_at`/`signed_by_user_id` plus a new `EyeExamAddendum` table: a provider (or system administrator) signs a visit as an electronic attestation, after which the only way to add anything further is a dated, authored addendum (this app never had an exam edit route to begin with, so "lock" makes Sign meaningful by gating the addendum path on it). **Done, v2.44** — see baseline spec §63. Extended to `Prescription` (same shape: `signed_at`/`signed_by_user_id` + `PrescriptionAddendum`, new `RX_SIGN` permission group). **Done, v2.46** — see baseline spec §67. "Staff present at this visit" attribution beyond the single `Provider` on an exam remains open (§6 above, spec §18.2 item 4/§37.6).
 - [ ] Actual PDF rendering — this app has zero PDF-generation library; `prescriptions/print.html` relies entirely on the browser's native print dialog
 
 ---

@@ -118,6 +118,8 @@
             {% if current_user and current_user.role in ('system_administrator', 'read_only_auditor') %}
             <div class="sidebar-subnav-heading">Authentication</div>
             <a href="/admin/audit">Auth Audit Log</a>
+            <div class="sidebar-subnav-heading">Records</div>
+            <a href="/admin/field-audit">Field Change Log</a>
             {% endif %}
             {% if current_user and current_user.role == 'system_administrator' %}
             <a href="/admin/users">User Accounts</a>

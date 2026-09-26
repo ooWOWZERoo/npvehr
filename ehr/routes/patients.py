@@ -11,6 +11,7 @@ from ehr.models.database import (get_db, Patient, Appointment, EyeExam, Prescrip
 from ehr.services import diagnostic_orders as diag_orders
 from ehr.services import lookback_alerts
 from ehr.services import scheduling as sched
+from ehr.services import field_audit
 from ehr.env_info import EHR_ENV
 from ehr.utils import patient_context, compute_age, display_name
 from ehr.auth.permissions import require_role, PATIENT_EDIT, ROLE_LABELS
@@ -23,6 +24,19 @@ router = APIRouter(prefix="/patients", tags=["patients"])
 templates = Jinja2Templates(directory="ehr/templates")
 templates.env.globals["ehr_env"] = EHR_ENV
 templates.env.globals["ROLE_LABELS"] = ROLE_LABELS
+
+# Per-record field-change audit trail (spec §37.1/§37.6 follow-up): the
+# fields tracked on a patient-record edit. photo_path is deliberately
+# excluded -- a file path isn't a meaningful "old value -> new value" to
+# show staff, and photo changes are already handled by their own
+# save/delete logic just below in update_patient.
+PATIENT_AUDITED_FIELDS = [
+    "first_name", "last_name", "preferred_name", "mrn", "date_of_birth", "gender",
+    "phone", "email", "address", "city", "state", "zip_code",
+    "insurance_provider", "insurance_id", "emergency_contact_name", "emergency_contact_phone",
+    "allergies", "medical_history", "ocular_history", "family_ocular_history",
+    "balance_due", "sms_opt_in", "email_opt_in",
+]
 
 def _parse_balance(raw: str):
     """Parse the manually-entered balance_due form field. Blank -> None (even/no
@@ -301,6 +315,7 @@ def update_patient(request: Request, patient_id: int,
             "patient": pending,
             "error": f"MRN \"{mrn.strip()}\" is already assigned to {display_name(conflict)} (patient #{conflict.id}). Each patient needs a unique MRN.",
         }, status_code=400)
+    before = {f: getattr(p, f) for f in PATIENT_AUDITED_FIELDS}
     p.first_name=first_name; p.last_name=last_name; p.preferred_name=preferred_name or None
     p.mrn=mrn or None; p.date_of_birth=date_of_birth or None
     p.gender=gender; p.phone=phone; p.email=email; p.address=address
@@ -311,6 +326,8 @@ def update_patient(request: Request, patient_id: int,
     p.ocular_history=ocular_history; p.family_ocular_history=family_ocular_history
     p.balance_due = _parse_balance(balance_due)
     p.sms_opt_in = sms_opt_in; p.email_opt_in = email_opt_in
+    after = {f: getattr(p, f) for f in PATIENT_AUDITED_FIELDS}
+    field_audit.record_field_changes(db, "patients", patient_id, before, after, request.state.user.id)
     new_photo_path = _save_photo(photo)
     if new_photo_path:
         old_photo_path = p.photo_path

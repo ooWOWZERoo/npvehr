@@ -8,6 +8,7 @@ from ehr.models.database import (get_db, AppointmentType, AppointmentTypeVersion
     PracticeClosure, Provider, ProviderAvailabilityTemplate, PortalSettings, SchedulingSettings,
     AppointmentTypeResourceRequirement, PortalAccessAuditEvent)
 from ehr.services import scheduling as sched
+from ehr.services import field_audit
 from ehr.env_info import EHR_ENV
 from ehr.auth.permissions import require_role, ADMIN_SCHEDULING_VIEW, ADMIN_SCHEDULING_EDIT, ROLE_LABELS
 from ehr.auth.deps import get_current_user
@@ -17,6 +18,9 @@ router = APIRouter(prefix="/admin/scheduling", tags=["admin-scheduling"])
 templates = Jinja2Templates(directory="ehr/templates")
 templates.env.globals["ehr_env"] = EHR_ENV
 templates.env.globals["ROLE_LABELS"] = ROLE_LABELS
+
+# Per-record field-change audit trail (spec §37.1/§37.6 follow-up).
+PROVIDER_AUDITED_FIELDS = ["first_name", "last_name", "license_number", "npi", "specialty"]
 
 # Every route below now requires either ADMIN_SCHEDULING_VIEW (System/Practice
 # Administrator, Read-only/Auditor) or ADMIN_SCHEDULING_EDIT (System/Practice
@@ -475,27 +479,34 @@ def edit_provider_form(request: Request, provider_id: int, db: Session = Depends
 @router.post("/providers/{provider_id}/edit", dependencies=[Depends(require_role(*ADMIN_SCHEDULING_EDIT))])
 def update_provider(request: Request, provider_id: int, first_name: str = Form(...), last_name: str = Form(...),
     license_number: str = Form(""), npi: str = Form(""), specialty: str = Form("Optometry"),
-    csrf_token: str = Form(""), db: Session = Depends(get_db)):
+    csrf_token: str = Form(""), db: Session = Depends(get_db), user=Depends(get_current_user)):
     csrf.verify_or_403(request.state.csrf_token, csrf_token)
     provider = db.query(Provider).filter(Provider.id == provider_id).first()
     if not provider:
         return HTMLResponse("Not found", status_code=404)
+    before = {f: getattr(provider, f) for f in PROVIDER_AUDITED_FIELDS}
     provider.first_name = first_name.strip()
     provider.last_name = last_name.strip()
     provider.license_number = license_number.strip() or None
     provider.npi = npi.strip() or None
     provider.specialty = specialty.strip() or "Optometry"
+    after = {f: getattr(provider, f) for f in PROVIDER_AUDITED_FIELDS}
+    field_audit.record_field_changes(db, "providers", provider_id, before, after, user.id)
     db.commit()
     return RedirectResponse("/admin/scheduling/providers", status_code=303)
 
 
 @router.post("/providers/{provider_id}/toggle-active", dependencies=[Depends(require_role(*ADMIN_SCHEDULING_EDIT))])
-def toggle_provider_active(request: Request, provider_id: int, csrf_token: str = Form(""), db: Session = Depends(get_db)):
+def toggle_provider_active(request: Request, provider_id: int, csrf_token: str = Form(""),
+    db: Session = Depends(get_db), user=Depends(get_current_user)):
     csrf.verify_or_403(request.state.csrf_token, csrf_token)
     provider = db.query(Provider).filter(Provider.id == provider_id).first()
     if not provider:
         return HTMLResponse("Not found", status_code=404)
+    before_active = provider.active
     provider.active = not provider.active
+    field_audit.record_field_changes(db, "providers", provider_id,
+        {"active": before_active}, {"active": provider.active}, user.id)
     db.commit()
     return RedirectResponse("/admin/scheduling/providers", status_code=303)
 

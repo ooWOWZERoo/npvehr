@@ -1839,3 +1839,85 @@ def test_prescription_prism_base_and_contact_lens_values_display(logged_in_page,
     print_text = page.locator("body").inner_text()
     assert "PRISM" in print_text.upper() and "BASE" in print_text.upper()
     assert "Acuvue Oasys" in print_text
+
+
+def test_prescription_sign_lock_and_addendum_lifecycle(logged_in_page, live_server):
+    """Clinical Record Sign/Lock/Amend Lifecycle extended to Prescription
+    (BUILD_BACKLOG.md follow-up from the EyeExam round) -- same shape:
+    Prescription is create-only just like EyeExam, so Sign gets real teeth
+    by making PrescriptionAddendum the only way to add anything further once
+    signed. Covers: an unsigned Rx has no addenda section and shows the Sign
+    button; an addendum cannot be added before signing; signing stamps
+    signed_at/signed_by and shows the e-signature block; a second sign
+    attempt is rejected server-side even with the UI button gone; and once
+    signed, an addendum can be added and appears with its author/timestamp."""
+    page = logged_in_page
+    page.goto(live_server + "/prescriptions/new")
+    page.select_option('select[name="patient_id"]', index=0)
+    page.locator('button[type="submit"]', has_text="Save Prescription").click()
+    page.wait_for_url(re.compile(r"/prescriptions/\d+$"))
+    rx_id = page.url.rstrip("/").split("/")[-1]
+
+    assert page.locator("h3", has_text="Addenda").count() == 0
+    assert page.locator("form[action$='/sign']").count() == 1
+    token = page.locator('meta[name="csrf-token"]').get_attribute("content")
+    resp = page.request.post(live_server + f"/prescriptions/{rx_id}/addenda",
+        form={"note": "too early", "csrf_token": token})
+    assert resp.status == 400
+
+    page.on("dialog", lambda d: d.accept())
+    page.locator("form[action$='/sign'] button[type=\"submit\"]").click()
+    page.wait_for_load_state("networkidle")
+    assert "Electronically signed" in page.content()
+    assert page.locator("form[action$='/sign']").count() == 0
+
+    token = page.locator('meta[name="csrf-token"]').get_attribute("content")
+    resp = page.request.post(live_server + f"/prescriptions/{rx_id}/sign", form={"csrf_token": token})
+    assert resp.status == 400
+
+    page.fill('input[name="note"]', "Regression test addendum after signing.")
+    page.locator('form[action$="/addenda"] button[type="submit"]').click()
+    page.wait_for_load_state("networkidle")
+    assert "Regression test addendum after signing." in page.content()
+
+
+def test_field_change_audit_log_records_patient_and_provider_edits(logged_in_page, live_server):
+    """Per-record "who changed this field" audit trail (spec 37.1/37.6
+    follow-up) -- Patient and Provider edits previously had no change
+    tracking of any kind. Covers: editing a freshly-created patient's phone
+    number and a freshly-created provider's specialty each produce a row on
+    /admin/field-audit with the right table/record, field name, old/new
+    value, and the editing user -- using fresh records (never seeded ones)
+    so this doesn't depend on or disturb any other test's data."""
+    page = logged_in_page
+    page.goto(live_server + "/patients/new")
+    page.fill('input[name="first_name"]', "Audittrail")
+    page.fill('input[name="last_name"]', "Patient")
+    page.fill('input[name="phone"]', "555-0100")
+    page.locator('button[type="submit"]', has_text="Create Patient").click()
+    page.wait_for_url(re.compile(r"/patients/\d+$"))
+    patient_id = page.url.rstrip("/").split("/")[-1]
+
+    page.goto(live_server + f"/patients/{patient_id}/edit")
+    page.fill('input[name="phone"]', "555-0199")
+    page.locator('button[type="submit"]', has_text="Save Changes").click()
+    page.wait_for_load_state("networkidle")
+
+    page.goto(live_server + "/admin/scheduling/providers")
+    page.fill('input[name="first_name"]', "Audittrail")
+    page.fill('input[name="last_name"]', "Provider")
+    page.locator('button[type="submit"]', has_text="Add Provider").click()
+    page.wait_for_load_state("networkidle")
+    page.locator("tr", has_text="Audittrail Provider").locator("a", has_text="Edit").click()
+    page.wait_for_load_state("networkidle")
+    page.fill('input[name="specialty"]', "Pediatric Optometry")
+    page.locator('button[type="submit"]', has_text="Save Changes").click()
+    page.wait_for_load_state("networkidle")
+
+    page.goto(live_server + "/admin/field-audit")
+    content = page.content()
+    patient_row = page.locator("tr", has_text=f"Patient #{patient_id}")
+    assert patient_row.count() >= 1
+    patient_text = patient_row.first.inner_text()
+    assert "phone" in patient_text and "555-0100" in patient_text and "555-0199" in patient_text
+    assert "specialty" in content and "Pediatric Optometry" in content

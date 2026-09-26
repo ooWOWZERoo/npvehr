@@ -1091,10 +1091,32 @@ class Prescription(Base):
     lens_treatments = Column(String)  # comma-delimited: Anti-Reflective Coating, Blue Light Filter, Transitions/Photochromic, Polarized
     recall_interval = Column(String)  # 3 Months / 6 Months / 1 Year / 2 Years
     patient_education_tags = Column(String)  # comma-delimited: 20-20-20 Rule, UV Protection, Contact Lens hygiene
+    # Clinical Record Sign/Lock/Amend Lifecycle, extended from EyeExam
+    # (BUILD_BACKLOG.md follow-up): same shape as EyeExam.signed_at/
+    # signed_by_user_id above -- Prescription is create-only just like
+    # EyeExam was, so "lock" means the same thing here: PrescriptionAddendum
+    # becomes the only way to add anything further once signed.
+    signed_at = Column(DateTime)
+    signed_by_user_id = Column(Integer, ForeignKey("users.id"))
     created_at = Column(DateTime, default=datetime.utcnow)
     patient = relationship("Patient", back_populates="prescriptions")
     exam = relationship("EyeExam", back_populates="prescriptions")
     provider = relationship("Provider", back_populates="prescriptions")
+    signed_by = relationship("User", foreign_keys=[signed_by_user_id])
+    addenda = relationship("PrescriptionAddendum", back_populates="rx", cascade="all, delete-orphan",
+                            order_by="PrescriptionAddendum.created_at")
+
+class PrescriptionAddendum(Base):
+    """An append-only dated note on a signed Prescription -- same pattern as
+    EyeExamAddendum/ProblemAddendum."""
+    __tablename__ = "prescription_addenda"
+    id = Column(Integer, primary_key=True, index=True)
+    rx_id = Column(Integer, ForeignKey("prescriptions.id"), nullable=False)
+    author_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    note = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    rx = relationship("Prescription", back_populates="addenda", foreign_keys=[rx_id])
+    author = relationship("User", foreign_keys=[author_user_id])
 
 # ---------------------------------------------------------------------------
 # Authentication / RBAC / auth-audit models (real-auth pass). See
@@ -1203,6 +1225,42 @@ class AuthAuditEvent(Base):
     __table_args__ = (
         Index("ix_auth_audit_occurred_at", "occurred_at"),
         Index("ix_auth_audit_user", "user_id"),
+    )
+
+
+class FieldChangeAuditEvent(Base):
+    """Per-record "who changed this field, and to what value" audit trail
+    (spec §37.1/§37.6, tracked as an open gap since the v2.4 auth pass --
+    that round's own AuthAuditEvent covers authentication/access events
+    only, explicitly not this). A single generic table rather than one
+    per model, keyed by (table_name, record_id) -- deliberately narrow: this
+    round wires it into the two records that were editable with NO change
+    tracking of any kind (Patient, Provider), not a blanket instrumentation
+    of every model in the app. AppointmentAuditEvent/AppointmentTypeAuditEvent
+    (§18.3) already cover their own tables and are left as-is, not migrated
+    onto this generic table, to avoid rewriting a working, already-tested
+    audit path for no functional gain.
+
+    old_value/new_value are always stored as plain strings (str(value) or
+    None) -- this is a change log for staff to read, not a typed diff, so a
+    lossy-but-legible string form (e.g. "True"/"None"/"2026-09-25") is the
+    right tradeoff, matching AppointmentAuditEvent's own old_value/new_value
+    string columns."""
+    __tablename__ = "field_change_audit_events"
+    id = Column(Integer, primary_key=True, index=True)
+    table_name = Column(String, nullable=False)
+    record_id = Column(Integer, nullable=False)
+    field_name = Column(String, nullable=False)
+    old_value = Column(Text)
+    new_value = Column(Text)
+    changed_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    changed_at = Column(DateTime, default=datetime.utcnow)
+
+    changed_by = relationship("User", foreign_keys=[changed_by_user_id])
+
+    __table_args__ = (
+        Index("ix_field_change_audit_record", "table_name", "record_id"),
+        Index("ix_field_change_audit_changed_at", "changed_at"),
     )
 
 
