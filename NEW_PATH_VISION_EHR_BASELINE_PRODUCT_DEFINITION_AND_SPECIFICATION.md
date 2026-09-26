@@ -3967,3 +3967,151 @@ No real lab integration (EDI, a lab's own order-status API, or automated ETA upd
 | New files | `ehr/services/rx_lab_orders.py`, `ehr/routes/rx_lab_orders.py`, `ehr/templates/orders/{list,form,detail}.html`. |
 | Updated | `ehr/models/database.py` (new `RxLabOrder` model), `ehr/auth/permissions.py` (new `RX_LAB_ORDER_VIEW`/`RX_LAB_ORDER_EDIT`), `ehr/app.py` (router registration), `ehr/routes/store_ops.py` (placeholder route removed), `ehr/routes/prescriptions.py` + `ehr/templates/prescriptions/detail.html` (new Lab Orders card). `tests/test_smoke.py` gained one new test. |
 | Explicitly not done | No real lab integration, EDI, or automated ETA updates. No patient-facing ready-for-pickup notification. No product/SKU line items on an order. No linkage into Claim Management or billing. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |
+
+## 70. Diagnostic-Order Deep-Links to Visit Focus Sections (v2.49)
+
+### 70.1 Origin
+
+Two named follow-ups left open since the Phase 3 and Phase 4 chief-complaint/CPT/billing-flow rounds (baseline spec §56/§57, `BUILD_BACKLOG.md` §0a): completing a pending diagnostic order, and resolving a look-back "interval due" alert, both only ever flipped a database status column -- neither offered a path to actually go document the test's result in the New Exam form section it belongs in.
+
+### 70.2 What changed
+
+**New `ehr.services.lookback_alerts.TEST_CODE_TO_FOCUS_SECTION`** map (a narrow hardcoded lookup, same posture as `CONDITION_PROFILES` in the same module): VF/OCT/OPTOS/GONIOSCOPY/PACHYMETRY all map to the Posterior Segment/Glaucoma Visit Focus section (`focus-glaucoma`), `CORNEAL_ANALYZER` maps to Anterior Segment (`focus-anterior`), `MEIBOGRAPHY` maps to Dry Eye (`focus-dryeye`) -- deliberately not exhaustive; a test with no natural section (e.g. `ERG`) is left unmapped.
+
+**A new "Document in Exam" link** appears alongside the existing "Mark Complete"/"Order Now" actions (never replacing them) on the patient overview's Pending Diagnostic Orders card and both look-back alert types, whenever the order's test maps to a section. The link opens `/exams/new?patient_id=...&focus=<section-id>`; new client-side JS on the New Exam form reads that `focus` query param on load, checks the matching Visit Focus chip (reusing the existing `.focus-toggle` mechanism unchanged), and scrolls to the now-expanded section.
+
+**`get_alerts_for_patient`'s `outstanding_order` alerts now also carry `test_code`** (previously only `interval_due` alerts did), so the deep-link is available on both alert types.
+
+### 70.3 Verified
+
+`python3 -m py_compile` on every touched file; Jinja parse-check on the touched templates. New Playwright test `test_diagnostic_order_deep_links_to_visit_focus_section` covers: the deep-link's exact href on both an interval-due and an outstanding-order alert, that visiting it actually expands the mapped section on the New Exam form, and that the Pending Diagnostic Orders card carries the same link. Full suite passed after this change.
+
+### 70.4 Explicitly not done
+
+No mapping for a test with no natural section (`ERG`) -- these keep their existing status-only actions with no deep-link. No change to the underlying complete/order-now mutations themselves; this is purely an additional navigation link. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6.
+
+## 71. Header Pending-Order Count Badge (v2.49)
+
+### 71.1 Origin
+
+Named follow-up from the Phase 3 diagnostic-order round (`BUILD_BACKLOG.md` §0a): "a header-level pending-order count badge on the patient-context strip, alongside the existing allergy flag."
+
+### 71.2 What changed
+
+**`ehr.utils.patient_context(patient, db=None)`** gained an optional `db` parameter: when given, it computes the patient's open (`ordered`/`scheduled`/`in_progress`) `DiagnosticOrder` count. Every one of the 11 call sites across `exams.py`/`patients.py`/`appointments.py`/`prescriptions.py` now passes `db` (all of them already had a session in scope). A new `.pcs-pending-orders-flag` badge (amber, same visual language as the existing red allergy flag) shows "N Pending Order(s)" in the patient-context strip whenever the count is non-zero -- visible on every page that renders that strip, not just the patient overview tab.
+
+### 71.3 Verified
+
+`python3 -m py_compile` on every touched file. New Playwright test `test_pending_order_count_badge_on_patient_context_strip` confirms a fresh patient shows no badge, placing an order makes "1 Pending Order" appear, and it's visible on more than one patient-scoped page (overview and edit). Full suite passed after this change.
+
+### 71.4 Explicitly not done
+
+No badge for completed/cancelled orders (only the three open statuses count, matching the existing Pending Diagnostic Orders card's own filter). None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6.
+
+## 72. `AppointmentType`/`AppointmentTypeVersion` Created-By/Updated-By Attribution (v2.49)
+
+### 72.1 Origin
+
+Named follow-up since the v2.7 Appointment attribution round (`BUILD_BACKLOG.md` §36.5 item 10, spec §26.1 item 2's own note): `Appointment` got real `created_by_user_id`/`updated_by_user_id` columns in v2.7; the appointment-*type* side was explicitly out of scope for that round. `AppointmentType.created_by_user_id` had existed since before auth even existed (a plain, never-a-real-FK, never-actually-set `Integer` column, per its own long-standing "future FK once auth exists" comment) and `AppointmentTypeVersion.created_by_user_id` existed but was likewise never populated by any of the three routes that create a version row.
+
+### 72.2 What changed
+
+**`AppointmentType.created_by_user_id`** is now a real FK to `users.id` (upgraded from the pre-auth placeholder column) and is actually set on create/clone. **New `AppointmentType.updated_at`/`updated_by_user_id`** columns (migration `044_appointment_type_updated_by`), stamped on activate/deactivate -- `AppointmentType` is mutable (its `active` flag flips in place), so it gets the same created-by/updated-by pair `Appointment` already has. **`AppointmentTypeVersion.created_by_user_id`** is likewise now a real FK, actually set on every version-creating route (`create_type`, `publish_new_version`, `clone_type`) -- `AppointmentTypeVersion` rows are immutable (a new row per change, never edited in place), so only created-by applies there, not updated-by. The type detail page now shows "Version Published By," "Type Created By," and (when different from the creator) "Last Updated By."
+
+### 72.3 Verified
+
+`python3 -m py_compile` on every touched file. Fresh-SQLite migration boot + idempotent re-run of `044_appointment_type_updated_by` confirmed clean, including against the already-migrated database from earlier in this session (upgrade-in-place). New Playwright test `test_appointment_type_created_and_updated_by_attribution` covers publishing a new version and deactivating a type, confirming both attributions appear. Full suite passed after this change.
+
+### 72.4 Explicitly not done
+
+No backfill of attribution for `AppointmentType`/`AppointmentTypeVersion` rows that already existed before this migration (they simply have `NULL` creator/updater, same as every other historical-attribution column added after the fact in this app). None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6.
+
+## 73. Prescription Relationship Validation (v2.49)
+
+### 73.1 Origin
+
+Long-tracked v1.x gap (spec §18.2 item 2): "Prescription relationships are not validated for patient/provider/exam consistency." The Rx creation form's own `<select>` options only ever offer valid choices, so this was never reachable through the UI, but nothing on the server actually enforced it against a forged/hand-crafted request.
+
+### 73.2 What changed
+
+**`POST /prescriptions/new`** now validates, server-side: `patient_id` and `provider_id` must reference real, existing `Patient`/`Provider` rows, and an `exam_id` (when given -- a prescription can be written without a linked exam) must both exist and belong to the *same* patient as `patient_id`. Any violation returns HTTP 400 with a plain-text reason, matching this app's existing forged-request-guard convention elsewhere.
+
+### 73.3 Verified
+
+`python3 -m py_compile`. New Playwright test `test_rx_relationship_validation_rejects_forged_mismatches` exercises all three guards via a forged `page.request.post` (a nonexistent patient, a nonexistent provider, and an exam belonging to a different patient than the one selected), plus confirms a consistent request still succeeds. Full suite passed after this change.
+
+### 73.4 Explicitly not done
+
+No equivalent validation added retroactively to `EyeExam` creation (that route already only ever receives a real, session-selected `patient_id`/`provider_id` with no exam-consistency concept to check). None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6.
+
+## 74. Record-Level Authorization: Provider Scoped to Own Patients (v2.49)
+
+### 74.1 Origin
+
+Long-tracked gap (spec §37.6): "current model is role-level only" -- every permission check in `ehr/auth/permissions.py` gated access by *role* (e.g. any Optometrist/Provider can view any prescription), never by whether this specific user has any real relationship to this specific patient. This is the largest, most cross-cutting item in this round.
+
+### 74.2 What changed
+
+**New `User.provider_id`** (migration `045_user_provider_link`, nullable FK to `providers.id`): links a login account to its clinical `Provider` identity -- `User` (login/auth) and `Provider` (the clinical identity on appointments/exams/prescriptions) were two entirely separate tables with no relationship between them before this. Set at account-creation time (`/admin/users/new` gained a "Linked Provider" dropdown, shown only for the Optometrist/Provider role) -- there is no user-edit route to change it after creation, matching this app's existing "no edit route, set at creation" posture for other `User` fields. The two seeded demo provider accounts (`schen@`/`mrivera@`) are linked to their matching `Provider` rows by a new idempotent `_link_demo_provider_users` seed step, which also backfills an already-seeded database upgrading to this feature.
+
+**New `ehr.services.authz` module**: `is_patient_restricted(user)` is true only for the `optometrist_provider` role; `own_patient_ids(db, provider_id)` is the union of patient IDs from every `Appointment`, `EyeExam`, and `Prescription` attributed to that provider (an unlinked provider account -- `provider_id` still `NULL` -- has no defined "own patients" set and sees **none**, fail-closed rather than fail-open); `can_view_patient`/`restrict_patient_query` apply that restriction. Every other role is completely unaffected.
+
+**Wired into every patient-scoped route**: `ehr/routes/patients.py`'s `_get_patient_or_404` helper (the single choke point already used by all 19+ patient-workspace routes, now also by the photo/edit/update routes that previously bypassed it) applies the restriction -- a patient outside a restricted provider's own patients renders as a 404, the same "not found, not forbidden" ownership-isolation convention already used for the patient portal's cross-patient guard. The patient list and quick-switcher search are filtered to own patients. `exams.py`'s exam detail and `prescriptions.py`'s Rx detail/print routes are gated the same way via the exam's/Rx's own `patient_id`.
+
+### 74.3 Verified
+
+`python3 -m py_compile` on every touched file. Fresh-SQLite migration boot + idempotent re-run of `045_user_provider_link` confirmed clean on both a fresh database and the already-migrated one from earlier in this session (the backfill step correctly linked both demo accounts on an upgrade-in-place run). New Playwright test `test_record_level_authorization_restricts_provider_to_own_patients` creates two fresh patients, attributes one to Dr. Chen and the other to Dr. Rivera via a real exam each, then confirms Dr. Chen's own session sees only her patient (list and direct-URL access) while a System Administrator session -- the role every other test in this suite runs as -- is completely unaffected and still sees both. Full suite passed after this change.
+
+Incidentally surfaced, not fixed in this round: the top-bar "recently viewed patients" list is a plain browser cookie (`npv_recent_patients`), not scoped per logged-in user, so it can still show a patient's name from a previous session sharing the same browser even after switching to a restricted account -- the underlying record itself is correctly protected (a click through to it 404s), but the name briefly remains visible in that convenience list. Logged to `BUILD_BACKLOG.md` as a named, deliberately-deferred follow-up rather than silently left unmentioned.
+
+### 74.4 Explicitly not done
+
+No restriction on the appointment calendar/scheduling surfaces (a provider still sees the whole practice's calendar) or the diagnostic-order/lab-order lists -- this round's scope is specifically "a provider's own patient chart" (list, detail, exams, prescriptions), the concrete gap named in §37.6, not every patient-adjacent surface in the app. No restriction for any role other than Optometrist/Provider (front desk, billing, etc. are unaffected, as today's role matrix already gives them practice-wide access by design). No fix for the recently-viewed-cookie cross-session name leak noted above. No user-edit route to change a `User`'s linked provider after creation. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6.
+
+## 75. Expanded Playwright Coverage Toward the §20 Baseline Regression Checklist (v2.49)
+
+### 75.1 Origin
+
+Spec §36.5 item 5's own note, restated in `BUILD_BACKLOG.md`: most of §20's manual baseline regression checklist has never been automated, having accumulated since the v1.x baseline long before this app's Playwright suite existed.
+
+### 75.2 What changed
+
+Five new Playwright tests covering previously-unautomated §20 checklist items: **(1)** booking an ineligible appointment-type/relationship combination is rejected with HTTP 400 naming the mismatch; **(2)** booking on a recorded practice-closure date is rejected naming the closure, and deleting that closure immediately re-opens the date; **(3)** unknown patient/appointment/exam/prescription IDs, and an unrecognized `/claims/{section}`/`/catalog/{section}`, all return 404; **(4)** assigning an MRN already used by another patient is rejected naming the conflicting patient, and two patients with a blank MRN never collide; **(5)** an appointment's status can be cycled through all six defined values (`scheduled`/`checked_in`/`in_progress`/`completed`/`cancelled`/`no_show`).
+
+### 75.3 Verified
+
+Each new test passed individually and as part of the full suite (74 tests total, up from 64 at the start of this round).
+
+### 75.4 Explicitly not done
+
+§20's checklist is large; this round picked five previously-uncovered, independently-valuable items rather than attempting full 100% automation in one pass (dashboard record counts, photo-upload edge cases, an automated migration-idempotency test suite, and several others remain manual-only, tracked in `BUILD_BACKLOG.md`). None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6.
+
+## 76. Accessibility and Responsive-Layout Fixes (v2.49)
+
+### 76.1 Origin
+
+Two long-tracked gaps: spec §18.3 item 1 (an app-wide horizontal-overflow bug at ~400px width, found incidentally during the v2.24 Visit Focus round on pages with no wide tables at all -- never root-caused at the time) and spec §18.3 item 2 ("incomplete form-label association and other accessibility issues").
+
+### 76.2 What changed
+
+**Horizontal-overflow root cause found and fixed**: the topbar's `.staff-picker` (showing "First Last -- Role Label") had `flex-shrink: 0`, refusing to shrink -- any staff member with a longer name/role forced the *entire topbar, and with it the whole page*, wider than the viewport, on every single page, which is exactly the "not any one page's content" symptom originally reported. Now allowed to shrink, with the name/role text itself truncating via ellipsis instead of forcing width; the redundant topbar "Manage Users" button (same destination as the sidebar's Administration ▸ User Accounts link) is hidden at ≤600px to leave room for Logout. Also added `overflow-x: hidden` on `html`/`body` as a defensive safety net on top of the real fix -- legitimate wide content (data tables) keeps its own scoped horizontal scroll via the pre-existing `.table-responsive` pattern, unaffected by this.
+
+**Form-label association**: this codebase's dominant form pattern was `<label>Text</label><input ...>` as **siblings**, not nested and with no `for`/`id` pairing -- meaning a screen reader announces the input with no associated label at all. A mechanical, verified-safe transformation converted 203 occurrences of this exact pattern across 27 templates into `<label>Text <input ...></label>` (nested) -- the existing `.form-group label { display: block }`/`.form-group input { width: 100% }` CSS rules use descendant selectors, so nesting the input inside the label changes nothing visually. Checkbox-style labels that were already correctly nested (e.g. Visit Focus chips) were untouched by this pattern and needed no change. Labels that already used explicit `for`/`id` pairing (e.g. the login form, the new-user form) were likewise untouched.
+
+### 76.3 Verified
+
+Every template re-parsed cleanly with Jinja2 after the transformation (zero syntax errors across the whole `ehr/templates/` tree). New Playwright test `test_no_horizontal_overflow_at_narrow_viewport` checks `document.documentElement.scrollWidth <= clientWidth` at a 400px viewport on both a table-free page (dashboard) and a wide-table page (patient list) -- confirmed to genuinely fail without the `.staff-picker` fix (verified by temporarily reverting just that CSS change and re-running the test) and pass with it. Full suite (74 tests) passed after both changes, confirming the label-nesting transformation broke no existing workflow.
+
+### 76.4 Explicitly not done
+
+No full manual accessibility audit (screen-reader testing, color-contrast, keyboard-navigation, ARIA roles) -- this round closes the specific, concrete "label not associated with its input" gap named in §18.3 item 2, not a comprehensive WCAG pass. A handful of non-simple form fields (multi-line grouped inputs, labels with complex inline content) that don't match the exact mechanical pattern were left as-is rather than risk an unsafe transformation; a future pass can address these individually. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6.
+
+**Version 2.49 change log (relative to v2.48) — Seven Follow-Up Items:**
+
+| Area | Change |
+| --- | --- |
+| New capability | Diagnostic-order deep-links to Visit Focus sections (§70). Header pending-order count badge (§71). `AppointmentType`/`AppointmentTypeVersion` created-by/updated-by attribution (§72). Prescription relationship validation (§73). Record-level authorization restricting Optometrist/Provider to their own patients (§74). Five new Playwright tests toward the §20 baseline checklist (§75). App-wide horizontal-overflow fix and form-label-association accessibility fix (§76). |
+| New migrations | `044_appointment_type_updated_by` (§72). `045_user_provider_link` (§74). |
+| New files | `ehr/services/authz.py` (§74). |
+| Updated | `ehr/services/lookback_alerts.py`, `ehr/routes/{patients,exams}.py`, `ehr/templates/patients/{overview,_lookback_alerts}.html`, `ehr/templates/exams/form.html` (§70). `ehr/utils.py`, `ehr/routes/{exams,patients,appointments,prescriptions}.py`, `ehr/templates/base.html`, `ehr/static/css/app.css` (§71). `ehr/models/database.py`, `ehr/routes/admin_scheduling.py`, `ehr/templates/admin/scheduling/type_detail.html` (§72). `ehr/routes/prescriptions.py` (§73). `ehr/models/database.py`, `ehr/routes/{patients,exams,prescriptions,auth}.py`, `ehr/db/seed.py`, `ehr/templates/admin/users/{form,list}.html` (§74). `tests/test_smoke.py` (§75, plus one new test per §70-74). `ehr/static/css/app.css`, `ehr/templates/base.html`, and 27 form templates app-wide (§76). |
+| Explicitly not done | No calendar/scheduling-surface record-level restriction (§74). No full accessibility audit beyond label association (§76). No 100% automation of the §20 checklist (§75). No user-edit route for changing a linked provider after account creation (§74). None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |

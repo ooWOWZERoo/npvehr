@@ -42,30 +42,28 @@
   <form method="post" action="/admin/scheduling/appointment-types/{{ type_.id }}/color-rules">
     <div class="section-title">Match Conditions (blank/Any = wildcard, matches every value)</div>
     <div class="form-row cols-3">
-      <div class="form-group"><label>Priority*</label><input name="priority" type="number" value="0" required></div>
-      <div class="form-group"><label>Patient Relationship</label>
-        <select name="patient_relationship">
+      <div class="form-group"><label>Priority* <input name="priority" type="number" value="0" required></label></div>
+      <div class="form-group"><label>Patient Relationship <select name="patient_relationship">
           <option value="">Any</option>
           <option value="new">New</option>
           <option value="established">Established</option>
-        </select>
+        </select></label>
       </div>
-      <div class="form-group"><label>Follow-up</label>
-        <select name="is_follow_up">
+      <div class="form-group"><label>Follow-up <select name="is_follow_up">
           <option value="">Any</option>
           <option value="yes">Yes</option>
           <option value="no">No</option>
-        </select>
+        </select></label>
       </div>
     </div>
     <div class="form-row cols-2">
-      <div class="form-group"><label>Minimum Countable Tests</label><input name="minimum_countable_tests" type="number" min="0"></div>
-      <div class="form-group"><label>Maximum Countable Tests</label><input name="maximum_countable_tests" type="number" min="0"></div>
+      <div class="form-group"><label>Minimum Countable Tests <input name="minimum_countable_tests" type="number" min="0"></label></div>
+      <div class="form-group"><label>Maximum Countable Tests <input name="maximum_countable_tests" type="number" min="0"></label></div>
     </div>
     <div class="section-title">Result</div>
     <div class="form-row cols-2">
-      <div class="form-group"><label>Color (hex)*</label><input name="color" type="text" placeholder="#0F766E" required></div>
-      <div class="form-group"><label>Reason Code</label><input name="reason_code" type="text" placeholder="e.g. established_follow_up"></div>
+      <div class="form-group"><label>Color (hex)* <input name="color" type="text" placeholder="#0F766E" required></label></div>
+      <div class="form-group"><label>Reason Code <input name="reason_code" type="text" placeholder="e.g. established_follow_up"></label></div>
     </div>
     <p style="font-size:0.8rem;color:#64748b">
       Rules are evaluated in priority order (lowest number first); the first rule whose conditions all

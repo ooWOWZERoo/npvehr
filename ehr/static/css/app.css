@@ -39,6 +39,13 @@
 }
 
 html { -webkit-text-size-adjust: 100%; }
+/* App-wide horizontal-overflow fix (BUILD_BACKLOG.md §18.3 item 1, found at
+   ~400px width on every page including ones with no wide tables -- traced to
+   the topbar's staff-picker, see .staff-picker/.staff-display-btn below, not
+   any one page's own content). This is a safety net on top of that real fix,
+   not a substitute for it: legitimate wide content (data tables) keeps its
+   own scoped horizontal scroll via .table-responsive, unaffected here. */
+html, body { overflow-x: hidden; }
 body { font-family: var(--font-body); margin: 0; background: var(--canvas); color: var(--ink); font-size: 0.9rem; line-height: 1.5; }
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
@@ -350,8 +357,15 @@ tr:hover td { background: var(--primary-soft); }
 .topbar-spacer { flex: 1; }
 .topbar-clock { text-align: right; flex-shrink: 0; display: flex; align-items: center; }
 .topbar-clock-time { font-family: var(--font-mono); font-size: 0.8rem; font-weight: 500; font-variant-numeric: tabular-nums; line-height: 1; }
-.staff-picker { flex-shrink: 0; font-size: 0.8rem; }
-.staff-display-btn { background: none; border: none; color: #fff; cursor: pointer; font-size: 0.8rem; padding: 0.3rem 0.55rem; border-radius: 5px; font-family: var(--font-body); }
+/* Root cause of the app-wide ~400px horizontal-overflow bug (BUILD_BACKLOG.md
+   §18.3 item 1): this container previously refused to shrink (flex-shrink: 0)
+   while holding an unbounded-length "First Last — Role Label" string, so any
+   staff member with a longer name/role forced the whole topbar (and with it,
+   the whole page) wider than the viewport on every page, not just wide-table
+   ones. Now allowed to shrink, with the name/role text itself truncating via
+   ellipsis instead of forcing width. */
+.staff-picker { flex-shrink: 1; min-width: 0; font-size: 0.8rem; }
+.staff-display-btn { background: none; border: none; color: #fff; cursor: pointer; font-size: 0.8rem; padding: 0.3rem 0.55rem; border-radius: 5px; font-family: var(--font-body); display: inline-block; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: middle; }
 .staff-display-btn:hover { background: rgba(255,255,255,0.12); }
 .staff-picker input { padding: 0.35rem 0.55rem; border-radius: 6px; border: 1px solid rgba(255,255,255,0.3); font-size: 0.8rem; width: 130px; font-family: var(--font-body); }
 /* .btn-secondary's default text color (--primary-strong) is the same dark green as the
@@ -364,6 +378,7 @@ tr:hover td { background: var(--primary-soft); }
 .pcs-info { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.82rem; color: var(--ink-muted); }
 .pcs-name { font-family: var(--font-display); font-size: 1.1rem; font-weight: 700; color: var(--primary-strong); }
 .pcs-allergy-flag { display: inline-flex; align-items: center; gap: 0.25rem; background: #fee2e2; color: #991b1b; padding: 0.15rem 0.55rem; border-radius: 10px; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; width: fit-content; }
+.pcs-pending-orders-flag { display: inline-flex; align-items: center; gap: 0.25rem; background: #fef9c3; color: #854d0e; padding: 0.15rem 0.55rem; border-radius: 10px; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; width: fit-content; }
 .pcs-side { display: flex; flex-direction: column; align-items: flex-end; gap: var(--space-3); margin-left: auto; text-align: right; }
 .pcs-balance { padding: 0.5rem 0.9rem; border-radius: 8px; font-size: 0.85rem; line-height: 1.25; text-align: right; border: 1px solid transparent; }
 .pcs-balance strong { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 1.1rem; }
@@ -412,6 +427,11 @@ tr:hover td { background: var(--primary-soft); }
   .topbar { gap: var(--space-2); padding: 0 0.6rem; }
   .topbar-brand span.topbar-brand-text { display: none; }
   .staff-picker input { width: 90px; }
+  .staff-display-btn { max-width: 70px; }
+  /* Redundant with the sidebar's Administration > User Accounts link (same
+     destination) -- dropped at narrow widths to leave room for Logout,
+     which has no other path to it. */
+  .topbar-manage-users-link { display: none; }
   .patient-switcher { width: 88px; }
   .patient-context-strip { padding: 0.6rem var(--space-4); gap: 0.6rem; }
   .pcs-side { align-items: flex-start; text-align: left; width: 100%; }

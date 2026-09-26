@@ -54,11 +54,25 @@ def display_name(patient) -> str:
     return base
 
 
-def patient_context(patient):
-    """Build the dict base.html's patient-context-strip expects, or None."""
+def patient_context(patient, db=None):
+    """Build the dict base.html's patient-context-strip expects, or None.
+    `db` is optional (every current call site has one, but a `None` fallback
+    keeps this backward compatible for any caller that doesn't): when given,
+    computes the pending-diagnostic-order count shown as a small badge next
+    to the existing Allergies flag (BUILD_BACKLOG.md follow-up from the
+    Phase 3 diagnostic-order round -- "a header-level pending-order count
+    badge on the patient-context strip")."""
     if patient is None:
         return None
+    pending_order_count = None
+    if db is not None:
+        from ehr.models.database import DiagnosticOrder
+        pending_order_count = (db.query(DiagnosticOrder)
+            .filter(DiagnosticOrder.patient_id == patient.id,
+                    DiagnosticOrder.status.in_(["ordered", "scheduled", "in_progress"]))
+            .count())
     return {
+        "pending_order_count": pending_order_count,
         "id": patient.id,
         "first_name": patient.first_name,
         "last_name": patient.last_name,

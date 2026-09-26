@@ -6,16 +6,23 @@
 {% for alert in lookback_alerts %}
 <div class="alert alert-{{ alert.severity }}" style="display:flex;justify-content:space-between;align-items:center;gap:1rem">
   <span>{{ alert.message }}</span>
+  {% set section = FOCUS_SECTION_MAP.get(alert.test_code) %}
+  <div style="display:flex;gap:0.4rem;flex-shrink:0">
   {% if alert.type == 'outstanding_order' %}
-  <form method="post" action="/patients/{{ patient_id }}/orders/{{ alert.order_id }}/complete" style="flex-shrink:0">
+  <form method="post" action="/patients/{{ patient_id }}/orders/{{ alert.order_id }}/complete">
     <button type="submit" class="btn btn-sm btn-secondary">Mark Complete</button>
   </form>
   {% elif alert.type == 'interval_due' %}
-  <form method="post" action="/patients/{{ patient_id }}/orders/quick-order" style="flex-shrink:0">
+  <form method="post" action="/patients/{{ patient_id }}/orders/quick-order">
     <input type="hidden" name="diagnostic_test_code" value="{{ alert.test_code }}">
     <button type="submit" class="btn btn-sm btn-secondary">Order Now</button>
   </form>
   {% endif %}
+  {% if section %}
+  <a href="/exams/new?patient_id={{ patient_id }}&focus={{ section }}" class="btn btn-sm btn-secondary"
+     title="Open a new exam with the section this test's result belongs in already expanded">Document in Exam</a>
+  {% endif %}
+  </div>
 </div>
 {% endfor %}
 {% endif %}

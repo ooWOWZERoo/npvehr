@@ -1308,6 +1308,26 @@ def migration_042_create_field_change_audit_events(conn):
             "ON field_change_audit_events (changed_at)"
         ))
 
+def migration_044_appointment_type_updated_by(conn):
+    """AppointmentType created_by/updated_by attribution (BUILD_BACKLOG.md
+    follow-up from the v2.7 Appointment round, §36.5 item 10): `created_by_user_id`
+    already existed as a plain (never-FK, never-set) column since before auth
+    existed -- this adds the missing `updated_at`/`updated_by_user_id` pair,
+    same shape as migration_013's Appointment columns."""
+    if not _table_exists(conn, "appointment_types"):
+        return  # brand-new database; create_all() will create the full table with these columns.
+    _add_column_if_missing(conn, "appointment_types", "updated_at", "TIMESTAMP")
+    _add_column_if_missing(conn, "appointment_types", "updated_by_user_id", "INTEGER")
+
+def migration_045_user_provider_link(conn):
+    """Record-level authorization (BUILD_BACKLOG.md §37.6 follow-up): links a
+    User login account to its clinical Provider identity, so an
+    optometrist_provider user's "own patients" (ehr.services.authz) can be
+    determined at all -- these were two entirely separate tables before this."""
+    if not _table_exists(conn, "users"):
+        return  # brand-new database; create_all() will create the full table with this column.
+    _add_column_if_missing(conn, "users", "provider_id", "INTEGER")
+
 def migration_043_create_rx_lab_orders(conn):
     """Real Order Management (BUILD_BACKLOG.md's "/orders/" placeholder):
     a real, patient-and-Rx-scoped optical lab order lifecycle table --
@@ -1380,6 +1400,8 @@ COLUMN_MIGRATIONS = [
     ("041_prescription_sign_lock", migration_041_prescription_sign_lock),
     ("042_create_field_change_audit_events", migration_042_create_field_change_audit_events),
     ("043_create_rx_lab_orders", migration_043_create_rx_lab_orders),
+    ("044_appointment_type_updated_by", migration_044_appointment_type_updated_by),
+    ("045_user_provider_link", migration_045_user_provider_link),
 ]
 POST_CREATE_ALL_MIGRATIONS = [
     ("002_seed_appointment_types", migration_002_seed_appointment_types),

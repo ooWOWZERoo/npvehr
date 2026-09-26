@@ -20,6 +20,9 @@
       <dt>Buffers</dt><dd>{{ version.buffer_before_minutes if version else 0 }} before / {{ version.buffer_after_minutes if version else 0 }} after</dd>
       <dt>Base Color</dt><dd>{% if version and version.base_color %}<span class="color-swatch" style="background:{{ version.base_color }}"></span> {{ version.base_color }}{% else %}<span style="color:#b91c1c">unset</span>{% endif %}</dd>
       <dt>Active</dt><dd>{{ 'Yes' if version and version.active else 'No' }}</dd>
+      {% if version and version.created_by %}<dt>Version Published By</dt><dd>{{ version.created_by.first_name }} {{ version.created_by.last_name }} on {{ version.created_at.strftime('%b %d, %Y at %I:%M %p') if version.created_at else '—' }}</dd>{% endif %}
+      {% if type_.created_by %}<dt>Type Created By</dt><dd>{{ type_.created_by.first_name }} {{ type_.created_by.last_name }} on {{ type_.created_at.strftime('%b %d, %Y at %I:%M %p') if type_.created_at else '—' }}</dd>{% endif %}
+      {% if type_.updated_by and type_.updated_by_user_id != type_.created_by_user_id %}<dt>Last Updated By</dt><dd>{{ type_.updated_by.first_name }} {{ type_.updated_by.last_name }} on {{ type_.updated_at.strftime('%b %d, %Y at %I:%M %p') if type_.updated_at else '—' }}</dd>{% endif %}
     </dl>
   </div>
   <div class="card"><h3>Color Preview (spec 17.3) &mdash; <a href="/admin/scheduling/appointment-types/{{ type_.id }}/color-rules">Manage Color Rules</a></h3>

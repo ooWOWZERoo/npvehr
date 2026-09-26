@@ -44,6 +44,11 @@
         <form method="post" action="/patients/{{ patient.id }}/orders/{{ o.id }}/cancel" style="display:inline">
           <button type="submit" class="btn btn-sm btn-secondary">Cancel</button>
         </form>
+        {% set section = FOCUS_SECTION_MAP.get(o.diagnostic_test.code) %}
+        {% if section %}
+        <a href="/exams/new?patient_id={{ patient.id }}&focus={{ section }}" class="btn btn-sm btn-secondary"
+           title="Open a new exam with the section this test's result belongs in already expanded">Document in Exam</a>
+        {% endif %}
       </td>
     </tr>
     {% endfor %}

@@ -49,20 +49,18 @@
   </dl></div>
   <div class="card"><h3>Update Status</h3>
     <form method="post" action="/appointments/{{ appt.id }}/status">
-      <div class="form-group"><label>Status</label>
-        <select name="status">
+      <div class="form-group"><label>Status <select name="status">
           {% for s in statuses %}<option value="{{ s.value }}" {{ 'selected' if appt.status == s }}>{{ s.value.replace('_',' ') }}</option>{% endfor %}
-        </select>
+        </select></label>
       </div>
       <button type="submit" class="btn btn-primary">Update</button>
     </form>
     <h3 style="margin-top:1.25rem">Check-In / Visit Flow <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; staff reference only, never billed or transmitted</span></h3>
     <form method="post" action="/appointments/{{ appt.id }}/visit-flow">
-      <div class="form-group"><label>Flow</label>
-        <select name="visit_flow">
+      <div class="form-group"><label>Flow <select name="visit_flow">
           <option value="vision" {{ 'selected' if (appt.visit_flow or suggested_visit_flow) == 'vision' }}>Routine Vision / Commercial Vision Plan</option>
           <option value="medical" {{ 'selected' if (appt.visit_flow or suggested_visit_flow) == 'medical' }}>Medical Visit (refraction billed separately to patient)</option>
-        </select>
+        </select></label>
       </div>
       {% if appt.visit_flow %}<p style="font-size:0.8rem;color:var(--ink-muted)">Set ({{ appt.visit_flow_source }}).</p>{% else %}<p style="font-size:0.8rem;color:var(--ink-muted)">Suggested from insurance on file &mdash; not yet confirmed.</p>{% endif %}
       <button type="submit" class="btn btn-secondary btn-sm">{{ 'Update Flow' if appt.visit_flow else 'Confirm Flow' }}</button>

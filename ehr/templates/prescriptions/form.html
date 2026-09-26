@@ -6,19 +6,16 @@
   <form method="post" action="/prescriptions/new">
     {% if selected_exam_id %}<input type="hidden" name="exam_id" value="{{ selected_exam_id }}">{% endif %}
     <div class="form-row cols-3">
-      <div class="form-group"><label>Patient*</label>
-        <select name="patient_id" required>{% for p in patients %}<option value="{{ p.id }}" {{ 'selected' if selected_patient_id == p.id }}>{{ p.last_name }}, {{ p.first_name }}</option>{% endfor %}</select>
+      <div class="form-group"><label>Patient* <select name="patient_id" required>{% for p in patients %}<option value="{{ p.id }}" {{ 'selected' if selected_patient_id == p.id }}>{{ p.last_name }}, {{ p.first_name }}</option>{% endfor %}</select></label>
       </div>
-      <div class="form-group"><label>Provider*</label>
-        <select name="provider_id" required>{% for p in providers %}<option value="{{ p.id }}">Dr. {{ p.last_name }}</option>{% endfor %}</select>
+      <div class="form-group"><label>Provider* <select name="provider_id" required>{% for p in providers %}<option value="{{ p.id }}">Dr. {{ p.last_name }}</option>{% endfor %}</select></label>
       </div>
-      <div class="form-group"><label>Rx Type</label>
-        <select name="rx_type"><option value="glasses">Glasses</option><option value="contacts">Contact Lenses</option></select>
+      <div class="form-group"><label>Rx Type <select name="rx_type"><option value="glasses">Glasses</option><option value="contacts">Contact Lenses</option></select></label>
       </div>
     </div>
     <div class="form-row cols-2">
-      <div class="form-group"><label>Issue Date</label><input name="issue_date" type="date" value="{{ today }}"></div>
-      <div class="form-group"><label>Expiry Date</label><input name="expiry_date" type="date"></div>
+      <div class="form-group"><label>Issue Date <input name="issue_date" type="date" value="{{ today }}"></label></div>
+      <div class="form-group"><label>Expiry Date <input name="expiry_date" type="date"></label></div>
     </div>
     <div class="section-title">Rx Values</div>
     <div class="table-responsive">
@@ -38,14 +35,11 @@
     </div>
     <div class="section-title">Lens Design &amp; Follow-Up <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; structured plan fields (VISION_EHR_DATA_STANDARDS_RESEARCH.md 5.1)</span></div>
     <div class="form-row cols-3">
-      <div class="form-group"><label>Lens Type</label>
-        <select name="lens_type"><option value="">&mdash;</option><option>Single Vision</option><option>Bifocal</option><option>Trifocal</option><option>Progressive</option><option>Office-Computer</option></select>
+      <div class="form-group"><label>Lens Type <select name="lens_type"><option value="">&mdash;</option><option>Single Vision</option><option>Bifocal</option><option>Trifocal</option><option>Progressive</option><option>Office-Computer</option></select></label>
       </div>
-      <div class="form-group"><label>Lens Material</label>
-        <select name="lens_material"><option value="">&mdash;</option><option>CR-39</option><option>Polycarbonate</option><option>Trivex</option><option>Hi-Index 1.67</option><option>Hi-Index 1.74</option></select>
+      <div class="form-group"><label>Lens Material <select name="lens_material"><option value="">&mdash;</option><option>CR-39</option><option>Polycarbonate</option><option>Trivex</option><option>Hi-Index 1.67</option><option>Hi-Index 1.74</option></select></label>
       </div>
-      <div class="form-group"><label>Recall Interval</label>
-        <select name="recall_interval"><option value="">&mdash;</option><option>3 Months</option><option>6 Months</option><option>1 Year</option><option>2 Years</option></select>
+      <div class="form-group"><label>Recall Interval <select name="recall_interval"><option value="">&mdash;</option><option>3 Months</option><option>6 Months</option><option>1 Year</option><option>2 Years</option></select></label>
       </div>
     </div>
     <div class="form-group"><label>Lens Treatments</label></div>
@@ -60,7 +54,7 @@
       <label class="test-chip"><input type="checkbox" name="patient_education_tags" value="{{ tag }}"> {{ tag }}</label>
       {% endfor %}
     </div>
-    <div class="form-group" style="margin-top:1rem"><label>Notes</label><textarea name="notes"></textarea></div>
+    <div class="form-group" style="margin-top:1rem"><label>Notes <textarea name="notes"></textarea></label></div>
     <div class="form-actions"><button type="submit" class="btn btn-primary">Save Prescription</button></div>
   </form>
 </div>

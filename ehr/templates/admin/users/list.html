@@ -10,13 +10,14 @@
 <div class="card">
   <div class="table-responsive">
   <table>
-    <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Last Login</th><th>Action</th></tr></thead>
+    <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Linked Provider</th><th>Status</th><th>Last Login</th><th>Action</th></tr></thead>
     <tbody>
     {% for u in users %}
       <tr>
         <td>{{ u.first_name }} {{ u.last_name }}</td>
         <td>{{ u.email }}</td>
         <td>{{ ROLE_LABELS.get(u.role, u.role) }}</td>
+        <td>{% if u.provider %}Dr. {{ u.provider.first_name }} {{ u.provider.last_name }}{% else %}&mdash;{% endif %}</td>
         <td>{% if u.active %}<span style="color:var(--primary)">Active</span>{% else %}<span style="color:#991b1b">Deactivated</span>{% endif %}</td>
         <td>{{ u.last_login_at.strftime('%Y-%m-%d %H:%M') if u.last_login_at else 'Never' }}</td>
         <td>

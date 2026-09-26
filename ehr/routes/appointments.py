@@ -268,9 +268,9 @@ def _form_context(db: Session, patient_id=None, prefill_date=None, appt: Appoint
         suggested = sched.suggest_relationship(db, patient_id, appt.scheduled_at.date().isoformat())
     ctx_patient = None
     if appt is not None:
-        ctx_patient = patient_context(appt.patient)
+        ctx_patient = patient_context(appt.patient, db)
     elif patient_id:
-        ctx_patient = patient_context(db.query(Patient).filter(Patient.id == patient_id).first())
+        ctx_patient = patient_context(db.query(Patient).filter(Patient.id == patient_id).first(), db)
     return {
         "patients": db.query(Patient).order_by(Patient.last_name).all(),
         "providers": sched.bookable_providers(db, include_id=appt.provider_id if appt else None),
@@ -289,7 +289,7 @@ def _form_context(db: Session, patient_id=None, prefill_date=None, appt: Appoint
 @router.get("/", response_class=HTMLResponse)
 def list_appointments(request: Request, patient_id: int = None, db: Session = Depends(get_db)):
     appts = db.query(Appointment).order_by(Appointment.scheduled_at).all()
-    ctx_patient = patient_context(db.query(Patient).filter(Patient.id == patient_id).first()) if patient_id else None
+    ctx_patient = patient_context(db.query(Patient).filter(Patient.id == patient_id).first(), db) if patient_id else None
     return templates.TemplateResponse(request, "appointments/list.html",
         {"appointments": appts, "context_patient": ctx_patient})
 
@@ -323,7 +323,7 @@ def _board_context(request: Request, db: Session, initial_view: str, initial_dat
         "provider_id": provider_id, "appointment_type_version_id": appointment_type_version_id,
         "relationship": relationship, "status": status, "room_resource_id": room_resource_id, "has_notes": has_notes,
         "legend_types": _all_active_type_versions_for_legend(db),
-        "context_patient": patient_context(db.query(Patient).filter(Patient.id == patient_id).first()) if patient_id else None,
+        "context_patient": patient_context(db.query(Patient).filter(Patient.id == patient_id).first(), db) if patient_id else None,
         "granularity_by_provider": granularity_by_provider, "default_granularity": default_granularity,
     }
 
@@ -613,7 +613,7 @@ def appointment_detail(request: Request, appt_id: int, db: Session = Depends(get
         {"appt": a, "statuses": list(AppointmentStatus), "audit_events": audit,
          "waitlist_matches": waitlist_matches, "notified_entry_ids": notified_entry_ids,
          "suggested_visit_flow": suggested_visit_flow,
-         "context_patient": patient_context(a.patient)})
+         "context_patient": patient_context(a.patient, db)})
 
 
 @router.post("/{appt_id}/visit-flow", dependencies=[Depends(require_role(*APPOINTMENT_EDIT))])
