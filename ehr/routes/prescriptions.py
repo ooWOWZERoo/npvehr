@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, Request, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
-from ehr.models.database import get_db, Prescription, PrescriptionAddendum, Patient
+from ehr.models.database import get_db, Prescription, PrescriptionAddendum, Patient, RxLabOrder
 from ehr.env_info import EHR_ENV
 from ehr.utils import patient_context
 from ehr.auth.deps import get_current_user
@@ -57,8 +57,10 @@ async def create_rx(request: Request, db: Session = Depends(get_db)):
 def rx_detail(request: Request, rx_id: int, db: Session = Depends(get_db)):
     rx = db.query(Prescription).filter(Prescription.id == rx_id).first()
     if not rx: return HTMLResponse("Not found", status_code=404)
+    lab_orders = (db.query(RxLabOrder).filter(RxLabOrder.rx_id == rx_id)
+                  .order_by(RxLabOrder.placed_at.desc()).all())
     return templates.TemplateResponse(request, "prescriptions/detail.html",
-        {"rx": rx, "context_patient": patient_context(rx.patient)})
+        {"rx": rx, "lab_orders": lab_orders, "context_patient": patient_context(rx.patient)})
 
 @router.get("/{rx_id}/print", response_class=HTMLResponse, dependencies=[Depends(require_role(*RX_VIEW))])
 def rx_print(request: Request, rx_id: int, db: Session = Depends(get_db)):

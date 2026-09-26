@@ -1,6 +1,6 @@
 # New Path Vision EHR — Master Build Backlog
 
-**Status:** Living tracking document. **Baseline as of:** spec v2.47 / research doc v2.24 (2026-09-25).
+**Status:** Living tracking document. **Baseline as of:** spec v2.48 / research doc v2.24 (2026-09-26).
 
 ## Purpose and how to use this document
 
@@ -96,7 +96,7 @@ Same external-integration caution as billing above, though lower compliance stak
 - [ ] E-prescribing (NCPDP SCRIPT, RxNorm drug identification, structured SIG codes)
 - [ ] Optical lab order transmission (ANSI Z80/VisionWeb-style API, frame boxing/centration metrics, JSON order payload)
 - [ ] In-house optical inventory (`inventory_frames`/`inventory_contact_lenses`, UPC/SKU lookup, reorder thresholds, transactional checkout with row-level locking)
-- [ ] Real Order Management (turning a written Rx into a trackable lab order — placed → fabrication → shipped → received → dispensed). Recommended by Claude earlier this session as the natural "next step after the exam" in the patient journey (Optical/Billing Out per IHE GEE, research doc §4.2); not yet scoped or started. Existing placeholder describes the target shape already (`ehr/routes/store_ops.py`'s `/orders/`).
+- [x] **Real Order Management (turning a written Rx into a trackable lab order — placed → in_fabrication → shipped → received → dispensed/cancelled). Done, v2.48** — see baseline spec §69. New `RxLabOrder` table + `ehr.services.rx_lab_orders` transition validation, gated on the originating Prescription being signed (spec §67); reorder/remake tracking; replaces the `/orders/` placeholder in `ehr/routes/store_ops.py` with a real `ehr/routes/rx_lab_orders.py` router. Still no real lab integration (EDI/VisionWeb transmission) — see the still-open item directly above.
 
 ---
 
@@ -215,7 +215,7 @@ A real visit-summary document export prompted a full component-by-component gap 
 - [ ] Vitreous as a discrete fundus structure, and a numeric CD ratio on the general exam (today it only exists on `GlaucomaTracking`)
 - [ ] Structured review of systems (the source document's large systemic-symptom checklist)
 - [ ] Structured social history (alcohol/tobacco screening) — no fields exist on `Patient` at all
-- [ ] Diagnostic-imaging order + structured result tracking (fundus photos, OCT) — no order/result model exists; Order Management remains a placeholder (§3 above)
+- [ ] Diagnostic-imaging order + structured result tracking (fundus photos, OCT) — this is `DiagnosticOrder`/Phase 3-4 look-back territory, a separate model from the optical-goods `RxLabOrder` lifecycle now built (§3 above, spec §69)
 - [x] E-signature / sign-lock-amend workflow -- `EyeExam.signed_at`/`signed_by_user_id` plus a new `EyeExamAddendum` table: a provider (or system administrator) signs a visit as an electronic attestation, after which the only way to add anything further is a dated, authored addendum (this app never had an exam edit route to begin with, so "lock" makes Sign meaningful by gating the addendum path on it). **Done, v2.44** — see baseline spec §63. Extended to `Prescription` (same shape: `signed_at`/`signed_by_user_id` + `PrescriptionAddendum`, new `RX_SIGN` permission group). **Done, v2.46** — see baseline spec §67. "Staff present at this visit" attribution beyond the single `Provider` on an exam remains open (§6 above, spec §18.2 item 4/§37.6).
 - [ ] Actual PDF rendering — this app has zero PDF-generation library; `prescriptions/print.html` relies entirely on the browser's native print dialog
 

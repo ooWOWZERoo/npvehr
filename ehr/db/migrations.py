@@ -1308,6 +1308,40 @@ def migration_042_create_field_change_audit_events(conn):
             "ON field_change_audit_events (changed_at)"
         ))
 
+def migration_043_create_rx_lab_orders(conn):
+    """Real Order Management (BUILD_BACKLOG.md's "/orders/" placeholder):
+    a real, patient-and-Rx-scoped optical lab order lifecycle table --
+    `placed -> in_fabrication -> shipped -> received -> dispensed/cancelled`,
+    validated in ehr.services.rx_lab_orders. See RxLabOrder's own docstring
+    in ehr/models/database.py for why this is separate from
+    diagnostic_orders (testing orders vs. optical-goods manufacturing).
+    Indexed the same shape as migration_036's diagnostic_orders table."""
+    conn.execute(text(f"""
+        CREATE TABLE IF NOT EXISTS rx_lab_orders (
+            id {_pk_ddl(conn)},
+            rx_id INTEGER NOT NULL,
+            patient_id INTEGER NOT NULL,
+            order_type VARCHAR NOT NULL,
+            lab_name VARCHAR NOT NULL,
+            status VARCHAR DEFAULT 'placed',
+            eta_date VARCHAR,
+            placed_by_user_id INTEGER,
+            placed_at TIMESTAMP,
+            shipped_at TIMESTAMP,
+            received_at TIMESTAMP,
+            dispensed_at TIMESTAMP,
+            dispensed_by_user_id INTEGER,
+            cancelled_at TIMESTAMP,
+            cancelled_reason TEXT,
+            remake_of_order_id INTEGER,
+            notes TEXT
+        )
+    """))
+    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_rx_lab_orders_patient_status "
+        "ON rx_lab_orders (patient_id, status)"))
+    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_rx_lab_orders_rx "
+        "ON rx_lab_orders (rx_id)"))
+
 # Ordered list of (id, function). Adding new migrations: append, never edit past entries.
 COLUMN_MIGRATIONS = [
     ("001_appointment_columns", migration_001_appointment_columns),
@@ -1345,6 +1379,7 @@ COLUMN_MIGRATIONS = [
     ("040_eye_exam_sign_lock", migration_040_eye_exam_sign_lock),
     ("041_prescription_sign_lock", migration_041_prescription_sign_lock),
     ("042_create_field_change_audit_events", migration_042_create_field_change_audit_events),
+    ("043_create_rx_lab_orders", migration_043_create_rx_lab_orders),
 ]
 POST_CREATE_ALL_MIGRATIONS = [
     ("002_seed_appointment_types", migration_002_seed_appointment_types),

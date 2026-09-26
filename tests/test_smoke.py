@@ -1921,3 +1921,67 @@ def test_field_change_audit_log_records_patient_and_provider_edits(logged_in_pag
     patient_text = patient_row.first.inner_text()
     assert "phone" in patient_text and "555-0100" in patient_text and "555-0199" in patient_text
     assert "specialty" in content and "Pediatric Optometry" in content
+
+
+def test_rx_lab_order_lifecycle_and_remake(logged_in_page, live_server):
+    """Real Order Management (replaces the old /orders/ sidebar placeholder):
+    a lab order can only be placed against a *signed* prescription; placing
+    one, walking it through the placed -> shipped -> dispensed lifecycle, and
+    creating a remake once dispensed all work, and the order shows up both
+    on /orders/ and on the originating prescription's detail page."""
+    page = logged_in_page
+    page.goto(live_server + "/prescriptions/new")
+    page.select_option('select[name="patient_id"]', index=0)
+    page.locator('button[type="submit"]', has_text="Save Prescription").click()
+    page.wait_for_url(re.compile(r"/prescriptions/\d+$"))
+    rx_id = page.url.rstrip("/").split("/")[-1]
+
+    # Cannot place a lab order before the Rx is signed.
+    resp = page.request.get(live_server + f"/orders/new?rx_id={rx_id}")
+    assert resp.status == 400
+    token = page.locator('meta[name="csrf-token"]').get_attribute("content")
+    resp = page.request.post(live_server + "/orders/new",
+        form={"rx_id": rx_id, "lab_name": "Too Early Lab", "order_type": "glasses", "csrf_token": token})
+    assert resp.status == 400
+
+    page.on("dialog", lambda d: d.accept())
+    page.locator("form[action$='/sign'] button[type=\"submit\"]").click()
+    page.wait_for_load_state("networkidle")
+
+    page.goto(live_server + f"/orders/new?rx_id={rx_id}")
+    page.fill('input[name="lab_name"]', "Regression Test Lab")
+    page.select_option('select[name="order_type"]', "glasses")
+    page.locator('button[type="submit"]', has_text="Place Order").click()
+    page.wait_for_url(re.compile(r"/orders/\d+$"))
+    order_id = page.url.rstrip("/").split("/")[-1]
+    assert "Regression Test Lab" in page.content()
+    assert "Placed" in page.content()
+
+    # Skip straight to Shipped (a permissive, skip-ahead lifecycle).
+    page.locator('form[action$="/transition"] button', has_text="Mark Shipped").click()
+    page.wait_for_load_state("networkidle")
+    assert page.locator(".badge", has_text="Shipped").count() >= 1
+
+    page.locator('form[action$="/transition"] button', has_text="Mark Dispensed").click()
+    page.wait_for_load_state("networkidle")
+    assert page.locator(".badge", has_text="Dispensed").count() >= 1
+    assert page.locator("form[action$='/transition']").count() == 0  # terminal state, no further transitions
+
+    # An already-dispensed order allows a remake, which links back to it.
+    page.locator("form[action$='/remake'] button").click()
+    page.wait_for_url(re.compile(r"/orders/\d+$"))
+    remake_id = page.url.rstrip("/").split("/")[-1]
+    assert remake_id != order_id
+    assert f"Order #{order_id}" in page.content()
+
+    page.goto(live_server + f"/orders/{order_id}")
+    assert f"Order #{remake_id}" in page.content()
+
+    # Surfaced on the originating prescription's detail page too.
+    page.goto(live_server + f"/prescriptions/{rx_id}")
+    assert "Regression Test Lab" in page.content()
+    assert page.locator("a[href='/orders/" + order_id + "']").count() >= 1
+
+    # And on the top-level Order Management list.
+    page.goto(live_server + "/orders/")
+    assert "Regression Test Lab" in page.content()

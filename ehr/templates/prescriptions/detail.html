@@ -90,6 +90,33 @@
   {% endif %}
   {% endif %}
 </div>
+{% if rx.signed_at %}
+{% set badge_class = {'placed': 'badge-ordered', 'in_fabrication': 'badge-in_progress', 'shipped': 'badge-scheduled',
+                       'received': 'badge-checked_in', 'dispensed': 'badge-completed', 'cancelled': 'badge-cancelled'} %}
+{% set status_label = {'placed': 'Placed', 'in_fabrication': 'In Fabrication', 'shipped': 'Shipped',
+                        'received': 'Received', 'dispensed': 'Dispensed', 'cancelled': 'Cancelled'} %}
+<div class="card" style="margin-top:1rem"><h3>Lab Orders</h3>
+  {% if lab_orders %}
+  <table><thead><tr><th>Placed</th><th>Type</th><th>Lab</th><th>ETA</th><th>Status</th><th></th></tr></thead><tbody>
+    {% for o in lab_orders %}
+    <tr>
+      <td>{{ o.placed_at.strftime('%Y-%m-%d') if o.placed_at else '—' }}</td>
+      <td>{{ o.order_type|title }}</td>
+      <td>{{ o.lab_name }}</td>
+      <td>{{ o.eta_date or '—' }}</td>
+      <td><span class="badge {{ badge_class[o.status] }}">{{ status_label[o.status] }}</span></td>
+      <td><a href="/orders/{{ o.id }}" class="btn btn-sm btn-secondary">View</a></td>
+    </tr>
+    {% endfor %}
+  </tbody></table>
+  {% else %}
+  <p style="color:var(--ink-muted);font-size:0.9rem">No lab orders placed yet.</p>
+  {% endif %}
+  {% if current_user and current_user.role in ('system_administrator', 'practice_administrator', 'optician') %}
+  <a href="/orders/new?rx_id={{ rx.id }}" class="btn btn-sm btn-primary" style="margin-top:0.75rem">Place Lab Order</a>
+  {% endif %}
+</div>
+{% endif %}
 {% if rx.signed_at or rx.addenda %}
 <div class="card" style="margin-top:1rem"><h3>Addenda</h3>
   {% if rx.addenda %}

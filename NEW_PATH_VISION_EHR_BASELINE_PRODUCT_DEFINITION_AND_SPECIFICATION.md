@@ -3931,3 +3931,39 @@ No blanket roll-out to every model in the app -- only `Patient` and `Provider`, 
 | New migrations | `041_prescription_sign_lock` (Prescription `signed_at`/`signed_by_user_id`; new `prescription_addenda` table). `042_create_field_change_audit_events` (new generic audit table). |
 | Updated | `ehr/routes/prescriptions.py`, `ehr/models/database.py`, `ehr/auth/permissions.py`, `ehr/templates/prescriptions/detail.html` (§67). `ehr/routes/{patients,admin_scheduling,auth}.py`, `ehr/templates/{base,admin/audit}.html`. New `ehr/services/field_audit.py`, `ehr/templates/admin/field_audit.html` (§68). `tests/test_smoke.py` gained two new tests. |
 | Explicitly not done | No unsign/reopen for either sign/lock lifecycle. No blanket field-audit roll-out beyond Patient/Provider. No migration of existing Appointment-side audit tables onto the new generic one. No search/pagination on the new audit page. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |
+
+## 69. Real Order Management: Written Rx to Trackable Lab Order Lifecycle (v2.48)
+
+### 69.1 Origin
+
+The "/orders/" sidebar section (competitive-review addition) had stood as an intentionally polished placeholder since it was added: `ehr/routes/store_ops.py`'s `order_management` route rendered a static description of what Order Management would eventually do -- "Create and track frame and lens orders against a specific patient and Rx," "Lab selection, order status ... and ETA tracking," "Reorder/remake tracking for warranty and redo jobs" -- with no underlying table or logic at all. This round builds exactly that placeholder's own bullet list.
+
+### 69.2 What changed
+
+**New `RxLabOrder` table** (`rx_lab_orders`, migration `043_create_rx_lab_orders`): a patient-and-Rx-scoped optical lab order, distinct from the pre-existing `DiagnosticOrder` table (clinical *testing* orders such as OCT/visual field) -- this one tracks the *optical goods manufacturing* pipeline for a specific prescription. `status` is a plain string (`placed | in_fabrication | shipped | received | dispensed | cancelled`), validated in a new `ehr.services.rx_lab_orders` module (`ALLOWED_TRANSITIONS` + `transition()`), matching this app's established convention for lifecycle status columns rather than a DB enum -- the same shape as `ehr.services.diagnostic_orders`. Transitions are deliberately permissive (a lab may not report every intermediate stage, so `placed` can jump straight to `dispensed`).
+
+**A written Rx must be signed before a lab order can be placed against it**: `GET/POST /orders/new` both reject an unsigned `Prescription` with a 400. This ties directly into §67's sign/lock/amend lifecycle -- signing is the "this Rx is final" attestation, so it's the natural gate for "this is now a real order sent to a lab," and it gives the existing Sign & Lock feature a second, concrete consequence beyond locking direct edits.
+
+**New `ehr/routes/rx_lab_orders.py` router** (replacing the placeholder route in `store_ops.py`): `GET /orders/` (practice-wide list, filterable by status, with an open-order count), `GET/POST /orders/new` (place an order against a signed Rx; lab name is a free-text field with a `<datalist>` of five representative labs, not a full vendor catalog -- same narrow-lookup posture as this app's other small reference lists), `GET /orders/{id}` (detail page with a status timeline and one-click "Mark {next status}" buttons computed from `ALLOWED_TRANSITIONS`), `POST /orders/{id}/transition` (advance or cancel, with an optional cancellation reason), and `POST /orders/{id}/remake` (reorder/remake tracking: a **new**, separate order row linked back via `remake_of_order_id` rather than mutating the original -- the original's own history of what was sent, when, and to which lab stays intact).
+
+**New permission groups** `RX_LAB_ORDER_VIEW` (same roles as the pre-existing `CATALOG_ORDERS_VIEW`) and `RX_LAB_ORDER_EDIT` (System Administrator, Practice Administrator, Optician -- the roles who actually run dispensing, mirroring `STORE_OPS_EDIT`'s posture).
+
+**Surfaced on the Prescription detail page**: a signed Rx gets a new "Lab Orders" card listing every lab order placed against it with a link to each one's detail page, plus a "Place Lab Order" button for `RX_LAB_ORDER_EDIT` roles.
+
+### 69.3 Verified
+
+`python3 -m py_compile` on every touched file. Fresh-SQLite migration boot + idempotent re-run of `043_create_rx_lab_orders` confirmed clean. New Playwright test `test_rx_lab_order_lifecycle_and_remake` covers: placing an order is rejected (400, both the form GET and the POST) against an unsigned Rx; after signing, an order can be placed and appears on its detail page, the practice-wide `/orders/` list, and the originating prescription's detail page; skip-ahead transitions (`placed` -> `shipped` -> `dispensed`) work and the terminal `dispensed` state offers no further transition buttons; and a remake created from a dispensed order links back to the original in both directions. Full suite (65 tests, up from 64) passed clean.
+
+### 69.4 Explicitly not done
+
+No real lab integration (EDI, a lab's own order-status API, or automated ETA updates) -- `eta_date` and `lab_name` are staff-entered free text, matching this app's "not for use with real patient data" posture and its existing narrow-lookup convention elsewhere (ICD-10, CPT). No patient-facing notification when an order becomes ready for pickup (the placeholder's own bullet list named this; it stays a named future refinement, same category as the portal's existing reminder/notification infrastructure this could eventually reuse). No frame/lens/contact-lens product catalog line items on an order (the Catalog sidebar section remains its own separate, still-placeholder area) -- an order here is lab + type + dates, not an itemized product order. No linkage from a lab order into Claim Management or a billing preview. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6.
+
+**Version 2.48 change log (relative to v2.47) — Real Order Management:**
+
+| Area | Change |
+| --- | --- |
+| New capability | `RxLabOrder` table and lifecycle (`placed -> in_fabrication -> shipped -> received -> dispensed/cancelled`), gated on the originating Prescription being signed. Reorder/remake tracking. Replaces the "/orders/" sidebar placeholder with a real, working page. |
+| New migration | `043_create_rx_lab_orders`. |
+| New files | `ehr/services/rx_lab_orders.py`, `ehr/routes/rx_lab_orders.py`, `ehr/templates/orders/{list,form,detail}.html`. |
+| Updated | `ehr/models/database.py` (new `RxLabOrder` model), `ehr/auth/permissions.py` (new `RX_LAB_ORDER_VIEW`/`RX_LAB_ORDER_EDIT`), `ehr/app.py` (router registration), `ehr/routes/store_ops.py` (placeholder route removed), `ehr/routes/prescriptions.py` + `ehr/templates/prescriptions/detail.html` (new Lab Orders card). `tests/test_smoke.py` gained one new test. |
+| Explicitly not done | No real lab integration, EDI, or automated ETA updates. No patient-facing ready-for-pickup notification. No product/SKU line items on an order. No linkage into Claim Management or billing. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |

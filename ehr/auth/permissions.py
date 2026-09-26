@@ -85,6 +85,12 @@ CLAIMS_VIEW = set(STORE_OPS_VIEW)
 # Admin (full-access-except-user-mgmt / full-access roles) and the
 # view-everything Read-only/Auditor role are included for completeness.
 CATALOG_ORDERS_VIEW = {SYSTEM_ADMINISTRATOR, PRACTICE_ADMINISTRATOR, OPTICIAN, READ_ONLY_AUDITOR}
+# Real Order Management ("/orders/" placeholder made real): view mirrors the
+# Catalog/Orders placeholder access above; edit (placing/advancing/cancelling
+# a lab order) is narrowed to the roles who actually run dispensing --
+# Optician plus the two full-access admin roles, same posture as STORE_OPS_EDIT.
+RX_LAB_ORDER_VIEW = set(CATALOG_ORDERS_VIEW)
+RX_LAB_ORDER_EDIT = {SYSTEM_ADMINISTRATOR, PRACTICE_ADMINISTRATOR, OPTICIAN}
 
 USER_MANAGEMENT = {SYSTEM_ADMINISTRATOR}
 AUTH_AUDIT_VIEW = {SYSTEM_ADMINISTRATOR, READ_ONLY_AUDITOR}
