@@ -1,6 +1,6 @@
 # New Path Vision EHR — Master Build Backlog
 
-**Status:** Living tracking document. **Baseline as of:** spec v2.48 / research doc v2.24 (2026-09-26).
+**Status:** Living tracking document. **Baseline as of:** spec v2.49 / research doc v2.24 (2026-09-26).
 
 ## Purpose and how to use this document
 
@@ -50,11 +50,11 @@ Four-phase roadmap from a single large user request; each phase is independently
 - [x] **Phase 1 — Chief-complaint triage + E/M-level suggestion.** Keyword scan on the chief complaint suggests an exam type; a 3-factor MDM heuristic (problems/data/risk, with a hard Rx-management-implies-Moderate-risk trigger) suggests an E/M code (99212/99213/99214). Both editable/overridable, never billed. **Done, v2.35** — see baseline spec §54.
 - [x] **Phase 2 — CPT mapping + two-flow billing preview.** New `cpt_codes` catalog, `patient_insurance_plans` table (vision + medical can coexist), `EyeExam.appointment_id` (finally linking clinical and scheduling sides), `Appointment.visit_flow`, a check-in step to select Flow A (routine vision-plan) vs. Flow B (medical, with 92015 refraction billed separately to the patient), and a read-only split-invoice preview card explicitly labeled "not a submitted claim." **Done, v2.36** — see baseline spec §55.
 - [x] **Phase 3 — Diagnostic order tracking.** A real `DiagnosticOrder` table with an `ordered → scheduled → in_progress → completed/cancelled` lifecycle (today's `AppointmentTest` is scheduling-only, no clinical lifecycle), wired to the Glaucoma dashboard's existing diagnostic-orders checkboxes, with a pending-orders card on the patient workspace. **Done, v2.37** — see baseline spec §56.
-  - [ ] Follow-up refinement: deep-link order completion to the originating Visit Focus dashboard section when the ordered test maps to one (not built -- no natural per-test-to-section mapping exists yet).
-  - [ ] Follow-up refinement: a header-level pending-order count badge on the patient-context strip, alongside the existing allergy flag (needs `_workspace_ctx` to compute the count, used by every workspace-tab route).
+  - [x] **Follow-up refinement: deep-link order completion to the originating Visit Focus dashboard section when the ordered test maps to one. Done, v2.49** — see baseline spec §70. New `TEST_CODE_TO_FOCUS_SECTION` map; "Document in Exam" link added alongside (not replacing) the existing actions.
+  - [x] **Follow-up refinement: a header-level pending-order count badge on the patient-context strip. Done, v2.49** — see baseline spec §71. `patient_context()` gained an optional `db` param; new `.pcs-pending-orders-flag` badge.
 - [x] **Phase 4 — Look-back & clinical alert engine.** No new schema -- pure queries over Phase 3's orders table and the existing Problem list, using a small hardcoded per-diagnosis testing-interval matrix (glaucoma, Plaquenil monitoring to start) to flag overdue testing as an ambient banner (never a blocking modal), with one-click resolution (an outstanding-order alert completes via Phase 3's existing route; an interval-due alert creates a fresh order via a new `quick-order` route). **Done, v2.38** — see baseline spec §57.
   - [x] Follow-up refinement: additional condition profiles beyond glaucoma/Plaquenil (AMD/diabetic retinopathy, keratoconus, etc., from the original request's fuller matrix) -- straightforward to add in the same `CONDITION_PROFILES` shape. **Done, v2.41** — see baseline spec §60.
-  - [ ] Follow-up refinement: deep-link an interval-due alert's "Order Now" action to a specific Visit Focus dashboard section (same open question as the Phase 3 order-completion deep-link above).
+  - [x] **Follow-up refinement: deep-link an interval-due alert's "Order Now" action to a specific Visit Focus dashboard section. Done, v2.49** — see baseline spec §70. Same `TEST_CODE_TO_FOCUS_SECTION` map/link as the order-completion deep-link above.
 
 ---
 
@@ -114,7 +114,7 @@ The foundational, largest-scope item underlying much of the above — deliberate
 
 ## 5. Appointment Scheduling Module — remaining gaps (spec §26.10, §36.5)
 
-- [ ] `AppointmentTypeVersion` `created_by`/`updated_by` attribution — `Appointment` itself got this in v2.7; the type-version side was explicitly out of scope for that round (§36.5 item 10)
+- [x] **`AppointmentType`/`AppointmentTypeVersion` `created_by`/`updated_by` attribution. Done, v2.49** — see baseline spec §72 (§36.5 item 10). New migration `044_appointment_type_updated_by`; both columns now real FKs and actually set.
 - [~] Visual **Resource Schedule grid view** — subsumed by the Calendar & Appointments UX Overhaul below (Phase 1's board view covers per-provider scheduling; a dedicated non-provider Resource grid, e.g. rooms/lanes/devices as their own board, is still open)
 - [ ] Room/lane/device resource conflict enforcement extended to a resource-picker UI on the booking form itself (today, resource assignment is automatic based on type requirements — no manual override UI, §31.3)
 - [ ] Calendar click-to-create does not itself pre-check availability before opening the form (§18.2 item 7, still open per that item's own note)
@@ -146,7 +146,7 @@ User asked for a deep-dive rethink of the calendar/scheduling UX against ten spe
 - [x] Clinical records (exams, prescriptions) **cannot be edited, signed, corrected, or appended** — both are create-only today (§18.2 item 4). **Resolved, v2.44/v2.46**: both `EyeExam` and `Prescription` now have a sign/lock/amend lifecycle (`signed_at`/`signed_by_user_id` + a per-record addenda table) — see baseline spec §63, §67. Still open: neither record gets a direct edit route pre-signature (create-only either way, signed or not).
 - [x] Appointment and exam records are not explicitly linked (§18.2 item 1) — resolved by the CPT Mapping round (v2.36, baseline spec §55): `EyeExam.appointment_id` now links the two.
 - [x] Provider records cannot be managed in the application (no add/edit provider UI) — resolved, v2.43: `/admin/scheduling/providers` (see baseline spec §62). Still open: inactive providers aren't yet filtered out of booking dropdowns (tracked separately above).
-- [ ] Prescription relationships not validated for patient/provider/exam consistency (§18.2 item 2)
+- [x] **Prescription relationships validated for patient/provider/exam consistency. Done, v2.49** — see baseline spec §73 (§18.2 item 2). Server-side guard on `POST /prescriptions/new`.
 - [x] Prism/base omitted from normal and printable prescription displays; contact-lens values omitted from normal prescription detail (§18.2 items 8-9) — re-verified: the v2.10 Lens Design & Follow-Up work never actually addressed this (it added lens-material/treatment/recall fields, a separate concern). **Done, v2.45** — see baseline spec §66.
 - [x] **`follow_up_unit` (v2.34) has the same latent edited-flag ordering bug fixed for the new suggestion fields in v2.35** (baseline spec §54.2): a `<select>` fires `input` before `change`, and the generic form-recompute wiring listens for both, so an edited-flag set only on `change` lets the `input`-triggered recompute fire first and silently revert a clinician's manual unit selection. Fixed the same way (also set the flag on `input`); a new regression test confirms it (verified to fail without the fix). **Done, v2.40** — see baseline spec §59.
 
@@ -157,7 +157,7 @@ User asked for a deep-dive rethink of the calendar/scheduling UX against ten spe
 - [x] **CSRF protection. Done, v2.19** — a pre-existing, long-tracked gap, present in every version's open-gaps list (spec §15.1, §26.10 item 4, §36.5 item 3, §37.6). See baseline spec §37.7: a session-bound synchronizer token verified on all 27 POST routes, delivered via a JS-injected hidden field, plus this app's first server-side secret (`SECRET_KEY`).
 - [ ] Down-migration/rollback capability in the migration runner — it only ever adds, never reverses (§25.15, §36.5 item 4)
 - [x] Per-record "who changed this specific clinical/administrative field" audit trail, beyond `AuthAuditEvent`'s authentication/access-event scope (§37.1, §37.6, §36.5 item 1's note). New generic `FieldChangeAuditEvent` table (keyed by table_name/record_id) wired into Patient and Provider edits -- the two records that had no change tracking at all. `AppointmentAuditEvent`/`AppointmentTypeAuditEvent` are left as their own separate, already-working thing, not migrated onto this. New `/admin/field-audit` staff page. **Done, v2.47** — see baseline spec §68.
-- [ ] Record-level authorization (e.g. restricting a provider to only their own patients) — current model is role-level only (§37.6)
+- [x] **Record-level authorization: Optometrist/Provider scoped to their own patients. Done, v2.49** — see baseline spec §74 (§37.6). New `User.provider_id` link + `ehr.services.authz`; wired into patient list/detail/photo/edit, exam detail, Rx detail/print. Not extended to the calendar/scheduling surfaces or diagnostic/lab-order lists (separately-scoped follow-up if needed). Surfaced a minor incidental gap, not fixed: the top-bar "recently viewed patients" list is a plain browser cookie, not scoped per logged-in user, so it can briefly show a prior session's patient name after switching accounts on the same browser (the record itself is still correctly protected).
 - [ ] MFA/SSO, self-service password reset, password-complexity policy beyond a sane minimum, account lockout/rate-limiting — all explicitly scoped out of the v2.4 auth build as "solid baseline, not enterprise list" (§37.6); revisit only if requirements change
 
 ---
@@ -189,18 +189,18 @@ Tracked here for visibility; the authoritative detail lives in the spec's go-liv
 
 ## 10. Product Quality / UX (spec §18.3)
 
-- [ ] Incomplete form-label association and other accessibility issues — no full audit has been performed
+- [x] **Form-label association fixed app-wide. Done, v2.49** — see baseline spec §76 (§18.3 item 2). 203 sibling `<label>Text</label><input>` occurrences across 27 templates converted to nested `<label>Text <input></label>`. No full accessibility audit beyond this (color-contrast, ARIA, keyboard-nav remain unaudited).
 - [ ] No user-friendly validation or confirmation messages, including for photo-upload failures
 - [ ] No pagination, advanced search, filters, or large-data handling on any list screen (patients, appointments, admin lists) — spec §36.5 item 13 also names this
 - [ ] Dependencies specify minimum versions only (`>=`), no upper bounds or lock file — reduces build reproducibility
 - [ ] Client's final logo asset still not supplied; navigation/print header show a placeholder mark
-- [ ] App-wide horizontal overflow at ~400px width — `document.documentElement.scrollWidth` exceeds `clientWidth` on every page tested (dashboard, exam detail, exam form), including pages with no wide tables at all, so it's in the base layout/sidebar chrome, not any one page's content. Found incidentally during the v2.24 Visit Focus round (spec §43.3); not investigated or fixed there since it predates and is unrelated to that work.
+- [x] **App-wide horizontal overflow at ~400px width fixed. Done, v2.49** — see baseline spec §76 (§43.3). Root cause: `.staff-picker`'s `flex-shrink: 0` with an unbounded name/role string; now shrinks with ellipsis truncation, plus a defensive `overflow-x: hidden` safety net.
 
 ---
 
 ## 11. Testing & QA
 
-- [ ] Expand the Playwright suite beyond smoke-level coverage (currently: login/logout/auth-redirects, main-nav-destinations-render, plus the Visit Focus toggle and composer behaviors added this session) toward the workflow-level regression coverage described in spec §20's manual checklist — most of that checklist is still not automated (§36.5 item 5's own note)
+- [~] **Expand Playwright coverage toward spec §20's baseline regression checklist. Partial, v2.49** — see baseline spec §75 (§36.5 item 5). 5 new tests: ineligible type/relationship rejection, practice-closure booking rejection, 404s on unknown IDs/placeholder sections, MRN conflict rejection, appointment status cycling. Most of §20 remains manual-only (dashboard counts, photo-upload edge cases, automated migration-idempotency suite, etc.) — large checklist, picked independently-valuable items rather than 100% automation in one pass.
 - [ ] No automated migration test suite — migrations are verified manually/via synthetic-database checks each round, not as a standing automated test (§18.3 item 7's note)
 
 ---

@@ -6,10 +6,10 @@
 <div class="card form-card"><h3>Add Diagnostic Test</h3>
   <form method="post" action="/admin/scheduling/tests/new">
     <div class="form-row cols-4">
-      <div class="form-group"><label>Code*</label><input name="code" required></div>
-      <div class="form-group"><label>Display Name*</label><input name="display_name" required></div>
-      <div class="form-group"><label>Abbreviation*</label><input name="calendar_abbreviation" required maxlength="8"></div>
-      <div class="form-group"><label>Default Duration (min)</label><input name="default_duration_minutes" type="number"></div>
+      <div class="form-group"><label>Code* <input name="code" required></label></div>
+      <div class="form-group"><label>Display Name* <input name="display_name" required></label></div>
+      <div class="form-group"><label>Abbreviation* <input name="calendar_abbreviation" required maxlength="8"></label></div>
+      <div class="form-group"><label>Default Duration (min) <input name="default_duration_minutes" type="number"></label></div>
     </div>
     <div class="checkbox-row" style="margin-bottom:1rem"><input type="checkbox" name="counts_toward_color" value="true" id="ctc" checked><label for="ctc">Counts toward medical color rules</label></div>
     <button type="submit" class="btn btn-primary">Add Test</button>

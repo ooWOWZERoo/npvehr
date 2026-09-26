@@ -6,7 +6,7 @@
 <div class="card form-card">
   <form method="post" action="/appointments/{{ appt.id }}/edit">
     <div class="form-row cols-2">
-      <div class="form-group"><label>Patient</label><input value="{{ appt.patient.last_name }}, {{ appt.patient.first_name }}" disabled></div>
+      <div class="form-group"><label>Patient <input value="{{ appt.patient.last_name }}, {{ appt.patient.first_name }}" disabled></label></div>
       <div class="form-group"><label for="provider_id">Provider*</label>
         <select id="provider_id" name="provider_id" required>
           {% for p in providers %}<option value="{{ p.id }}" {{ 'selected' if appt.provider_id == p.id }}>Dr. {{ p.last_name }}</option>{% endfor %}
@@ -16,7 +16,7 @@
     <div class="form-row cols-2">
       <div class="form-group"><label for="scheduled_at">Date &amp; Time*</label>
         <input id="scheduled_at" name="scheduled_at" type="datetime-local" required value="{{ appt.scheduled_at.strftime('%Y-%m-%dT%H:%M') }}"></div>
-      <div class="form-group"><label>Reason</label><input name="reason" value="{{ appt.reason or '' }}"></div>
+      <div class="form-group"><label>Reason <input name="reason" value="{{ appt.reason or '' }}"></label></div>
     </div>
     <div class="section-title">Patient Relationship</div>
     <div class="form-row cols-2">
@@ -27,7 +27,7 @@
         </select>
         <input type="hidden" id="relationship_source" name="relationship_source" value="{{ appt.patient_relationship_source or 'automatic' }}">
       </div>
-      <div class="form-group"><label>Override Reason</label><input name="relationship_override_reason" value="{{ appt.patient_relationship_override_reason or '' }}"></div>
+      <div class="form-group"><label>Override Reason <input name="relationship_override_reason" value="{{ appt.patient_relationship_override_reason or '' }}"></label></div>
     </div>
     <div class="section-title">Appointment Type &amp; Color</div>
     <div class="form-row cols-2">
@@ -50,18 +50,17 @@
     </div>
     <div class="section-title">Overrides</div>
     <div class="form-row cols-2">
-      <div class="form-group"><label>Duration Override (minutes)</label><input name="duration_override" type="number" step="5" min="5" max="480" value="{{ appt.duration_minutes if appt.duration_overridden else '' }}"></div>
-      <div class="form-group"><label>Duration Override Reason</label><input name="duration_override_reason" value="{{ appt.duration_override_reason or '' }}"></div>
+      <div class="form-group"><label>Duration Override (minutes) <input name="duration_override" type="number" step="5" min="5" max="480" value="{{ appt.duration_minutes if appt.duration_overridden else '' }}"></label></div>
+      <div class="form-group"><label>Duration Override Reason <input name="duration_override_reason" value="{{ appt.duration_override_reason or '' }}"></label></div>
     </div>
     <div class="form-row cols-2">
       <div class="form-group checkbox-row"><input type="checkbox" name="conflict_override" value="true" id="conflict_override" {{ 'checked' if appt.conflict_overridden }}><label for="conflict_override" style="margin:0">Override conflict</label></div>
-      <div class="form-group"><label>Conflict Override Reason</label><input name="conflict_override_reason" value="{{ appt.conflict_override_reason or '' }}"></div>
+      <div class="form-group"><label>Conflict Override Reason <input name="conflict_override_reason" value="{{ appt.conflict_override_reason or '' }}"></label></div>
     </div>
     <div class="form-row cols-2">
-      <div class="form-group"><label>Status</label>
-        <select name="status">{% for s in ['scheduled','checked_in','in_progress','completed','cancelled','no_show'] %}<option value="{{ s }}" {{ 'selected' if appt.status.value == s }}>{{ s.replace('_',' ') }}</option>{% endfor %}</select>
+      <div class="form-group"><label>Status <select name="status">{% for s in ['scheduled','checked_in','in_progress','completed','cancelled','no_show'] %}<option value="{{ s }}" {{ 'selected' if appt.status.value == s }}>{{ s.replace('_',' ') }}</option>{% endfor %}</select></label>
       </div>
-      <div class="form-group"><label>Notes</label><textarea name="notes">{{ appt.notes or '' }}</textarea></div>
+      <div class="form-group"><label>Notes <textarea name="notes">{{ appt.notes or '' }}</textarea></label></div>
     </div>
     <div class="form-actions"><button type="submit" class="btn btn-primary">Save Changes</button></div>
   </form>

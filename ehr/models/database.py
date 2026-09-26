@@ -287,10 +287,20 @@ class AppointmentType(Base):
     id = Column(Integer, primary_key=True, index=True)
     code = Column(String, nullable=False, unique=True)
     created_at = Column(DateTime, default=datetime.utcnow)
-    created_by_user_id = Column(Integer)  # future FK once auth exists
+    created_by_user_id = Column(Integer, ForeignKey("users.id"))
+    # created_by/updated_by attribution (BUILD_BACKLOG.md follow-up from the
+    # v2.7 Appointment round, §36.5 item 10): AppointmentType itself is
+    # mutable (activate/deactivate flips `active` in place), so it gets both
+    # created_by and updated_by, same shape as Appointment. AppointmentTypeVersion
+    # below is immutable (a new row per change, never edited in place), so it
+    # only gets created_by -- there is no "update" to attribute.
+    updated_at = Column(DateTime)
+    updated_by_user_id = Column(Integer, ForeignKey("users.id"))
     is_system_seeded = Column(Boolean, default=False)
     active = Column(Boolean, default=True)
     versions = relationship("AppointmentTypeVersion", back_populates="appointment_type", cascade="all, delete-orphan")
+    created_by = relationship("User", foreign_keys=[created_by_user_id])
+    updated_by = relationship("User", foreign_keys=[updated_by_user_id])
 
 
 class AppointmentTypeVersion(Base):
@@ -320,11 +330,12 @@ class AppointmentTypeVersion(Base):
     active = Column(Boolean, default=True)
     change_reason = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
-    created_by_user_id = Column(Integer)
+    created_by_user_id = Column(Integer, ForeignKey("users.id"))
 
     appointment_type = relationship("AppointmentType", back_populates="versions")
     color_rules = relationship("AppointmentTypeColorRule", back_populates="version", cascade="all, delete-orphan", order_by="AppointmentTypeColorRule.priority")
     resource_requirements = relationship("AppointmentTypeResourceRequirement", back_populates="version", cascade="all, delete-orphan")
+    created_by = relationship("User", foreign_keys=[created_by_user_id])
 
     __table_args__ = (
         UniqueConstraint("appointment_type_id", "version_number", name="uq_apptype_version"),
@@ -1191,8 +1202,17 @@ class User(Base):
     active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     last_login_at = Column(DateTime)
+    # Record-level authorization (BUILD_BACKLOG.md §37.6 follow-up): links a
+    # login account to its clinical Provider identity, so an
+    # optometrist_provider user's "own patients" can be determined at all --
+    # User (login/auth) and Provider (the clinical identity on appointments/
+    # exams/prescriptions) were two entirely separate tables with no
+    # relationship between them before this. Only meaningful for the
+    # optometrist_provider role; null for every other role.
+    provider_id = Column(Integer, ForeignKey("providers.id"))
 
     sessions = relationship("UserSession", back_populates="user", cascade="all, delete-orphan")
+    provider = relationship("Provider", foreign_keys=[provider_id])
 
 
 class UserSession(Base):

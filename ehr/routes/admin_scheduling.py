@@ -54,14 +54,14 @@ def create_type(request: Request, code: str = Form(...), internal_name: str = Fo
     buffer_before_minutes: int = Form(0), buffer_after_minutes: int = Form(0),
     arrival_lead_minutes: int = Form(0), base_color: str = Form(""), active: bool = Form(False),
     patient_bookable: bool = Form(False),
-    csrf_token: str = Form(""), db: Session = Depends(get_db)):
+    csrf_token: str = Form(""), db: Session = Depends(get_db), user=Depends(get_current_user)):
     csrf.verify_or_403(request.state.csrf_token, csrf_token)
     code = code.strip().upper()
     if db.query(AppointmentType).filter(AppointmentType.code == code).first():
         return HTMLResponse(f"Appointment type code '{code}' already exists.", status_code=400)
     if not allows_new and not allows_established:
         return HTMLResponse("At least one of new/established eligibility must be allowed.", status_code=400)
-    t = AppointmentType(code=code, is_system_seeded=False, active=True)
+    t = AppointmentType(code=code, is_system_seeded=False, active=True, created_by_user_id=user.id)
     db.add(t); db.flush()
     v = AppointmentTypeVersion(appointment_type_id=t.id, version_number=1, internal_name=internal_name,
         display_name=display_name, calendar_abbreviation=calendar_abbreviation, description=description,
@@ -73,7 +73,7 @@ def create_type(request: Request, code: str = Form(...), internal_name: str = Fo
         arrival_lead_minutes=arrival_lead_minutes, base_color=base_color or None, staff_bookable=True,
         patient_bookable=patient_bookable,
         effective_from=datetime.utcnow().date().isoformat(), active=bool(active and base_color),
-        change_reason="Created via admin UI")
+        change_reason="Created via admin UI", created_by_user_id=user.id)
     db.add(v); db.flush()
     db.add(AppointmentTypeAuditEvent(appointment_type_id=t.id, appointment_type_version_id=v.id,
         event_type="created", change_reason="Type created"))
@@ -172,7 +172,8 @@ def publish_new_version(request: Request, type_id: int, internal_name: str = For
     buffer_before_minutes: int = Form(0), buffer_after_minutes: int = Form(0),
     arrival_lead_minutes: int = Form(0), base_color: str = Form(""), active: bool = Form(False),
     patient_bookable: bool = Form(False),
-    change_reason: str = Form(...), csrf_token: str = Form(""), db: Session = Depends(get_db)):
+    change_reason: str = Form(...), csrf_token: str = Form(""), db: Session = Depends(get_db),
+    user=Depends(get_current_user)):
     """Publish an immutable new AppointmentTypeVersion (spec 8.3, 17.4). Existing
     appointments keep referencing their original version_id -- nothing here rewrites
     previously booked appointments (spec 3.22-3.24, 17.4)."""
@@ -195,7 +196,7 @@ def publish_new_version(request: Request, type_id: int, internal_name: str = For
         arrival_lead_minutes=arrival_lead_minutes, base_color=base_color or None, staff_bookable=True,
         patient_bookable=patient_bookable,
         effective_from=datetime.utcnow().date().isoformat(), active=bool(active and base_color),
-        change_reason=change_reason)
+        change_reason=change_reason, created_by_user_id=user.id)
     if prev:
         # Carry forward color rules onto the new version (still editable afterward via direct DB access;
         # a dedicated color-rule editor UI is one of the deferred simplifications -- see report).
@@ -224,7 +225,8 @@ def publish_new_version(request: Request, type_id: int, internal_name: str = For
 
 
 @router.post("/appointment-types/{type_id}/activate", dependencies=[Depends(require_role(*ADMIN_SCHEDULING_EDIT))])
-def activate_type(request: Request, type_id: int, csrf_token: str = Form(""), db: Session = Depends(get_db)):
+def activate_type(request: Request, type_id: int, csrf_token: str = Form(""), db: Session = Depends(get_db),
+    user=Depends(get_current_user)):
     csrf.verify_or_403(request.state.csrf_token, csrf_token)
     t = db.query(AppointmentType).filter(AppointmentType.id == type_id).first()
     if not t: return HTMLResponse("Not found", status_code=404)
@@ -233,6 +235,8 @@ def activate_type(request: Request, type_id: int, csrf_token: str = Form(""), db
         return HTMLResponse("Cannot activate: assign a base color first (spec 9.2).", status_code=400)
     if v: v.active = True
     t.active = True
+    t.updated_at = datetime.utcnow()
+    t.updated_by_user_id = user.id
     db.add(AppointmentTypeAuditEvent(appointment_type_id=t.id, appointment_type_version_id=v.id if v else None,
         event_type="activated"))
     db.commit()
@@ -240,13 +244,16 @@ def activate_type(request: Request, type_id: int, csrf_token: str = Form(""), db
 
 
 @router.post("/appointment-types/{type_id}/deactivate", dependencies=[Depends(require_role(*ADMIN_SCHEDULING_EDIT))])
-def deactivate_type(request: Request, type_id: int, csrf_token: str = Form(""), db: Session = Depends(get_db)):
+def deactivate_type(request: Request, type_id: int, csrf_token: str = Form(""), db: Session = Depends(get_db),
+    user=Depends(get_current_user)):
     csrf.verify_or_403(request.state.csrf_token, csrf_token)
     t = db.query(AppointmentType).filter(AppointmentType.id == type_id).first()
     if not t: return HTMLResponse("Not found", status_code=404)
     v = _latest_version(t)
     if v: v.active = False
     t.active = False
+    t.updated_at = datetime.utcnow()
+    t.updated_by_user_id = user.id
     db.add(AppointmentTypeAuditEvent(appointment_type_id=t.id, appointment_type_version_id=v.id if v else None,
         event_type="deactivated"))
     db.commit()
@@ -254,7 +261,8 @@ def deactivate_type(request: Request, type_id: int, csrf_token: str = Form(""), 
 
 
 @router.post("/appointment-types/{type_id}/clone", dependencies=[Depends(require_role(*ADMIN_SCHEDULING_EDIT))])
-def clone_type(request: Request, type_id: int, new_code: str = Form(...), csrf_token: str = Form(""), db: Session = Depends(get_db)):
+def clone_type(request: Request, type_id: int, new_code: str = Form(...), csrf_token: str = Form(""),
+    db: Session = Depends(get_db), user=Depends(get_current_user)):
     csrf.verify_or_403(request.state.csrf_token, csrf_token)
     t = db.query(AppointmentType).filter(AppointmentType.id == type_id).first()
     if not t: return HTMLResponse("Not found", status_code=404)
@@ -262,7 +270,7 @@ def clone_type(request: Request, type_id: int, new_code: str = Form(...), csrf_t
     if db.query(AppointmentType).filter(AppointmentType.code == new_code).first():
         return HTMLResponse(f"Code '{new_code}' already exists.", status_code=400)
     v = _latest_version(t)
-    nt = AppointmentType(code=new_code, is_system_seeded=False, active=False)
+    nt = AppointmentType(code=new_code, is_system_seeded=False, active=False, created_by_user_id=user.id)
     db.add(nt); db.flush()
     nv = AppointmentTypeVersion(appointment_type_id=nt.id, version_number=1, internal_name=v.internal_name + " (Clone)",
         display_name=v.display_name + " (Clone)", calendar_abbreviation=v.calendar_abbreviation,
@@ -272,7 +280,8 @@ def clone_type(request: Request, type_id: int, new_code: str = Form(...), csrf_t
         buffer_before_minutes=v.buffer_before_minutes, buffer_after_minutes=v.buffer_after_minutes,
         arrival_lead_minutes=v.arrival_lead_minutes, base_color=v.base_color, staff_bookable=True,
         patient_bookable=v.patient_bookable,
-        effective_from=datetime.utcnow().date().isoformat(), active=False, change_reason=f"Cloned from {t.code}")
+        effective_from=datetime.utcnow().date().isoformat(), active=False, change_reason=f"Cloned from {t.code}",
+        created_by_user_id=user.id)
     db.add(nv); db.flush()
     for r in v.color_rules:
         db.add(AppointmentTypeColorRule(priority=r.priority, patient_relationship=r.patient_relationship,

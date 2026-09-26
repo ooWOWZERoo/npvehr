@@ -4,23 +4,20 @@
   <h2>Add to Waitlist</h2>
   <form method="post" action="/patients/{{ patient.id }}/waitlist/new">
     <div class="form-row cols-3">
-      <div class="form-group"><label>Provider</label>
-        <select name="provider_id"><option value="">Any provider</option>
-          {% for p in providers %}<option value="{{ p.id }}">Dr. {{ p.last_name }}</option>{% endfor %}</select>
+      <div class="form-group"><label>Provider <select name="provider_id"><option value="">Any provider</option>
+          {% for p in providers %}<option value="{{ p.id }}">Dr. {{ p.last_name }}</option>{% endfor %}</select></label>
       </div>
-      <div class="form-group"><label>Appointment Type</label>
-        <select name="appointment_type_version_id"><option value="">Any type</option>
-          {% for t in types %}<option value="{{ t.id }}">{{ t.display_name }}</option>{% endfor %}</select>
+      <div class="form-group"><label>Appointment Type <select name="appointment_type_version_id"><option value="">Any type</option>
+          {% for t in types %}<option value="{{ t.id }}">{{ t.display_name }}</option>{% endfor %}</select></label>
       </div>
-      <div class="form-group"><label>Priority</label>
-        <select name="priority"><option value="normal">Normal</option><option value="urgent">Urgent</option></select>
+      <div class="form-group"><label>Priority <select name="priority"><option value="normal">Normal</option><option value="urgent">Urgent</option></select></label>
       </div>
     </div>
     <div class="form-row cols-2">
-      <div class="form-group"><label>Earliest Date</label><input type="date" name="desired_date_start"></div>
-      <div class="form-group"><label>Latest Date</label><input type="date" name="desired_date_end"></div>
+      <div class="form-group"><label>Earliest Date <input type="date" name="desired_date_start"></label></div>
+      <div class="form-group"><label>Latest Date <input type="date" name="desired_date_end"></label></div>
     </div>
-    <div class="form-group"><label>Notes</label><input type="text" name="notes" placeholder="Prefers mornings; available on short notice"></div>
+    <div class="form-group"><label>Notes <input type="text" name="notes" placeholder="Prefers mornings; available on short notice"></label></div>
     <div class="form-actions"><button type="submit" class="btn btn-primary">Add to Waitlist</button></div>
   </form>
 </div>

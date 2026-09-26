@@ -35,6 +35,25 @@ from ehr.models.database import DiagnosticOrder, DiagnosticTest, Problem
 
 OUTSTANDING_STATUSES = ("ordered", "scheduled", "in_progress")
 
+# Deep-link map (BUILD_BACKLOG.md follow-up named in both the Phase 3
+# order-completion round and the Phase 4 look-back round): which New Exam
+# form Visit Focus section a diagnostic test's result naturally belongs in,
+# so a "Mark Complete"/"Order Now" action can also offer a direct link to go
+# document it there, not just flip a status column. Same narrow-hardcoded-
+# lookup posture as CONDITION_PROFILES below -- deliberately not exhaustive:
+# a test with no natural section (e.g. ERG, which no built dashboard covers)
+# is left unmapped, and callers check for that rather than assuming every
+# code has an entry.
+TEST_CODE_TO_FOCUS_SECTION = {
+    "OCT": "focus-glaucoma",
+    "OPTOS": "focus-glaucoma",
+    "VF": "focus-glaucoma",
+    "GONIOSCOPY": "focus-glaucoma",
+    "PACHYMETRY": "focus-glaucoma",
+    "CORNEAL_ANALYZER": "focus-anterior",
+    "MEIBOGRAPHY": "focus-dryeye",
+}
+
 # Each profile: icd10_prefixes (matched via str.startswith against
 # Problem.icd10_code, case-insensitive), label, required_test_codes (from
 # the diagnostic_tests catalog), default_interval_days, and an optional
@@ -107,7 +126,9 @@ def _months_ago(dt: datetime) -> int:
 
 def get_alerts_for_patient(db, patient_id: int) -> list[dict]:
     """Returns a list of {type, severity, message, order_id?, problem_id?,
-    test_code?} dicts. `type` is 'outstanding_order' or 'interval_due';
+    test_code} dicts (every alert now carries test_code, for the Visit Focus
+    deep-link -- see TEST_CODE_TO_FOCUS_SECTION above). `type` is
+    'outstanding_order' or 'interval_due';
     `severity` is 'warning' (outstanding_order) or 'info' (interval_due),
     matching this app's existing two-tier alert-banner palette
     (.alert-warning/.alert-info)."""
@@ -121,7 +142,7 @@ def get_alerts_for_patient(db, patient_id: int) -> list[dict]:
         alerts.append({
             "type": "outstanding_order", "severity": "warning",
             "message": f"Outstanding order: {order.diagnostic_test.display_name} from {ordered_date} is pending.",
-            "order_id": order.id,
+            "order_id": order.id, "test_code": order.diagnostic_test.code,
         })
     # A test already covered by an outstanding order (above) shouldn't also
     # get an "interval due" nag below -- ordering it is already the correct

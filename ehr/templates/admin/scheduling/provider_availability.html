@@ -12,10 +12,9 @@
     only narrow what's offered, never hide a real conflict.
   </p>
   <form method="post" action="/admin/scheduling/scheduling-settings" style="display:flex;gap:0.5rem;align-items:flex-end">
-    <div class="form-group" style="margin:0"><label>Practice Default (minutes)</label>
-      <select name="default_slot_granularity_minutes">
+    <div class="form-group" style="margin:0"><label>Practice Default (minutes) <select name="default_slot_granularity_minutes">
         {% for g in granularity_choices %}<option value="{{ g }}" {{ 'selected' if scheduling_settings.default_slot_granularity_minutes == g }}>{{ g }}</option>{% endfor %}
-      </select>
+      </select></label>
     </div>
     <button type="submit" class="btn btn-primary">Save</button>
   </form>
@@ -39,14 +38,12 @@
 <div class="card form-card"><h3>Add Weekly Working Hours</h3>
   <form method="post" action="/admin/scheduling/provider-availability/new">
     <div class="form-row cols-4">
-      <div class="form-group"><label>Provider*</label>
-        <select name="provider_id" required>{% for p in providers %}<option value="{{ p.id }}">Dr. {{ p.last_name }}</option>{% endfor %}</select>
+      <div class="form-group"><label>Provider* <select name="provider_id" required>{% for p in providers %}<option value="{{ p.id }}">Dr. {{ p.last_name }}</option>{% endfor %}</select></label>
       </div>
-      <div class="form-group"><label>Day of Week*</label>
-        <select name="day_of_week" required>{% for i, name in [(0,'Monday'),(1,'Tuesday'),(2,'Wednesday'),(3,'Thursday'),(4,'Friday'),(5,'Saturday'),(6,'Sunday')] %}<option value="{{ i }}">{{ name }}</option>{% endfor %}</select>
+      <div class="form-group"><label>Day of Week* <select name="day_of_week" required>{% for i, name in [(0,'Monday'),(1,'Tuesday'),(2,'Wednesday'),(3,'Thursday'),(4,'Friday'),(5,'Saturday'),(6,'Sunday')] %}<option value="{{ i }}">{{ name }}</option>{% endfor %}</select></label>
       </div>
-      <div class="form-group"><label>Start Time*</label><input name="start_time" type="time" required></div>
-      <div class="form-group"><label>End Time*</label><input name="end_time" type="time" required></div>
+      <div class="form-group"><label>Start Time* <input name="start_time" type="time" required></label></div>
+      <div class="form-group"><label>End Time* <input name="end_time" type="time" required></label></div>
     </div>
     <button type="submit" class="btn btn-primary">Add Hours</button>
   </form>

@@ -14,11 +14,13 @@ from ehr.auth import csrf
 from ehr.services import cpt_mapper
 from ehr.services import lookback_alerts
 from ehr.services import scheduling as sched
+from ehr.services import authz
 
 router = APIRouter(prefix="/exams", tags=["exams"])
 templates = Jinja2Templates(directory="ehr/templates")
 templates.env.globals["ehr_env"] = EHR_ENV
 templates.env.globals["ROLE_LABELS"] = ROLE_LABELS
+templates.env.globals["FOCUS_SECTION_MAP"] = lookback_alerts.TEST_CODE_TO_FOCUS_SECTION
 
 def _f(v):
     try: return float(v) if v and str(v).strip() else None
@@ -43,7 +45,7 @@ GT_DIAGNOSTIC_ORDER_LABELS = {"OCT": "OCT RNFL", "VF": "Humphrey VF 24-2",
 
 @router.get("/new", response_class=HTMLResponse, dependencies=[Depends(require_role(*EXAM_EDIT))])
 def new_exam_form(request: Request, patient_id: int = None, appointment_id: int = None, db: Session = Depends(get_db)):
-    ctx_patient = patient_context(db.query(Patient).filter(Patient.id == patient_id).first()) if patient_id else None
+    ctx_patient = patient_context(db.query(Patient).filter(Patient.id == patient_id).first(), db) if patient_id else None
     # Active problems for the "Problems Addressed" checklist -- only meaningful
     # once a patient is already known (reached via the patient workspace's
     # "New Exam" link, matching how context_patient/selected_patient_id
@@ -231,11 +233,12 @@ async def create_exam(request: Request, db: Session = Depends(get_db)):
 @router.get("/{exam_id}", response_class=HTMLResponse, dependencies=[Depends(require_role(*EXAM_VIEW))])
 def exam_detail(request: Request, exam_id: int, db: Session = Depends(get_db)):
     e = db.query(EyeExam).filter(EyeExam.id == exam_id).first()
-    if not e: return HTMLResponse("Not found", status_code=404)
+    if not e or not authz.can_view_patient(db, request.state.user, e.patient_id):
+        return HTMLResponse("Not found", status_code=404)
     problem_addenda = db.query(ProblemAddendum).filter(ProblemAddendum.exam_id == exam_id).all()
     cpt_summary = cpt_mapper.compute_cpt_summary(db, e)
     return templates.TemplateResponse(request, "exams/detail.html",
-        {"exam": e, "context_patient": patient_context(e.patient), "problem_addenda": problem_addenda,
+        {"exam": e, "context_patient": patient_context(e.patient, db), "problem_addenda": problem_addenda,
          "cpt_summary": cpt_summary})
 
 

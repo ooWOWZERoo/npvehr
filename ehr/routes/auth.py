@@ -5,10 +5,10 @@ from fastapi import APIRouter, Depends, Request, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
-from ehr.models.database import get_db, User, UserSession, AuthAuditEvent, FieldChangeAuditEvent
+from ehr.models.database import get_db, User, UserSession, AuthAuditEvent, FieldChangeAuditEvent, Provider
 from ehr.auth.security import hash_password, verify_password, new_session_token
 from ehr.auth.deps import get_current_user, SESSION_COOKIE_NAME, SESSION_LIFETIME
-from ehr.auth.permissions import require_role, USER_MANAGEMENT, AUTH_AUDIT_VIEW, ALL_ROLES, ROLE_LABELS
+from ehr.auth.permissions import require_role, USER_MANAGEMENT, AUTH_AUDIT_VIEW, ALL_ROLES, ROLE_LABELS, OPTOMETRIST_PROVIDER
 from ehr.auth.audit import log_auth_event
 from ehr.auth import csrf
 from ehr.env_info import EHR_ENV
@@ -110,31 +110,42 @@ def list_users(request: Request, db: Session = Depends(get_db), _user=Depends(ge
 
 
 @router.get("/admin/users/new", response_class=HTMLResponse)
-def new_user_form(request: Request, _user=Depends(get_current_user), _role=Depends(require_role(*USER_MANAGEMENT))):
-    return templates.TemplateResponse(request, "admin/users/form.html", {"roles": ALL_ROLES, "error": None})
+def new_user_form(request: Request, db: Session = Depends(get_db), _user=Depends(get_current_user),
+                   _role=Depends(require_role(*USER_MANAGEMENT))):
+    providers = db.query(Provider).filter(Provider.active == True).order_by(Provider.last_name).all()
+    return templates.TemplateResponse(request, "admin/users/form.html",
+        {"roles": ALL_ROLES, "providers": providers, "error": None})
 
 
 @router.post("/admin/users/new")
 def create_user(request: Request, email: str = Form(...), first_name: str = Form(...), last_name: str = Form(...),
-                 role: str = Form(...), password: str = Form(...), csrf_token: str = Form(""), db: Session = Depends(get_db),
+                 role: str = Form(...), password: str = Form(...), provider_id: str = Form(""),
+                 csrf_token: str = Form(""), db: Session = Depends(get_db),
                  _user=Depends(get_current_user), _role_check=Depends(require_role(*USER_MANAGEMENT))):
     csrf.verify_or_403(request.state.csrf_token, csrf_token)
     email_norm = email.strip().lower()
+    providers = db.query(Provider).filter(Provider.active == True).order_by(Provider.last_name).all()
     if role not in ALL_ROLES:
         return templates.TemplateResponse(request, "admin/users/form.html",
-            {"roles": ALL_ROLES, "error": "Invalid role."}, status_code=400)
+            {"roles": ALL_ROLES, "providers": providers, "error": "Invalid role."}, status_code=400)
     if len(password) < 10:
         # Minimum-length-only policy (spec: complexity enforcement beyond a sane
         # minimum is explicitly out of scope for this pass).
         return templates.TemplateResponse(request, "admin/users/form.html",
-            {"roles": ALL_ROLES, "error": "Password must be at least 10 characters."}, status_code=400)
+            {"roles": ALL_ROLES, "providers": providers, "error": "Password must be at least 10 characters."}, status_code=400)
     if db.query(User).filter(User.email == email_norm).first():
         return templates.TemplateResponse(request, "admin/users/form.html",
-            {"roles": ALL_ROLES, "error": f"An account already exists for {email_norm}."}, status_code=400)
+            {"roles": ALL_ROLES, "providers": providers, "error": f"An account already exists for {email_norm}."}, status_code=400)
     salt_hex, hash_hex = hash_password(password)
+    # Record-level authorization (BUILD_BACKLOG.md §37.6 follow-up): an
+    # optometrist_provider account can be linked to its clinical Provider
+    # identity at creation time, the same "no edit route, set at creation"
+    # posture this app already has for other User fields -- see
+    # ehr.services.authz and User.provider_id's own docstring.
+    linked_provider_id = int(provider_id) if role == OPTOMETRIST_PROVIDER and provider_id else None
     new_user = User(email=email_norm, password_hash=hash_hex, password_salt=salt_hex,
                      first_name=first_name, last_name=last_name, role=role, active=True,
-                     created_at=datetime.utcnow())
+                     provider_id=linked_provider_id, created_at=datetime.utcnow())
     db.add(new_user); db.flush()
     log_auth_event(db, "account_created", user_id=new_user.id, detail=f"role={role}")
     db.commit()

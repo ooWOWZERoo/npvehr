@@ -21,7 +21,7 @@
       <div class="form-group"><label for="scheduled_at">Date &amp; Time*</label>
         <input id="scheduled_at" name="scheduled_at" type="datetime-local" required
                value="{{ posted.scheduled_at or ((prefill_date + 'T09:00') if prefill_date else '') }}" onchange="updateSuggestion()"></div>
-      <div class="form-group"><label>Reason</label><input name="reason" placeholder="Annual exam&hellip;" value="{{ posted.reason or '' }}"></div>
+      <div class="form-group"><label>Reason <input name="reason" placeholder="Annual exam&hellip;" value="{{ posted.reason or '' }}"></label></div>
     </div>
 
     <div class="section-title">Patient Relationship (spec 10)</div>
@@ -68,14 +68,14 @@
 
     <div class="section-title">Overrides (require a reason; spec 11.4, 12.4)</div>
     <div class="form-row cols-2">
-      <div class="form-group"><label>Duration Override (minutes, multiple of 5)</label><input name="duration_override" type="number" step="5" min="5" max="480" placeholder="Leave blank to use type default"></div>
-      <div class="form-group"><label>Duration Override Reason</label><input name="duration_override_reason"></div>
+      <div class="form-group"><label>Duration Override (minutes, multiple of 5) <input name="duration_override" type="number" step="5" min="5" max="480" placeholder="Leave blank to use type default"></label></div>
+      <div class="form-group"><label>Duration Override Reason <input name="duration_override_reason"></label></div>
     </div>
     <div class="form-row cols-2">
       <div class="form-group checkbox-row"><input type="checkbox" name="conflict_override" value="true" id="conflict_override"><label for="conflict_override" style="margin:0">Override conflict (approved overbook)</label></div>
-      <div class="form-group"><label>Conflict Override Reason</label><input name="conflict_override_reason"></div>
+      <div class="form-group"><label>Conflict Override Reason <input name="conflict_override_reason"></label></div>
     </div>
-    <div class="form-group"><label>Notes</label><textarea name="notes">{{ posted.notes or '' }}</textarea></div>
+    <div class="form-group"><label>Notes <textarea name="notes">{{ posted.notes or '' }}</textarea></label></div>
     <div class="form-actions"><button type="submit" class="btn btn-primary">Schedule Appointment</button></div>
   </form>
 </div>

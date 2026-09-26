@@ -14,6 +14,16 @@
         {% for r in roles %}<option value="{{ r }}">{{ ROLE_LABELS.get(r, r) }}</option>{% endfor %}
       </select>
     </div>
+    <div class="form-group" id="provider_link_group" hidden>
+      <label for="provider_id">Linked Provider</label>
+      <select id="provider_id" name="provider_id">
+        <option value="">&mdash; None &mdash;</option>
+        {% for p in providers %}<option value="{{ p.id }}">Dr. {{ p.first_name }} {{ p.last_name }}</option>{% endfor %}
+      </select>
+      <p style="font-size:0.75rem;color:var(--ink-muted);margin-top:0.25rem">Links this login to its clinical Provider
+        identity, so record-level authorization can determine this provider's own patients. Only used for
+        Optometrist/Provider accounts.</p>
+    </div>
     <div class="form-group">
       <label for="password">Initial Password</label>
       <input type="password" id="password" name="password" required minlength="10">
@@ -24,4 +34,15 @@
     </div>
   </form>
 </div>
+<script>
+// Linked Provider only means anything for an Optometrist/Provider account --
+// hidden for every other role so the form doesn't ask an irrelevant question.
+(function () {
+  var roleSelect = document.getElementById('role');
+  var group = document.getElementById('provider_link_group');
+  function sync() { group.hidden = roleSelect.value !== 'optometrist_provider'; }
+  roleSelect.addEventListener('change', sync);
+  sync();
+})();
+</script>
 {% endblock %}

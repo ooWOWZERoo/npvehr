@@ -4,19 +4,18 @@
   <h2>Add a Problem</h2>
   <form method="post" action="/patients/{{ patient.id }}/problems/new">
     <div class="form-row cols-3">
-      <div class="form-group"><label>Diagnosis</label><input type="text" name="diagnosis_name" required placeholder="Primary Open Angle Glaucoma"></div>
-      <div class="form-group"><label>ICD-10 Code</label><input type="text" name="icd10_code" placeholder="H40.1132"></div>
-      <div class="form-group"><label>Laterality</label>
-        <select name="laterality"><option value="">&mdash;</option><option value="OD">OD (Right)</option><option value="OS">OS (Left)</option><option value="OU">OU (Both)</option></select>
+      <div class="form-group"><label>Diagnosis <input type="text" name="diagnosis_name" required placeholder="Primary Open Angle Glaucoma"></label></div>
+      <div class="form-group"><label>ICD-10 Code <input type="text" name="icd10_code" placeholder="H40.1132"></label></div>
+      <div class="form-group"><label>Laterality <select name="laterality"><option value="">&mdash;</option><option value="OD">OD (Right)</option><option value="OS">OS (Left)</option><option value="OU">OU (Both)</option></select></label>
       </div>
     </div>
     <div class="form-row cols-2">
-      <div class="form-group"><label>Severity / Stage</label><input type="text" name="severity_or_stage" placeholder="moderate stage OU"></div>
-      <div class="form-group"><label>Date First Diagnosed</label><input type="date" name="date_first_diagnosed"></div>
+      <div class="form-group"><label>Severity / Stage <input type="text" name="severity_or_stage" placeholder="moderate stage OU"></label></div>
+      <div class="form-group"><label>Date First Diagnosed <input type="date" name="date_first_diagnosed"></label></div>
     </div>
-    <div class="form-group"><label>Counseling &mdash; Eye Care</label><textarea name="counseling_eye_care"></textarea></div>
-    <div class="form-group"><label>Counseling &mdash; Expectations</label><textarea name="counseling_expectations"></textarea></div>
-    <div class="form-group"><label>Counseling &mdash; Contact Office If</label><textarea name="counseling_contact_office_if"></textarea></div>
+    <div class="form-group"><label>Counseling &mdash; Eye Care <textarea name="counseling_eye_care"></textarea></label></div>
+    <div class="form-group"><label>Counseling &mdash; Expectations <textarea name="counseling_expectations"></textarea></label></div>
+    <div class="form-group"><label>Counseling &mdash; Contact Office If <textarea name="counseling_contact_office_if"></textarea></label></div>
     <div class="form-actions"><button type="submit" class="btn btn-primary">Add Problem</button></div>
   </form>
 </div>

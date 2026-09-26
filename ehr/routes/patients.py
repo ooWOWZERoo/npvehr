@@ -10,6 +10,7 @@ from ehr.models.database import (get_db, Patient, Appointment, EyeExam, Prescrip
     PatientInsurancePlan, DiagnosticOrder, DiagnosticTest)
 from ehr.services import diagnostic_orders as diag_orders
 from ehr.services import lookback_alerts
+from ehr.services import authz
 from ehr.services import scheduling as sched
 from ehr.services import field_audit
 from ehr.env_info import EHR_ENV
@@ -24,6 +25,7 @@ router = APIRouter(prefix="/patients", tags=["patients"])
 templates = Jinja2Templates(directory="ehr/templates")
 templates.env.globals["ehr_env"] = EHR_ENV
 templates.env.globals["ROLE_LABELS"] = ROLE_LABELS
+templates.env.globals["FOCUS_SECTION_MAP"] = lookback_alerts.TEST_CODE_TO_FOCUS_SECTION
 
 # Per-record field-change audit trail (spec §37.1/§37.6 follow-up): the
 # fields tracked on a patient-record edit. photo_path is deliberately
@@ -57,7 +59,7 @@ def list_patients(request: Request, q: str = "",
     """Multi-field patient search (Last Name / First Name / DOB / Phone / MRN, AND-combined,
     partial+case-insensitive) with a legacy `q` fallback for the top-bar quick-switcher and any
     old bookmarks -- `q` alone still does the original OR-across-first/last/phone match."""
-    query = db.query(Patient)
+    query = authz.restrict_patient_query(db, request.state.user, db.query(Patient))
     any_field = last_name or first_name or dob or phone or mrn
     if any_field:
         if last_name:
@@ -112,14 +114,14 @@ def merge_patient_stub(request: Request):
 
 
 @router.get("/search", response_class=JSONResponse)
-def search_patients_json(q: str = "", db: Session = Depends(get_db)):
+def search_patients_json(request: Request, q: str = "", db: Session = Depends(get_db)):
     """Lightweight JSON search backing the top-bar quick patient switcher's
     type-ahead. Kept separate from the HTML list view above (which reuses the
     same fields) so the widget gets a small, fast payload."""
     q = (q or "").strip()
     if not q:
         return JSONResponse([])
-    results = (db.query(Patient)
+    results = (authz.restrict_patient_query(db, request.state.user, db.query(Patient))
                .filter((Patient.first_name.ilike(f"%{q}%")) |
                        (Patient.last_name.ilike(f"%{q}%")) |
                        (Patient.phone.ilike(f"%{q}%")))
@@ -198,8 +200,18 @@ def create_patient(request: Request,
 # tab below. `_workspace_ctx` builds the common template context; each route
 # adds its own tab-specific data on top of it.
 # ---------------------------------------------------------------------------
-def _get_patient_or_404(db: Session, patient_id: int):
-    return db.query(Patient).filter(Patient.id == patient_id).first()
+def _get_patient_or_404(db: Session, patient_id: int, user=None):
+    """`user` is optional so every existing internal caller that doesn't have
+    (or doesn't need) a user in scope keeps working unchanged; every actual
+    route handler below passes request.state.user, which is what applies the
+    record-level authorization restriction (ehr.services.authz) -- a patient
+    outside a restricted provider's own patients renders as 404, the same
+    "not found, not forbidden" ownership-isolation convention already used
+    for the patient portal's cross-patient guard."""
+    p = db.query(Patient).filter(Patient.id == patient_id).first()
+    if p and user is not None and not authz.can_view_patient(db, user, patient_id):
+        return None
+    return p
 
 def _workspace_ctx(db: Session, p: Patient, active_tab: str) -> dict:
     # "Provider" in the identity header: no primary-provider field exists on Patient,
@@ -212,7 +224,7 @@ def _workspace_ctx(db: Session, p: Patient, active_tab: str) -> dict:
         provider_label = f"Dr. {last_appt.provider.last_name}"
     return {
         "patient": p,
-        "context_patient": patient_context(p),
+        "context_patient": patient_context(p, db),
         "display_name": display_name(p),
         "age": compute_age(p.date_of_birth),
         "provider_label": provider_label,
@@ -225,7 +237,7 @@ def patient_detail(request: Request, patient_id: int, db: Session = Depends(get_
     Overview tab of the workspace restructure instead of the old flat page. Every
     existing link to this exact URL (patient list, back-links, context strip, the
     top-bar quick-switcher, recently-viewed) continues to work unchanged."""
-    p = _get_patient_or_404(db, patient_id)
+    p = _get_patient_or_404(db, patient_id, request.state.user)
     if not p: return HTMLResponse("Not found", status_code=404)
     ctx = _workspace_ctx(db, p, "overview")
     now = datetime.utcnow()
@@ -256,7 +268,7 @@ def patient_detail(request: Request, patient_id: int, db: Session = Depends(get_
     return templates.TemplateResponse(request, "patients/overview.html", ctx)
 
 @router.get("/{patient_id}/photo")
-def patient_photo(patient_id: int, db: Session = Depends(get_db)):
+def patient_photo(request: Request, patient_id: int, db: Session = Depends(get_db)):
     """Serves a patient's photo bytes directly, gated by the same session
     auth as every other route in this router (applied at inclusion in
     ehr/app.py) -- rather than the browser holding a URL (Cloudinary or, in
@@ -264,7 +276,7 @@ def patient_photo(patient_id: int, db: Session = Depends(get_db)):
     anyone who has it, forever, with no auth check at all. Patient.photo_path
     itself never leaves the server as a browser-facing URL; templates point
     <img> tags at this route instead."""
-    p = db.query(Patient).filter(Patient.id == patient_id).first()
+    p = _get_patient_or_404(db, patient_id, request.state.user)
     if not p or not p.photo_path:
         return HTMLResponse(status_code=404, content="")
     result = _get_photo_bytes(p.photo_path)
@@ -276,10 +288,10 @@ def patient_photo(patient_id: int, db: Session = Depends(get_db)):
 
 @router.get("/{patient_id}/edit", response_class=HTMLResponse)
 def edit_patient_form(request: Request, patient_id: int, db: Session = Depends(get_db)):
-    p = db.query(Patient).filter(Patient.id == patient_id).first()
+    p = _get_patient_or_404(db, patient_id, request.state.user)
     if not p: return HTMLResponse("Not found", status_code=404)
     return templates.TemplateResponse(request, "patients/form.html",
-        {"patient": p, "context_patient": patient_context(p)})
+        {"patient": p, "context_patient": patient_context(p, db)})
 
 @router.post("/{patient_id}/edit", dependencies=[Depends(require_role(*PATIENT_EDIT))])
 def update_patient(request: Request, patient_id: int,
@@ -298,7 +310,7 @@ def update_patient(request: Request, patient_id: int,
     csrf_token: str = Form(""),
     db: Session = Depends(get_db)):
     csrf.verify_or_403(request.state.csrf_token, csrf_token)
-    p = db.query(Patient).filter(Patient.id == patient_id).first()
+    p = _get_patient_or_404(db, patient_id, request.state.user)
     if not p: return HTMLResponse("Not found", status_code=404)
     conflict = _mrn_conflict(db, mrn, exclude_patient_id=patient_id)
     if conflict:
@@ -343,7 +355,7 @@ def update_patient(request: Request, patient_id: int,
 
 def _placeholder_tab(request: Request, db: Session, patient_id: int, active_tab: str,
                       title: str, icon: str, description: str, bullets=None):
-    p = _get_patient_or_404(db, patient_id)
+    p = _get_patient_or_404(db, patient_id, request.state.user)
     if not p: return HTMLResponse("Not found", status_code=404)
     ctx = _workspace_ctx(db, p, active_tab)
     ctx.update({"title": title, "icon": icon, "description": description, "bullets": bullets or []})
@@ -352,7 +364,7 @@ def _placeholder_tab(request: Request, db: Session, patient_id: int, active_tab:
 
 @router.get("/{patient_id}/demographics", response_class=HTMLResponse)
 def patient_demographics(request: Request, patient_id: int, db: Session = Depends(get_db)):
-    p = _get_patient_or_404(db, patient_id)
+    p = _get_patient_or_404(db, patient_id, request.state.user)
     if not p: return HTMLResponse("Not found", status_code=404)
     return templates.TemplateResponse(request, "patients/demographics.html", _workspace_ctx(db, p, "demographics"))
 
@@ -372,7 +384,7 @@ def patient_addresses(request: Request, patient_id: int, db: Session = Depends(g
 def patient_appointments(request: Request, patient_id: int, db: Session = Depends(get_db)):
     """Real tab -- reuses the same Appointment query/ordering as the global
     appointments list, just filtered by patient_id instead of duplicating logic."""
-    p = _get_patient_or_404(db, patient_id)
+    p = _get_patient_or_404(db, patient_id, request.state.user)
     if not p: return HTMLResponse("Not found", status_code=404)
     ctx = _workspace_ctx(db, p, "appointments")
     ctx["appointments"] = (db.query(Appointment).filter(Appointment.patient_id == patient_id)
@@ -393,7 +405,7 @@ def patient_recalls(request: Request, patient_id: int, db: Session = Depends(get
 
 @router.get("/{patient_id}/insurance", response_class=HTMLResponse)
 def patient_insurance(request: Request, patient_id: int, db: Session = Depends(get_db)):
-    p = _get_patient_or_404(db, patient_id)
+    p = _get_patient_or_404(db, patient_id, request.state.user)
     if not p: return HTMLResponse("Not found", status_code=404)
     ctx = _workspace_ctx(db, p, "insurance")
     # Structured insurance plans (Phase 2 of the chief-complaint/CPT/billing-
@@ -412,7 +424,7 @@ def add_insurance_plan(request: Request, patient_id: int, plan_category: str = F
     payer_name: str = Form(""), member_id: str = Form(""), group_number: str = Form(""),
     csrf_token: str = Form(""), db: Session = Depends(get_db)):
     csrf.verify_or_403(request.state.csrf_token, csrf_token)
-    p = _get_patient_or_404(db, patient_id)
+    p = _get_patient_or_404(db, patient_id, request.state.user)
     if not p: return HTMLResponse("Not found", status_code=404)
     if plan_category not in ("vision", "medical"):
         return HTMLResponse("Invalid plan category.", status_code=400)
@@ -481,7 +493,7 @@ def quick_order_diagnostic_test(request: Request, patient_id: int, diagnostic_te
     (status='ordered', no exam context -- DiagnosticOrder.ordered_exam_id is
     nullable for exactly this "originates off an exam" case)."""
     csrf.verify_or_403(request.state.csrf_token, csrf_token)
-    p = _get_patient_or_404(db, patient_id)
+    p = _get_patient_or_404(db, patient_id, request.state.user)
     if not p: return HTMLResponse("Not found", status_code=404)
     test = db.query(DiagnosticTest).filter(DiagnosticTest.code == diagnostic_test_code).first()
     if not test: return HTMLResponse("Unknown diagnostic test.", status_code=400)
@@ -516,7 +528,7 @@ def patient_insurance_relationships(request: Request, patient_id: int, db: Sessi
 @router.get("/{patient_id}/rx", response_class=HTMLResponse)
 def patient_rx(request: Request, patient_id: int, db: Session = Depends(get_db)):
     """Real tab -- reuses the existing Prescription data for this patient."""
-    p = _get_patient_or_404(db, patient_id)
+    p = _get_patient_or_404(db, patient_id, request.state.user)
     if not p: return HTMLResponse("Not found", status_code=404)
     ctx = _workspace_ctx(db, p, "rx")
     ctx["prescriptions"] = sorted(p.prescriptions, key=lambda r: r.issue_date or "", reverse=True)
@@ -525,7 +537,7 @@ def patient_rx(request: Request, patient_id: int, db: Session = Depends(get_db))
 
 @router.get("/{patient_id}/rx/glasses", response_class=HTMLResponse)
 def patient_rx_glasses(request: Request, patient_id: int, db: Session = Depends(get_db)):
-    p = _get_patient_or_404(db, patient_id)
+    p = _get_patient_or_404(db, patient_id, request.state.user)
     if not p: return HTMLResponse("Not found", status_code=404)
     ctx = _workspace_ctx(db, p, "rx-glasses")
     ctx["prescriptions"] = sorted(
@@ -536,7 +548,7 @@ def patient_rx_glasses(request: Request, patient_id: int, db: Session = Depends(
 
 @router.get("/{patient_id}/rx/contacts", response_class=HTMLResponse)
 def patient_rx_contacts(request: Request, patient_id: int, db: Session = Depends(get_db)):
-    p = _get_patient_or_404(db, patient_id)
+    p = _get_patient_or_404(db, patient_id, request.state.user)
     if not p: return HTMLResponse("Not found", status_code=404)
     ctx = _workspace_ctx(db, p, "rx-contacts")
     ctx["prescriptions"] = sorted(
@@ -566,7 +578,7 @@ def patient_orders_exams(request: Request, patient_id: int, db: Session = Depend
     already-existing per-patient exam history (same data as the Overview/Exams area) since that is the
     closest real, honest thing to show under this tab; a future billing/orders module should replace
     this with the actual exam-order records Encompass models."""
-    p = _get_patient_or_404(db, patient_id)
+    p = _get_patient_or_404(db, patient_id, request.state.user)
     if not p: return HTMLResponse("Not found", status_code=404)
     ctx = _workspace_ctx(db, p, "orders-exams")
     ctx["exams"] = sorted(p.eye_exams, key=lambda e: e.exam_date or "", reverse=True)
@@ -610,7 +622,7 @@ def patient_glaucoma_trend(request: Request, patient_id: int, db: Session = Depe
     Refraction/DryEyeAssessment/AnteriorSegmentAssessment); this route just walks a patient's
     exam history collecting each exam's tracking row, rather than the table
     itself carrying a redundant patient_id."""
-    p = _get_patient_or_404(db, patient_id)
+    p = _get_patient_or_404(db, patient_id, request.state.user)
     if not p: return HTMLResponse("Not found", status_code=404)
     ctx = _workspace_ctx(db, p, "glaucoma-trend")
     exams_oldest_first = sorted(p.eye_exams, key=lambda e: e.exam_date or "")
@@ -632,7 +644,7 @@ def patient_surgery_timeline(request: Request, patient_id: int, db: Session = De
     patient_glaucoma_trend above, minus the chart (milestones are
     categorical, not a quantity worth trending visually -- the ordered table
     itself is the timeline)."""
-    p = _get_patient_or_404(db, patient_id)
+    p = _get_patient_or_404(db, patient_id, request.state.user)
     if not p: return HTMLResponse("Not found", status_code=404)
     ctx = _workspace_ctx(db, p, "surgery-timeline")
     exams_oldest_first = sorted(p.eye_exams, key=lambda e: e.exam_date or "")
@@ -648,7 +660,7 @@ def patient_problem_list(request: Request, patient_id: int, db: Session = Depend
     scoped clinical dashboards. Active problems first, each with its
     ProblemAddendum history (oldest to newest, matching real visit-summary
     documents' own dated-note convention)."""
-    p = _get_patient_or_404(db, patient_id)
+    p = _get_patient_or_404(db, patient_id, request.state.user)
     if not p: return HTMLResponse("Not found", status_code=404)
     ctx = _workspace_ctx(db, p, "problems")
     problems = (db.query(Problem).filter(Problem.patient_id == patient_id)
@@ -659,7 +671,7 @@ def patient_problem_list(request: Request, patient_id: int, db: Session = Depend
 
 @router.post("/{patient_id}/problems/new", dependencies=[Depends(require_role(*PATIENT_EDIT))])
 async def create_problem(request: Request, patient_id: int, db: Session = Depends(get_db)):
-    p = _get_patient_or_404(db, patient_id)
+    p = _get_patient_or_404(db, patient_id, request.state.user)
     if not p: return HTMLResponse("Not found", status_code=404)
     form = await request.form()
     csrf.verify_or_403(request.state.csrf_token, form.get("csrf_token"))
@@ -707,7 +719,7 @@ def patient_waitlist(request: Request, patient_id: int, db: Session = Depends(ge
     active entries first, then fulfilled/cancelled history. See
     ehr.services.scheduling.find_matching_waitlist_entries for how these
     surface to staff when a matching slot opens up (today: on cancellation)."""
-    p = _get_patient_or_404(db, patient_id)
+    p = _get_patient_or_404(db, patient_id, request.state.user)
     if not p: return HTMLResponse("Not found", status_code=404)
     ctx = _workspace_ctx(db, p, "waitlist")
     entries = (db.query(WaitlistEntry).filter(WaitlistEntry.patient_id == patient_id)
@@ -723,7 +735,7 @@ def patient_waitlist(request: Request, patient_id: int, db: Session = Depends(ge
 
 @router.post("/{patient_id}/waitlist/new", dependencies=[Depends(require_role(*PATIENT_EDIT))])
 async def create_waitlist_entry(request: Request, patient_id: int, db: Session = Depends(get_db)):
-    p = _get_patient_or_404(db, patient_id)
+    p = _get_patient_or_404(db, patient_id, request.state.user)
     if not p: return HTMLResponse("Not found", status_code=404)
     form = await request.form()
     csrf.verify_or_403(request.state.csrf_token, form.get("csrf_token"))
@@ -786,7 +798,7 @@ DOCUMENT_CATEGORIES = ["Outside Records", "Consent Form", "Correspondence", "Vis
 
 @router.get("/{patient_id}/correspondence/documents", response_class=HTMLResponse)
 def patient_correspondence_documents(request: Request, patient_id: int, db: Session = Depends(get_db)):
-    p = _get_patient_or_404(db, patient_id)
+    p = _get_patient_or_404(db, patient_id, request.state.user)
     if not p: return HTMLResponse("Not found", status_code=404)
     ctx = _workspace_ctx(db, p, "correspondence-documents")
     ctx["documents"] = (db.query(PatientDocument).filter(PatientDocument.patient_id == patient_id)
@@ -797,7 +809,7 @@ def patient_correspondence_documents(request: Request, patient_id: int, db: Sess
 
 @router.post("/{patient_id}/correspondence/documents", dependencies=[Depends(require_role(*PATIENT_EDIT))])
 async def upload_patient_document(request: Request, patient_id: int, db: Session = Depends(get_db)):
-    p = _get_patient_or_404(db, patient_id)
+    p = _get_patient_or_404(db, patient_id, request.state.user)
     if not p: return HTMLResponse("Not found", status_code=404)
     form = await request.form()
     csrf.verify_or_403(request.state.csrf_token, form.get("csrf_token"))

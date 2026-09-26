@@ -8,13 +8,13 @@
   {% if error %}<div class="alert alert-error" style="margin-bottom:1rem">{{ error }}</div>{% endif %}
   <form method="post" action="/admin/scheduling/providers/{{ provider.id }}/edit">
     <div class="form-row cols-4">
-      <div class="form-group"><label>First Name*</label><input name="first_name" required value="{{ provider.first_name }}"></div>
-      <div class="form-group"><label>Last Name*</label><input name="last_name" required value="{{ provider.last_name }}"></div>
-      <div class="form-group"><label>License Number</label><input name="license_number" value="{{ provider.license_number or '' }}"></div>
-      <div class="form-group"><label>NPI</label><input name="npi" value="{{ provider.npi or '' }}"></div>
+      <div class="form-group"><label>First Name* <input name="first_name" required value="{{ provider.first_name }}"></label></div>
+      <div class="form-group"><label>Last Name* <input name="last_name" required value="{{ provider.last_name }}"></label></div>
+      <div class="form-group"><label>License Number <input name="license_number" value="{{ provider.license_number or '' }}"></label></div>
+      <div class="form-group"><label>NPI <input name="npi" value="{{ provider.npi or '' }}"></label></div>
     </div>
     <div class="form-row cols-4">
-      <div class="form-group"><label>Specialty</label><input name="specialty" value="{{ provider.specialty or '' }}"></div>
+      <div class="form-group"><label>Specialty <input name="specialty" value="{{ provider.specialty or '' }}"></label></div>
     </div>
     <p style="font-size:0.8rem;color:#64748b">
       Active/inactive status is managed from the <a href="/admin/scheduling/providers">Providers list</a>,

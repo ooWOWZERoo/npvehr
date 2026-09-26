@@ -8,24 +8,21 @@
     {% if appointment_id %}<input type="hidden" name="appointment_id" value="{{ appointment_id }}">{% endif %}
     <div class="section-title">Visit Info</div>
     <div class="form-row cols-3">
-      <div class="form-group"><label>Patient*</label>
-        <select name="patient_id" required>{% for p in patients %}<option value="{{ p.id }}" {{ 'selected' if selected_patient_id == p.id }}>{{ p.last_name }}, {{ p.first_name }}</option>{% endfor %}</select>
+      <div class="form-group"><label>Patient* <select name="patient_id" required>{% for p in patients %}<option value="{{ p.id }}" {{ 'selected' if selected_patient_id == p.id }}>{{ p.last_name }}, {{ p.first_name }}</option>{% endfor %}</select></label>
       </div>
-      <div class="form-group"><label>Provider*</label>
-        <select name="provider_id" required>{% for p in providers %}<option value="{{ p.id }}">Dr. {{ p.last_name }}</option>{% endfor %}</select>
+      <div class="form-group"><label>Provider* <select name="provider_id" required>{% for p in providers %}<option value="{{ p.id }}">Dr. {{ p.last_name }}</option>{% endfor %}</select></label>
       </div>
-      <div class="form-group"><label>Exam Date*</label><input name="exam_date" type="date" value="{{ today }}" required></div>
+      <div class="form-group"><label>Exam Date* <input name="exam_date" type="date" value="{{ today }}" required></label></div>
     </div>
-    <div class="form-group"><label>Chief Complaint</label><textarea name="chief_complaint" id="chief_complaint"></textarea></div>
+    <div class="form-group"><label>Chief Complaint <textarea name="chief_complaint" id="chief_complaint"></textarea></label></div>
     <div class="form-group" style="max-width:420px">
-      <label>Suggested Exam Type</label>
-      <select name="exam_type_confirmed" id="exam_type_confirmed">
+      <label>Suggested Exam Type <select name="exam_type_confirmed" id="exam_type_confirmed">
         <option value="">&mdash;</option>
         <option value="Routine Vision">Routine Vision</option>
         <option value="Comprehensive New/Established">Comprehensive New/Established</option>
         <option value="Medical Established (Intermediate)">Medical Established (Intermediate)</option>
         <option value="Emergent/Urgent Medical">Emergent/Urgent Medical</option>
-      </select>
+      </select></label>
       <div id="exam_type_suggestion_note" style="font-size:0.75rem;color:#64748b;margin-top:0.25rem"></div>
       <input type="hidden" name="suggested_exam_type" id="suggested_exam_type">
     </div>
@@ -78,10 +75,9 @@
     </table>
     </div>
     <div class="form-row cols-2">
-      <div class="form-group"><label>APD (Swinging Flashlight Test)</label>
-        <select name="pupil_apd_finding"><option value="">&mdash;</option><option>Negative</option><option>Positive OD</option><option>Positive OS</option></select>
+      <div class="form-group"><label>APD (Swinging Flashlight Test) <select name="pupil_apd_finding"><option value="">&mdash;</option><option>Negative</option><option>Positive OD</option><option>Positive OS</option></select></label>
       </div>
-      <div class="form-group"><label>Pupil Notes</label><input name="pupil_notes"></div>
+      <div class="form-group"><label>Pupil Notes <input name="pupil_notes"></label></div>
     </div>
     <div class="section-title">Motility &amp; Confrontation Visual Fields</div>
     <div class="table-responsive">
@@ -98,11 +94,11 @@
     </div>
     <div class="section-title">IOP &amp; Cover Test</div>
     <div class="form-row cols-3">
-      <div class="form-group"><label>IOP OD (mmHg)</label><input name="iop_od" type="number" step="0.5"></div>
-      <div class="form-group"><label>IOP OS (mmHg)</label><input name="iop_os" type="number" step="0.5"></div>
-      <div class="form-group"><label>Method</label><select name="iop_method"><option>Goldmann</option><option>Non-contact</option><option>iCare</option></select></div>
+      <div class="form-group"><label>IOP OD (mmHg) <input name="iop_od" type="number" step="0.5"></label></div>
+      <div class="form-group"><label>IOP OS (mmHg) <input name="iop_os" type="number" step="0.5"></label></div>
+      <div class="form-group"><label>Method <select name="iop_method"><option>Goldmann</option><option>Non-contact</option><option>iCare</option></select></label></div>
     </div>
-    <div class="form-group"><label>Cover Test</label><input name="cover_test" placeholder="Orthophoria at distance and near"></div>
+    <div class="form-group"><label>Cover Test <input name="cover_test" placeholder="Orthophoria at distance and near"></label></div>
     <div class="section-title">Slit Lamp</div>
     <div class="table-responsive">
     <table class="exam-table">
@@ -134,11 +130,9 @@
       {% endfor %}
     </div>
     <div class="form-row cols-2">
-      <div class="form-group"><label>Laterality</label>
-        <select name="refractive_laterality"><option value="">&mdash;</option><option value="OD">OD (Right)</option><option value="OS">OS (Left)</option><option value="OU">OU (Both)</option></select>
+      <div class="form-group"><label>Laterality <select name="refractive_laterality"><option value="">&mdash;</option><option value="OD">OD (Right)</option><option value="OS">OS (Left)</option><option value="OU">OU (Both)</option></select></label>
       </div>
-      <div class="form-group"><label>Stability</label>
-        <select name="refractive_stability"><option value="">&mdash;</option><option>Stable</option><option>Progressing</option><option>Improving</option></select>
+      <div class="form-group"><label>Stability <select name="refractive_stability"><option value="">&mdash;</option><option>Stable</option><option>Progressing</option><option>Improving</option></select></label>
       </div>
     </div>
     <div class="form-group"><label>Secondary Findings</label></div>
@@ -159,9 +153,8 @@
       </button>
       <div class="vf-body" id="focus-anterior">
     <div class="form-row cols-2">
-      <div class="form-group"><label>Primary Diagnosis Code</label><input name="ant_primary_diagnosis_code" placeholder="H11.031"></div>
-      <div class="form-group"><label>Severity</label>
-        <select name="ant_severity"><option value="">&mdash;</option><option>Mild</option><option>Moderate</option><option>Severe</option></select>
+      <div class="form-group"><label>Primary Diagnosis Code <input name="ant_primary_diagnosis_code" placeholder="H11.031"></label></div>
+      <div class="form-group"><label>Severity <select name="ant_severity"><option value="">&mdash;</option><option>Mild</option><option>Moderate</option><option>Severe</option></select></label>
       </div>
     </div>
     <div class="form-group"><label style="font-weight:600;font-size:0.85rem">Conjunctiva</label></div>
@@ -238,10 +231,9 @@
       {% endfor %}
     </div>
     <div class="form-row cols-2">
-      <div class="form-group"><label>Follow-up Interval</label>
-        <select name="ant_follow_up_interval"><option value="">&mdash;</option><option>24 hours</option><option>1 week</option><option>2 weeks</option><option>1 month</option><option>3 months</option><option>6 months</option></select>
+      <div class="form-group"><label>Follow-up Interval <select name="ant_follow_up_interval"><option value="">&mdash;</option><option>24 hours</option><option>1 week</option><option>2 weeks</option><option>1 month</option><option>3 months</option><option>6 months</option></select></label>
       </div>
-      <div class="form-group"><label>Clinical Notes</label><input name="ant_clinical_notes"></div>
+      <div class="form-group"><label>Clinical Notes <input name="ant_clinical_notes"></label></div>
     </div>
       </div>
     </div>
@@ -255,9 +247,8 @@
       </button>
       <div class="vf-body" id="focus-dryeye">
     <div class="form-row cols-2">
-      <div class="form-group"><label>Primary Diagnosis Code</label><input name="de_primary_diagnosis_code" placeholder="H04.123"></div>
-      <div class="form-group"><label>Severity</label>
-        <select name="de_severity"><option value="">&mdash;</option><option>Mild</option><option>Moderate</option><option>Severe</option></select>
+      <div class="form-group"><label>Primary Diagnosis Code <input name="de_primary_diagnosis_code" placeholder="H04.123"></label></div>
+      <div class="form-group"><label>Severity <select name="de_severity"><option value="">&mdash;</option><option>Mild</option><option>Moderate</option><option>Severe</option></select></label>
       </div>
     </div>
     <div class="table-responsive">
@@ -281,10 +272,9 @@
       {% endfor %}
     </div>
     <div class="form-row cols-2">
-      <div class="form-group"><label>Follow-up Interval</label>
-        <select name="de_follow_up_interval"><option value="">&mdash;</option><option>24 hours</option><option>1 week</option><option>2 weeks</option><option>1 month</option><option>3 months</option></select>
+      <div class="form-group"><label>Follow-up Interval <select name="de_follow_up_interval"><option value="">&mdash;</option><option>24 hours</option><option>1 week</option><option>2 weeks</option><option>1 month</option><option>3 months</option></select></label>
       </div>
-      <div class="form-group"><label>Clinical Notes</label><input name="de_clinical_notes"></div>
+      <div class="form-group"><label>Clinical Notes <input name="de_clinical_notes"></label></div>
     </div>
       </div>
     </div>
@@ -298,14 +288,12 @@
       </button>
       <div class="vf-body" id="focus-glaucoma">
     <div class="form-row cols-3">
-      <div class="form-group"><label>Primary Diagnosis Code</label><input name="gt_primary_diagnosis_code" placeholder="H40.1132"></div>
-      <div class="form-group"><label>Glaucoma Stage</label>
-        <select name="gt_glaucoma_stage"><option value="">&mdash;</option><option>Mild</option><option>Moderate</option><option>Severe</option><option>Indeterminate</option><option>Unspecified</option></select>
+      <div class="form-group"><label>Primary Diagnosis Code <input name="gt_primary_diagnosis_code" placeholder="H40.1132"></label></div>
+      <div class="form-group"><label>Glaucoma Stage <select name="gt_glaucoma_stage"><option value="">&mdash;</option><option>Mild</option><option>Moderate</option><option>Severe</option><option>Indeterminate</option><option>Unspecified</option></select></label>
       </div>
-      <div class="form-group"><label>IOP Time Measured</label><input name="gt_iop_time_measured" type="time"></div>
+      <div class="form-group"><label>IOP Time Measured <input name="gt_iop_time_measured" type="time"></label></div>
     </div>
-    <div class="form-group"><label>IOP Method</label>
-      <select name="gt_iop_method"><option value="">&mdash;</option><option>Goldmann Applanation</option><option>Tono-Pen</option><option>iCare</option></select>
+    <div class="form-group"><label>IOP Method <select name="gt_iop_method"><option value="">&mdash;</option><option>Goldmann Applanation</option><option>Tono-Pen</option><option>iCare</option></select></label>
     </div>
     <div class="table-responsive">
     <table class="exam-table">
@@ -345,10 +333,9 @@
       {% endfor %}
     </div>
     <div class="form-row cols-2">
-      <div class="form-group"><label>Follow-up Interval</label>
-        <select name="gt_follow_up_interval"><option value="">&mdash;</option><option>1 month</option><option>3 months</option><option>6 months</option><option>1 year</option></select>
+      <div class="form-group"><label>Follow-up Interval <select name="gt_follow_up_interval"><option value="">&mdash;</option><option>1 month</option><option>3 months</option><option>6 months</option><option>1 year</option></select></label>
       </div>
-      <div class="form-group"><label>Clinical Notes</label><input name="gt_clinical_notes"></div>
+      <div class="form-group"><label>Clinical Notes <input name="gt_clinical_notes"></label></div>
     </div>
       </div>
     </div>
@@ -362,21 +349,19 @@
       </button>
       <div class="vf-body" id="focus-binocular">
     <div class="form-row cols-3">
-      <div class="form-group"><label>Primary Diagnosis Code</label><input name="bv_primary_diagnosis_code" placeholder="H51.11"></div>
-      <div class="form-group"><label>Strabismus Present?</label>
-        <select name="bv_strabismus_present"><option value="">&mdash;</option><option>Yes</option><option>No</option></select>
+      <div class="form-group"><label>Primary Diagnosis Code <input name="bv_primary_diagnosis_code" placeholder="H51.11"></label></div>
+      <div class="form-group"><label>Strabismus Present? <select name="bv_strabismus_present"><option value="">&mdash;</option><option>Yes</option><option>No</option></select></label>
       </div>
-      <div class="form-group"><label>Strabismus Direction</label>
-        <select name="bv_strabismus_direction"><option value="">&mdash;</option><option>Exotropia</option><option>Esotropia</option><option>Hypertropia</option></select>
+      <div class="form-group"><label>Strabismus Direction <select name="bv_strabismus_direction"><option value="">&mdash;</option><option>Exotropia</option><option>Esotropia</option><option>Hypertropia</option></select></label>
       </div>
     </div>
     <div class="form-row cols-2">
-      <div class="form-group"><label>Phoria, Distance (&Delta;)</label><input name="bv_phoria_distance_diopters" type="number" placeholder="Negative = Exo, Positive = Eso"></div>
-      <div class="form-group"><label>Phoria, Near (&Delta;)</label><input name="bv_phoria_near_diopters" type="number" placeholder="Negative = Exo, Positive = Eso"></div>
+      <div class="form-group"><label>Phoria, Distance (&Delta;) <input name="bv_phoria_distance_diopters" type="number" placeholder="Negative = Exo, Positive = Eso"></label></div>
+      <div class="form-group"><label>Phoria, Near (&Delta;) <input name="bv_phoria_near_diopters" type="number" placeholder="Negative = Exo, Positive = Eso"></label></div>
     </div>
     <div class="form-row cols-2">
-      <div class="form-group"><label>NPC Break (cm)</label><input name="bv_npc_break_cm" type="number" step="0.5" min="0"></div>
-      <div class="form-group"><label>NPC Recovery (cm)</label><input name="bv_npc_recovery_cm" type="number" step="0.5" min="0"></div>
+      <div class="form-group"><label>NPC Break (cm) <input name="bv_npc_break_cm" type="number" step="0.5" min="0"></label></div>
+      <div class="form-group"><label>NPC Recovery (cm) <input name="bv_npc_recovery_cm" type="number" step="0.5" min="0"></label></div>
     </div>
     <div class="table-responsive">
     <table class="exam-table">
@@ -393,15 +378,13 @@
       {% endfor %}
     </div>
     <div class="form-row cols-3">
-      <div class="form-group"><label>Therapy Session #</label><input name="bv_therapy_session_number" type="number" min="1" placeholder="e.g. 4 of 12"></div>
-      <div class="form-group"><label>Therapy Compliance</label>
-        <select name="bv_therapy_compliance_rating"><option value="">&mdash;</option><option>Excellent</option><option>Good</option><option>Fair</option><option>Poor</option></select>
+      <div class="form-group"><label>Therapy Session # <input name="bv_therapy_session_number" type="number" min="1" placeholder="e.g. 4 of 12"></label></div>
+      <div class="form-group"><label>Therapy Compliance <select name="bv_therapy_compliance_rating"><option value="">&mdash;</option><option>Excellent</option><option>Good</option><option>Fair</option><option>Poor</option></select></label>
       </div>
-      <div class="form-group"><label>Follow-up Interval</label>
-        <select name="bv_follow_up_interval"><option value="">&mdash;</option><option>1 week</option><option>2 weeks</option><option>1 month</option><option>3 months</option></select>
+      <div class="form-group"><label>Follow-up Interval <select name="bv_follow_up_interval"><option value="">&mdash;</option><option>1 week</option><option>2 weeks</option><option>1 month</option><option>3 months</option></select></label>
       </div>
     </div>
-    <div class="form-group"><label>Clinical Notes</label><input name="bv_clinical_notes"></div>
+    <div class="form-group"><label>Clinical Notes <input name="bv_clinical_notes"></label></div>
       </div>
     </div>
     <div class="vf-card" data-vf-card="focus-surgery">
@@ -414,47 +397,40 @@
       </button>
       <div class="vf-body" id="focus-surgery">
     <div class="form-row cols-3">
-      <div class="form-group"><label>Surgical Procedure</label>
-        <select name="sx_surgical_procedure"><option value="">&mdash;</option><option>Cataract Extraction with IOL</option><option>LASIK</option><option>PRK</option><option>SMILE</option><option>YAG Capsulotomy</option><option>Selective Laser Trabeculoplasty</option></select>
+      <div class="form-group"><label>Surgical Procedure <select name="sx_surgical_procedure"><option value="">&mdash;</option><option>Cataract Extraction with IOL</option><option>LASIK</option><option>PRK</option><option>SMILE</option><option>YAG Capsulotomy</option><option>Selective Laser Trabeculoplasty</option></select></label>
       </div>
-      <div class="form-group"><label>Operative Eye</label>
-        <select name="sx_operative_eye"><option value="">&mdash;</option><option value="OD">OD (Right)</option><option value="OS">OS (Left)</option><option value="OU">OU (Both)</option></select>
+      <div class="form-group"><label>Operative Eye <select name="sx_operative_eye"><option value="">&mdash;</option><option value="OD">OD (Right)</option><option value="OS">OS (Left)</option><option value="OU">OU (Both)</option></select></label>
       </div>
-      <div class="form-group"><label>Date of Surgery</label><input name="sx_date_of_surgery" type="date"></div>
+      <div class="form-group"><label>Date of Surgery <input name="sx_date_of_surgery" type="date"></label></div>
     </div>
     <div class="form-row cols-3">
-      <div class="form-group"><label>Surgeon</label><input name="sx_surgeon_name"></div>
-      <div class="form-group"><label>Co-Managing Facility</label><input name="sx_co_managing_facility"></div>
-      <div class="form-group"><label>Current Milestone</label>
-        <select name="sx_current_milestone"><option value="">&mdash;</option><option>Pre-Op Clearance</option><option>Day 1</option><option>Week 1</option><option>Month 1</option><option>Month 3 Post-Op</option><option>Released to Regular Care</option></select>
+      <div class="form-group"><label>Surgeon <input name="sx_surgeon_name"></label></div>
+      <div class="form-group"><label>Co-Managing Facility <input name="sx_co_managing_facility"></label></div>
+      <div class="form-group"><label>Current Milestone <select name="sx_current_milestone"><option value="">&mdash;</option><option>Pre-Op Clearance</option><option>Day 1</option><option>Week 1</option><option>Month 1</option><option>Month 3 Post-Op</option><option>Released to Regular Care</option></select></label>
       </div>
     </div>
     <div class="form-row cols-2">
-      <div class="form-group"><label>Best Corrected VA</label><input name="sx_best_corrected_visual_acuity" placeholder="20/20"></div>
-      <div class="form-group"><label>IOP (mmHg)</label><input name="sx_intraocular_pressure" type="number" step="0.5"></div>
+      <div class="form-group"><label>Best Corrected VA <input name="sx_best_corrected_visual_acuity" placeholder="20/20"></label></div>
+      <div class="form-group"><label>IOP (mmHg) <input name="sx_intraocular_pressure" type="number" step="0.5"></label></div>
     </div>
     <div class="form-row cols-3">
-      <div class="form-group"><label>Corneal Edema Present?</label>
-        <select name="sx_corneal_edema_present"><option value="">&mdash;</option><option>Yes</option><option>No</option></select>
+      <div class="form-group"><label>Corneal Edema Present? <select name="sx_corneal_edema_present"><option value="">&mdash;</option><option>Yes</option><option>No</option></select></label>
       </div>
-      <div class="form-group"><label>Corneal Edema Grading</label>
-        <select name="sx_corneal_edema_grading"><option value="">&mdash;</option>{% for g in ['0','1+','2+','3+','4+'] %}<option>{{ g }}</option>{% endfor %}</select>
+      <div class="form-group"><label>Corneal Edema Grading <select name="sx_corneal_edema_grading"><option value="">&mdash;</option>{% for g in ['0','1+','2+','3+','4+'] %}<option>{{ g }}</option>{% endfor %}</select></label>
       </div>
-      <div class="form-group"><label>AC Cells/Flare</label>
-        <select name="sx_anterior_chamber_cells_flare"><option value="">&mdash;</option>{% for g in ['0','1+','2+','3+','4+'] %}<option>{{ g }}</option>{% endfor %}</select>
+      <div class="form-group"><label>AC Cells/Flare <select name="sx_anterior_chamber_cells_flare"><option value="">&mdash;</option>{% for g in ['0','1+','2+','3+','4+'] %}<option>{{ g }}</option>{% endfor %}</select></label>
       </div>
     </div>
-    <div class="form-group"><label>Surgical Flap/Wound Status</label><input name="sx_surgical_flap_or_wound_status" placeholder="Intact, Clear, Well-Apposed"></div>
-    <div class="form-group"><label>Steroid Taper Schedule</label><textarea name="sx_steroid_taper_schedule" placeholder="Pred Forte: QID x 1 week, then TID..."></textarea></div>
+    <div class="form-group"><label>Surgical Flap/Wound Status <input name="sx_surgical_flap_or_wound_status" placeholder="Intact, Clear, Well-Apposed"></label></div>
+    <div class="form-group"><label>Steroid Taper Schedule <textarea name="sx_steroid_taper_schedule" placeholder="Pred Forte: QID x 1 week, then TID..."></textarea></label></div>
     <div class="form-row cols-2">
-      <div class="form-group"><label>NSAID Drops Frequency</label><input name="sx_nsaid_drops_frequency"></div>
-      <div class="form-group"><label>Antibiotic Drops Status</label><input name="sx_antibiotic_drops_status"></div>
+      <div class="form-group"><label>NSAID Drops Frequency <input name="sx_nsaid_drops_frequency"></label></div>
+      <div class="form-group"><label>Antibiotic Drops Status <input name="sx_antibiotic_drops_status"></label></div>
     </div>
     <div class="form-row cols-2">
-      <div class="form-group"><label>Follow-up Interval</label>
-        <select name="sx_follow_up_interval"><option value="">&mdash;</option><option>1 day</option><option>1 week</option><option>1 month</option><option>3 months</option></select>
+      <div class="form-group"><label>Follow-up Interval <select name="sx_follow_up_interval"><option value="">&mdash;</option><option>1 day</option><option>1 week</option><option>1 month</option><option>3 months</option></select></label>
       </div>
-      <div class="form-group"><label>Clinical Notes</label><input name="sx_clinical_notes"></div>
+      <div class="form-group"><label>Clinical Notes <input name="sx_clinical_notes"></label></div>
     </div>
       </div>
     </div>
@@ -465,22 +441,21 @@
       <div class="form-group">
         <label class="test-chip"><input type="checkbox" name="problems_addressed" value="{{ problem.id }}"> {{ problem.diagnosis_name }}{% if problem.laterality %} {{ problem.laterality }}{% endif %}{% if problem.icd10_code %} <span class="mono-data" style="color:#64748b">({{ problem.icd10_code }})</span>{% endif %}</label>
       </div>
-      <div class="form-group"><label>Follow-up Note</label><input name="problem_note_{{ problem.id }}" placeholder="Addressed at this visit."></div>
+      <div class="form-group"><label>Follow-up Note <input name="problem_note_{{ problem.id }}" placeholder="Addressed at this visit."></label></div>
     </div>
     {% endfor %}
     {% endif %}
     <div class="section-title">Assessment &amp; Plan <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; auto-filled from the structured fields above as you fill them in; edit freely</span></div>
     <div class="form-group" style="max-width:260px">
-      <label>Note Style</label>
-      <select id="ap_note_style"><option value="abbreviated">Abbreviated (bulleted fragments)</option><option value="narrative">Narrative (sentences)</option></select>
+      <label>Note Style <select id="ap_note_style"><option value="abbreviated">Abbreviated (bulleted fragments)</option><option value="narrative">Narrative (sentences)</option></select></label>
     </div>
     <div id="ap_validation_issues" style="display:none;margin-bottom:var(--space-2);font-size:0.85rem;color:#b45309"></div>
     <div class="form-row cols-2">
-      <div class="form-group"><label>Assessment</label><textarea name="assessment" id="assessment"></textarea></div>
-      <div class="form-group"><label>Plan</label><textarea name="plan" id="plan"></textarea></div>
+      <div class="form-group"><label>Assessment <textarea name="assessment" id="assessment"></textarea></label></div>
+      <div class="form-group"><label>Plan <textarea name="plan" id="plan"></textarea></label></div>
     </div>
     <div class="form-row cols-2">
-      <div class="form-group"><label>Diagnosis Codes (ICD-10)</label><input name="diagnosis_codes" id="diagnosis_codes" placeholder="H52.13, H52.219"></div>
+      <div class="form-group"><label>Diagnosis Codes (ICD-10) <input name="diagnosis_codes" id="diagnosis_codes" placeholder="H52.13, H52.219"></label></div>
       <div class="form-group"><label>Follow-up</label>
         <div style="display:flex;gap:0.5rem">
           <input name="follow_up_weeks" id="follow_up_weeks" type="number" style="flex:1">
@@ -501,13 +476,12 @@
     </div>
     <div class="form-row cols-2">
       <div class="form-group" style="max-width:320px">
-        <label>Suggested E/M Code</label>
-        <select name="em_code_confirmed" id="em_code_confirmed">
+        <label>Suggested E/M Code <select name="em_code_confirmed" id="em_code_confirmed">
           <option value="">&mdash;</option>
           <option value="99212">99212 &mdash; Straightforward</option>
           <option value="99213">99213 &mdash; Low</option>
           <option value="99214">99214 &mdash; Moderate</option>
-        </select>
+        </select></label>
         <div id="em_suggestion_note" style="font-size:0.75rem;color:#64748b;margin-top:0.25rem"></div>
         <input type="hidden" name="suggested_em_code" id="suggested_em_code">
         <input type="hidden" name="suggested_em_rationale" id="suggested_em_rationale">
@@ -549,6 +523,22 @@ document.querySelectorAll('.focus-toggle').forEach(function (cb) {
   cb.addEventListener('change', sync);
   sync();
 });
+
+// Diagnostic-order deep-link (BUILD_BACKLOG.md follow-up, Phase 3/4 rounds):
+// a "Document in Exam" link from the patient overview's pending-orders card
+// or a look-back alert lands here with ?focus=<section-id>, so the section
+// that test's result belongs in opens automatically instead of the clinician
+// having to know which chip to click.
+(function () {
+  var focus = new URLSearchParams(window.location.search).get('focus');
+  if (!focus) return;
+  var chip = document.querySelector('.focus-toggle[data-target="' + focus + '"]');
+  if (!chip) return;
+  chip.checked = true;
+  chip.dispatchEvent(new Event('change'));
+  var card = document.querySelector('[data-vf-card="' + focus + '"]');
+  if (card) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+})();
 
 document.querySelectorAll('[data-vf-head]').forEach(function (head) {
   var id = head.dataset.vfHead;

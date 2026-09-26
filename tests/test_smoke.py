@@ -1985,3 +1985,388 @@ def test_rx_lab_order_lifecycle_and_remake(logged_in_page, live_server):
     # And on the top-level Order Management list.
     page.goto(live_server + "/orders/")
     assert "Regression Test Lab" in page.content()
+
+
+def test_rx_relationship_validation_rejects_forged_mismatches(logged_in_page, live_server):
+    """Prescription relationships are validated for patient/provider/exam
+    consistency (long-tracked gap, spec §18.2 item 2) -- the form's own
+    <select> options only ever offer valid choices, so this exercises the
+    server-side guard directly via a forged POST: a nonexistent patient,
+    a nonexistent provider, and an exam that belongs to a different patient
+    than the one selected must each be rejected with 400."""
+    page = logged_in_page
+
+    page.goto(live_server + "/patients/new")
+    page.fill('input[name="first_name"]', "Relval")
+    page.fill('input[name="last_name"]', "PatientA")
+    page.locator('button[type="submit"]', has_text="Create Patient").click()
+    page.wait_for_url(re.compile(r"/patients/\d+$"))
+    patient_a_id = page.url.rstrip("/").split("/")[-1]
+
+    page.goto(live_server + "/patients/new")
+    page.fill('input[name="first_name"]', "Relval")
+    page.fill('input[name="last_name"]', "PatientB")
+    page.locator('button[type="submit"]', has_text="Create Patient").click()
+    page.wait_for_url(re.compile(r"/patients/\d+$"))
+    patient_b_id = page.url.rstrip("/").split("/")[-1]
+
+    page.goto(live_server + "/exams/new")
+    page.select_option('select[name="patient_id"]', patient_a_id)
+    page.locator('button[type="submit"]', has_text="Save Exam").click()
+    page.wait_for_url(re.compile(r"/exams/\d+$"))
+    exam_a_id = page.url.rstrip("/").split("/")[-1]
+
+    token = page.locator('meta[name="csrf-token"]').get_attribute("content")
+    base_form = {"patient_id": patient_a_id, "provider_id": "1", "rx_type": "glasses", "csrf_token": token}
+
+    resp = page.request.post(live_server + "/prescriptions/new",
+        form={**base_form, "patient_id": "999999"})
+    assert resp.status == 400
+
+    resp = page.request.post(live_server + "/prescriptions/new",
+        form={**base_form, "provider_id": "999999"})
+    assert resp.status == 400
+
+    resp = page.request.post(live_server + "/prescriptions/new",
+        form={**base_form, "patient_id": patient_b_id, "exam_id": exam_a_id})
+    assert resp.status == 400
+
+    # A consistent set (exam belongs to the same patient) still succeeds.
+    resp = page.request.post(live_server + "/prescriptions/new",
+        form={**base_form, "patient_id": patient_a_id, "exam_id": exam_a_id})
+    assert resp.status in (200, 303)
+
+
+def test_appointment_type_created_and_updated_by_attribution(logged_in_page, live_server):
+    """AppointmentType created_by/updated_by attribution (BUILD_BACKLOG.md
+    follow-up from the v2.7 Appointment round) -- publishing a new version
+    stamps AppointmentTypeVersion.created_by_user_id, and deactivating/
+    reactivating the type stamps AppointmentType.updated_by/updated_at.
+    Both show on the type detail page."""
+    page = logged_in_page
+    page.goto(live_server + "/admin/scheduling/appointment-types")
+    page.locator("table a").first.click()
+    page.wait_for_load_state("networkidle")
+    type_id = page.url.rstrip("/").split("/")[-1]
+
+    page.goto(live_server + f"/admin/scheduling/appointment-types/{type_id}/edit")
+    page.fill('input[name="change_reason"]', "Regression test version publish")
+    page.locator('button[type="submit"]', has_text="Publish New Version").click()
+    page.wait_for_url(re.compile(rf"/appointment-types/{type_id}$"))
+    assert "Version Published By" in page.content()
+    assert "Type Created By" in page.content() or "System Administrator" in page.content()
+
+    page.goto(live_server + "/admin/scheduling/appointment-types")
+    page.locator(f'form[action="/admin/scheduling/appointment-types/{type_id}/deactivate"] button').click()
+    page.wait_for_url(re.compile(rf"/appointment-types/{type_id}$"))
+    assert "Last Updated By" in page.content()
+
+
+def test_pending_order_count_badge_on_patient_context_strip(logged_in_page, live_server):
+    """Header pending-order count badge (BUILD_BACKLOG.md follow-up from the
+    Phase 3 diagnostic-order round) -- a fresh patient with no orders shows
+    no badge; placing a diagnostic order via the quick-order route makes a
+    "1 Pending Order" badge appear in the patient-context strip on any page
+    that shows that patient (not just the overview tab)."""
+    page = logged_in_page
+    page.goto(live_server + "/patients/new")
+    page.fill('input[name="first_name"]', "Pendingorder")
+    page.fill('input[name="last_name"]', "Patient")
+    page.locator('button[type="submit"]', has_text="Create Patient").click()
+    page.wait_for_url(re.compile(r"/patients/\d+$"))
+    patient_id = page.url.rstrip("/").split("/")[-1]
+
+    assert "Pending Order" not in page.content()
+
+    token = page.locator('meta[name="csrf-token"]').get_attribute("content")
+    resp = page.request.post(live_server + f"/patients/{patient_id}/orders/quick-order",
+        form={"diagnostic_test_code": "OCT", "csrf_token": token})
+    assert resp.status in (200, 303)
+
+    page.goto(live_server + f"/patients/{patient_id}")
+    assert "1 Pending Order" in page.content()
+
+    # Also visible on another patient-scoped page, not just the overview tab.
+    page.goto(live_server + f"/patients/{patient_id}/edit")
+    assert "1 Pending Order" in page.content()
+
+
+def test_diagnostic_order_deep_links_to_visit_focus_section(logged_in_page, live_server):
+    """Deep-link diagnostic-order completion and interval-due "Order Now" to
+    the originating Visit Focus dashboard section (BUILD_BACKLOG.md follow-
+    ups named in both the Phase 3 and Phase 4 rounds) -- VF/OCT both map to
+    the Posterior Segment/Glaucoma section (ehr.services.lookback_alerts.
+    TEST_CODE_TO_FOCUS_SECTION), so both an interval-due alert and an
+    outstanding-order alert (and the Pending Diagnostic Orders card) offer a
+    "Document in Exam" link that lands on the New Exam form with that
+    section already expanded, not just a status-only action."""
+    page = logged_in_page
+    page.goto(live_server + "/patients/new")
+    page.fill('input[name="first_name"]', "Deeplink")
+    page.fill('input[name="last_name"]', "Testpatient")
+    page.locator('button[type="submit"]', has_text="Create Patient").click()
+    page.wait_for_url(re.compile(r"/patients/\d+$"))
+    patient_id = page.url.rstrip("/").split("/")[-1]
+    page.locator('a[href$="/problems"]').click()
+    page.fill('input[name="diagnosis_name"]', "Primary Open Angle Glaucoma")
+    page.fill('input[name="icd10_code"]', "H40.1132")
+    page.locator('select[name="laterality"]').select_option("OU")
+    page.locator('button[type="submit"]', has_text="Add Problem").click()
+    page.wait_for_load_state("networkidle")
+
+    page.goto(live_server + f"/patients/{patient_id}")
+    deep_link = page.locator(".alert-info").first.locator("a", has_text="Document in Exam")
+    assert deep_link.count() == 1
+    href = deep_link.get_attribute("href")
+    assert f"/exams/new?patient_id={patient_id}&focus=focus-glaucoma" == href
+
+    page.goto(live_server + href)
+    assert page.locator('[data-vf-card="focus-glaucoma"].vf-on').count() == 1
+    assert page.locator('.focus-toggle[data-target="focus-glaucoma"]').is_checked()
+
+    # Ordering the test swaps the interval-due alert for an outstanding-order
+    # one, which carries the same deep-link.
+    page.goto(live_server + f"/patients/{patient_id}")
+    page.locator(".alert-info").first.locator("button", has_text="Order Now").click()
+    page.wait_for_load_state("networkidle")
+    warning_link = page.locator(".alert-warning").first.locator("a", has_text="Document in Exam")
+    assert warning_link.count() == 1
+    assert "focus=focus-glaucoma" in warning_link.get_attribute("href")
+
+    # The Pending Diagnostic Orders card on the overview tab carries it too.
+    pending_row = page.locator("tr", has_text="Virtual Visual Field")
+    assert pending_row.locator("a", has_text="Document in Exam").count() == 1
+
+
+def test_no_horizontal_overflow_at_narrow_viewport(logged_in_page, live_server):
+    """App-wide horizontal-overflow fix (spec §18.3 item 1) -- found at ~400px
+    width on every page, including ones with no wide tables, traced to the
+    topbar's staff-picker (an unbounded "First Last -- Role Label" string in
+    a flex-shrink:0 container) rather than any one page's own content.
+    Checks document.documentElement.scrollWidth <= clientWidth (the exact
+    symptom originally reported) at 400px on a page with no wide tables
+    (dashboard) and one that does have a wide table (patients list, which
+    keeps its own legitimate scoped horizontal scroll via .table-responsive
+    -- this only asserts the outer *page* doesn't scroll, not that the table
+    itself doesn't)."""
+    page = logged_in_page
+    page.set_viewport_size({"width": 400, "height": 800})
+    for path in ["/", "/patients"]:
+        page.goto(live_server + path)
+        page.wait_for_load_state("networkidle")
+        scroll_width = page.evaluate("document.documentElement.scrollWidth")
+        client_width = page.evaluate("document.documentElement.clientWidth")
+        assert scroll_width <= client_width, f"{path}: scrollWidth {scroll_width} > clientWidth {client_width}"
+
+
+def test_record_level_authorization_restricts_provider_to_own_patients(logged_in_page, live_server):
+    """Record-level authorization (spec §37.6 follow-up) -- an
+    optometrist_provider account linked to its clinical Provider identity
+    (User.provider_id, seeded for the demo Dr. Chen/Dr. Rivera accounts) only
+    sees patients it has a real clinical relationship with (an appointment,
+    exam, or prescription under that provider); every other role (System
+    Administrator, used by every other test in this suite) is unaffected.
+    Uses freshly-created patients so this doesn't depend on or disturb
+    seeded/other-test data."""
+    admin_page = logged_in_page
+    admin_page.goto(live_server + "/patients/new")
+    admin_page.fill('input[name="first_name"]', "Authzown")
+    admin_page.fill('input[name="last_name"]', "Patient")
+    admin_page.locator('button[type="submit"]', has_text="Create Patient").click()
+    admin_page.wait_for_url(re.compile(r"/patients/\d+$"))
+    own_patient_id = admin_page.url.rstrip("/").split("/")[-1]
+
+    admin_page.goto(live_server + "/patients/new")
+    admin_page.fill('input[name="first_name"]', "Authzother")
+    admin_page.fill('input[name="last_name"]', "Patient")
+    admin_page.locator('button[type="submit"]', has_text="Create Patient").click()
+    admin_page.wait_for_url(re.compile(r"/patients/\d+$"))
+    other_patient_id = admin_page.url.rstrip("/").split("/")[-1]
+
+    # Dr. Chen (schen@) sees the own-patient exam she's attributed to; the
+    # other patient gets an exam from Dr. Rivera instead, so Dr. Chen has no
+    # relationship to them at all.
+    admin_page.goto(live_server + "/exams/new")
+    admin_page.select_option('select[name="patient_id"]', own_patient_id)
+    admin_page.select_option('select[name="provider_id"]', label="Dr. Chen")
+    admin_page.locator('button[type="submit"]', has_text="Save Exam").click()
+    admin_page.wait_for_url(re.compile(r"/exams/\d+$"))
+
+    admin_page.goto(live_server + "/exams/new")
+    admin_page.select_option('select[name="patient_id"]', other_patient_id)
+    admin_page.select_option('select[name="provider_id"]', label="Dr. Rivera")
+    admin_page.locator('button[type="submit"]', has_text="Save Exam").click()
+    admin_page.wait_for_url(re.compile(r"/exams/\d+$"))
+
+    # Switch to Dr. Chen's own session in the same browser context.
+    admin_page.goto(live_server + "/login")
+    admin_page.fill("#email", "schen@newpathvision.example")
+    admin_page.fill("#password", DEMO_PASSWORD)
+    admin_page.click("button[type=submit]")
+    admin_page.wait_for_url(f"{live_server}/")
+
+    admin_page.goto(live_server + "/patients")
+    # Scoped to the patients table itself, not the whole page -- the top-bar's
+    # "recently viewed" list is a plain browser cookie (npv_recent_patients),
+    # not scoped per logged-in user, so it can still show a patient name from
+    # the previous (admin) session sharing this browser; that's a separate,
+    # already-noted limitation (see BUILD_BACKLOG.md), not what this test is
+    # checking -- the point here is the actual patient list/detail routes.
+    rows_text = " ".join(admin_page.locator("table tbody tr").all_inner_texts())
+    assert "Patient, Authzown" in rows_text
+    assert "Patient, Authzother" not in rows_text
+
+    resp = admin_page.request.get(live_server + f"/patients/{own_patient_id}")
+    assert resp.status == 200
+    resp = admin_page.request.get(live_server + f"/patients/{other_patient_id}")
+    assert resp.status == 404
+
+    # System Administrator (the role every other test in this suite runs as)
+    # is completely unaffected -- still sees both.
+    admin_page.goto(live_server + "/login")
+    admin_page.fill("#email", DEMO_EMAIL)
+    admin_page.fill("#password", DEMO_PASSWORD)
+    admin_page.click("button[type=submit]")
+    admin_page.wait_for_url(f"{live_server}/")
+    admin_page.goto(live_server + "/patients")
+    assert "Patient, Authzown" in admin_page.content()
+    assert "Patient, Authzother" in admin_page.content()
+
+
+def test_appointment_booking_rejects_ineligible_relationship_and_practice_closure(logged_in_page, live_server):
+    """Two still-unautomated items from spec §20.2's baseline regression
+    checklist: booking an ineligible type/relationship combination is
+    rejected with HTTP 400 naming the mismatch, and booking on a recorded
+    practice-closure date is rejected naming the closure -- deleting that
+    closure immediately re-opens the date for booking."""
+    page = logged_in_page
+
+    # A fresh, New-patients-only appointment type.
+    page.goto(live_server + "/admin/scheduling/appointment-types/new")
+    page.fill('input[name="code"]', "NEWONLY_TEST")
+    page.fill('input[name="internal_name"]', "New Patients Only Test")
+    page.fill('input[name="display_name"]', "New Patients Only")
+    page.fill('input[name="calendar_abbreviation"]', "NPO")
+    page.check('input[name="allows_new"]')
+    page.fill('input[name="base_color"]', "#123456")
+    page.check('input[name="active"]')
+    page.locator('button[type="submit"]', has_text="Create Appointment Type").click()
+    page.wait_for_load_state("networkidle")
+
+    page.goto(live_server + "/patients/new")
+    page.fill('input[name="first_name"]', "Ineligible")
+    page.fill('input[name="last_name"]', "Bookingtest")
+    page.locator('button[type="submit"]', has_text="Create Patient").click()
+    page.wait_for_url(re.compile(r"/patients/\d+$"))
+    patient_id = page.url.rstrip("/").split("/")[-1]
+
+    when = (datetime.utcnow() + timedelta(days=10)).strftime("%Y-%m-%dT10:00")
+    page.goto(live_server + f"/appointments/new?patient_id={patient_id}")
+    page.select_option('select[name="appointment_type_version_id"]', label="New Patients Only (NPO)")
+    page.select_option('select[name="relationship"]', "established")
+    page.fill('#relationship_override_reason', "Regression test override")
+    page.fill('#scheduled_at', when)
+    page.locator('button[type="submit"]', has_text="Schedule Appointment").click()
+    page.wait_for_load_state("networkidle")
+    assert "not available to established patients" in page.locator(".alert-error").inner_text()
+
+    # Practice closure: booking on a closed date is rejected; deleting the
+    # closure re-opens it.
+    closure_date = (datetime.utcnow() + timedelta(days=20)).strftime("%Y-%m-%d")
+    page.goto(live_server + "/admin/scheduling/holidays")
+    page.fill('input[name="closure_date"]', closure_date)
+    page.fill('input[name="label"]', "Regression Test Closure")
+    page.locator('button[type="submit"]', has_text="Add Closure").click()
+    page.wait_for_load_state("networkidle")
+    assert closure_date in page.content()
+
+    page.goto(live_server + f"/appointments/new?patient_id={patient_id}")
+    page.fill('#scheduled_at', closure_date + "T10:00")
+    page.locator('button[type="submit"]', has_text="Schedule Appointment").click()
+    page.wait_for_load_state("networkidle")
+    assert "practice is closed" in page.locator(".alert-error").inner_text()
+    assert "Regression Test Closure" in page.locator(".alert-error").inner_text()
+
+    page.goto(live_server + "/admin/scheduling/holidays")
+    page.on("dialog", lambda d: d.accept())
+    page.locator("tr", has_text="Regression Test Closure").locator("button", has_text="Delete").click()
+    page.wait_for_load_state("networkidle")
+    assert "Regression Test Closure" not in page.content()
+
+    page.goto(live_server + f"/appointments/new?patient_id={patient_id}")
+    page.fill('#scheduled_at', closure_date + "T10:00")
+    page.locator('button[type="submit"]', has_text="Schedule Appointment").click()
+    page.wait_for_url(re.compile(r"/appointments/\d+$"))
+
+
+def test_unknown_record_ids_and_placeholder_sections_return_404(logged_in_page, live_server):
+    """Spec §20.1: unknown patient/appointment/exam/prescription detail IDs
+    return 404, and an unrecognized /claims/{section} or /catalog/{section}
+    also returns 404."""
+    page = logged_in_page
+    for path in ["/patients/999999", "/appointments/999999", "/exams/999999",
+                 "/prescriptions/999999", "/claims/not-a-real-section", "/catalog/not-a-real-section"]:
+        resp = page.request.get(live_server + path)
+        assert resp.status == 404, f"{path} returned {resp.status}, expected 404"
+
+
+def test_mrn_conflict_rejected_naming_the_conflicting_patient(logged_in_page, live_server):
+    """Spec §20.2: assigning an MRN already used by another patient is
+    rejected with a clear error naming the conflicting patient; a blank MRN
+    never collides with another blank MRN."""
+    page = logged_in_page
+    page.goto(live_server + "/patients/new")
+    page.fill('input[name="first_name"]', "Mrnholder")
+    page.fill('input[name="last_name"]', "One")
+    page.fill('input[name="mrn"]', "MRN-CONFLICT-TEST")
+    page.locator('button[type="submit"]', has_text="Create Patient").click()
+    page.wait_for_url(re.compile(r"/patients/\d+$"))
+
+    page.goto(live_server + "/patients/new")
+    page.fill('input[name="first_name"]', "Mrnholder")
+    page.fill('input[name="last_name"]', "Two")
+    page.fill('input[name="mrn"]', "MRN-CONFLICT-TEST")
+    page.locator('button[type="submit"]', has_text="Create Patient").click()
+    page.wait_for_load_state("networkidle")
+    assert "MRN-CONFLICT-TEST" in page.content()
+    assert "Mrnholder" in page.content() and "One" in page.content()  # names the conflicting patient
+
+    # Two patients with a blank MRN never collide with each other.
+    page.goto(live_server + "/patients/new")
+    page.fill('input[name="first_name"]', "Blankmrn")
+    page.fill('input[name="last_name"]', "One")
+    page.locator('button[type="submit"]', has_text="Create Patient").click()
+    page.wait_for_url(re.compile(r"/patients/\d+$"))
+    page.goto(live_server + "/patients/new")
+    page.fill('input[name="first_name"]', "Blankmrn")
+    page.fill('input[name="last_name"]', "Two")
+    page.locator('button[type="submit"]', has_text="Create Patient").click()
+    page.wait_for_url(re.compile(r"/patients/\d+$"))
+
+
+def test_appointment_status_cycles_through_all_six_values(logged_in_page, live_server):
+    """Spec §20.2: appointment status can be changed among all six defined
+    values (scheduled, checked_in, in_progress, completed, cancelled,
+    no_show)."""
+    page = logged_in_page
+    page.goto(live_server + "/patients/new")
+    page.fill('input[name="first_name"]', "Statuscycle")
+    page.fill('input[name="last_name"]', "Patient")
+    page.locator('button[type="submit"]', has_text="Create Patient").click()
+    page.wait_for_url(re.compile(r"/patients/\d+$"))
+    patient_id = page.url.rstrip("/").split("/")[-1]
+
+    when = (datetime.utcnow() + timedelta(days=15)).strftime("%Y-%m-%dT10:00")
+    page.goto(live_server + f"/appointments/new?patient_id={patient_id}")
+    page.fill('#scheduled_at', when)
+    page.locator('button[type="submit"]', has_text="Schedule Appointment").click()
+    page.wait_for_url(re.compile(r"/appointments/\d+$"))
+    appt_id = page.url.rstrip("/").split("/")[-1]
+
+    token = page.locator('meta[name="csrf-token"]').get_attribute("content")
+    for status in ["checked_in", "in_progress", "completed", "cancelled", "no_show", "scheduled"]:
+        resp = page.request.post(live_server + f"/appointments/{appt_id}/status",
+            form={"status": status, "csrf_token": token})
+        assert resp.status in (200, 303), f"status={status} returned {resp.status}"
+    page.goto(live_server + f"/appointments/{appt_id}")
+    assert "Scheduled" in page.content() or "scheduled" in page.content()

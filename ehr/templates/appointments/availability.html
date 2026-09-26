@@ -4,21 +4,17 @@
 <div class="page-header"><h1>Provider Availability</h1><a href="/appointments/calendar" class="btn btn-secondary">Back to Calendar</a></div>
 <div class="card">
   <form method="get" style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:flex-end">
-    <div class="form-group" style="margin:0"><label>Provider</label>
-      <select name="provider_id" onchange="this.form.submit()"><option value="">Choose a provider&hellip;</option>
-        {% for p in providers %}<option value="{{ p.id }}" {{ 'selected' if provider_id == p.id }}>Dr. {{ p.last_name }}</option>{% endfor %}</select>
+    <div class="form-group" style="margin:0"><label>Provider <select name="provider_id" onchange="this.form.submit()"><option value="">Choose a provider&hellip;</option>
+        {% for p in providers %}<option value="{{ p.id }}" {{ 'selected' if provider_id == p.id }}>Dr. {{ p.last_name }}</option>{% endfor %}</select></label>
     </div>
-    <div class="form-group" style="margin:0"><label>Appointment Type</label>
-      <select name="appointment_type_version_id" onchange="this.form.submit()"><option value="">Choose a type&hellip;</option>
-        {% for t in types %}<option value="{{ t.id }}" {{ 'selected' if appointment_type_version_id == t.id }}>{{ t.display_name }}</option>{% endfor %}</select>
+    <div class="form-group" style="margin:0"><label>Appointment Type <select name="appointment_type_version_id" onchange="this.form.submit()"><option value="">Choose a type&hellip;</option>
+        {% for t in types %}<option value="{{ t.id }}" {{ 'selected' if appointment_type_version_id == t.id }}>{{ t.display_name }}</option>{% endfor %}</select></label>
     </div>
-    <div class="form-group" style="margin:0"><label>Relationship</label>
-      <select name="relationship" onchange="this.form.submit()"><option value="">Choose&hellip;</option>
+    <div class="form-group" style="margin:0"><label>Relationship <select name="relationship" onchange="this.form.submit()"><option value="">Choose&hellip;</option>
         <option value="new" {{ 'selected' if relationship == 'new' }}>New</option>
-        <option value="established" {{ 'selected' if relationship == 'established' }}>Established</option></select>
+        <option value="established" {{ 'selected' if relationship == 'established' }}>Established</option></select></label>
     </div>
-    <div class="form-group" style="margin:0"><label>Date</label>
-      <input type="date" name="date_str" value="{{ target_date.isoformat() }}" onchange="this.form.submit()">
+    <div class="form-group" style="margin:0"><label>Date <input type="date" name="date_str" value="{{ target_date.isoformat() }}" onchange="this.form.submit()"></label>
     </div>
   </form>
 </div>

@@ -3,13 +3,14 @@ from fastapi import APIRouter, Depends, Request, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
-from ehr.models.database import get_db, Prescription, PrescriptionAddendum, Patient, RxLabOrder
+from ehr.models.database import get_db, Prescription, PrescriptionAddendum, Patient, RxLabOrder, Provider, EyeExam
 from ehr.env_info import EHR_ENV
 from ehr.utils import patient_context
 from ehr.auth.deps import get_current_user
 from ehr.auth.permissions import require_role, RX_VIEW, RX_EDIT, RX_SIGN, ROLE_LABELS
 from ehr.auth import csrf
 from ehr.services import scheduling as sched
+from ehr.services import authz
 
 router = APIRouter(prefix="/prescriptions", tags=["prescriptions"])
 templates = Jinja2Templates(directory="ehr/templates")
@@ -25,7 +26,7 @@ def _i(v):
 
 @router.get("/new", response_class=HTMLResponse, dependencies=[Depends(require_role(*RX_EDIT))])
 def new_rx_form(request: Request, patient_id: int = None, exam_id: int = None, db: Session = Depends(get_db)):
-    ctx_patient = patient_context(db.query(Patient).filter(Patient.id == patient_id).first()) if patient_id else None
+    ctx_patient = patient_context(db.query(Patient).filter(Patient.id == patient_id).first(), db) if patient_id else None
     return templates.TemplateResponse(request, "prescriptions/form.html", {
         "patients": db.query(Patient).order_by(Patient.last_name).all(),
         "providers": sched.bookable_providers(db),
@@ -38,9 +39,30 @@ async def create_rx(request: Request, db: Session = Depends(get_db)):
     csrf.verify_or_403(request.state.csrf_token, form.get("csrf_token"))
     g = lambda k: form.get(k, "")
     gl = lambda k: ", ".join(form.getlist(k))  # comma-join a multi-value (checkbox) field
+
+    # Relationship consistency validation (spec §18.2 item 2, long-tracked gap):
+    # patient_id and provider_id must reference real records, and an exam_id
+    # (when given -- a prescription can be written without a linked exam) must
+    # both exist and belong to the same patient. All server-side, since the
+    # form's own <select> options only ever offer valid choices -- this guards
+    # a forged/hand-crafted request, not a normal UI submission.
+    patient_id = _i(g("patient_id"))
+    provider_id = _i(g("provider_id"))
+    exam_id = _i(g("exam_id"))
+    if not patient_id or not db.query(Patient).filter(Patient.id == patient_id).first():
+        return HTMLResponse("Invalid patient.", status_code=400)
+    if not provider_id or not db.query(Provider).filter(Provider.id == provider_id).first():
+        return HTMLResponse("Invalid provider.", status_code=400)
+    if exam_id:
+        exam = db.query(EyeExam).filter(EyeExam.id == exam_id).first()
+        if not exam:
+            return HTMLResponse("Invalid exam.", status_code=400)
+        if exam.patient_id != patient_id:
+            return HTMLResponse("The selected exam does not belong to the selected patient.", status_code=400)
+
     rx = Prescription(
-        patient_id=int(g("patient_id")), provider_id=int(g("provider_id")),
-        exam_id=_i(g("exam_id")), rx_type=g("rx_type") or "glasses",
+        patient_id=patient_id, provider_id=provider_id,
+        exam_id=exam_id, rx_type=g("rx_type") or "glasses",
         issue_date=g("issue_date"), expiry_date=g("expiry_date"),
         od_sphere=_f(g("od_sphere")), od_cylinder=_f(g("od_cylinder")), od_axis=_i(g("od_axis")),
         od_add=_f(g("od_add")), od_prism=_f(g("od_prism")), od_base=g("od_base"),
@@ -56,16 +78,18 @@ async def create_rx(request: Request, db: Session = Depends(get_db)):
 @router.get("/{rx_id}", response_class=HTMLResponse, dependencies=[Depends(require_role(*RX_VIEW))])
 def rx_detail(request: Request, rx_id: int, db: Session = Depends(get_db)):
     rx = db.query(Prescription).filter(Prescription.id == rx_id).first()
-    if not rx: return HTMLResponse("Not found", status_code=404)
+    if not rx or not authz.can_view_patient(db, request.state.user, rx.patient_id):
+        return HTMLResponse("Not found", status_code=404)
     lab_orders = (db.query(RxLabOrder).filter(RxLabOrder.rx_id == rx_id)
                   .order_by(RxLabOrder.placed_at.desc()).all())
     return templates.TemplateResponse(request, "prescriptions/detail.html",
-        {"rx": rx, "lab_orders": lab_orders, "context_patient": patient_context(rx.patient)})
+        {"rx": rx, "lab_orders": lab_orders, "context_patient": patient_context(rx.patient, db)})
 
 @router.get("/{rx_id}/print", response_class=HTMLResponse, dependencies=[Depends(require_role(*RX_VIEW))])
 def rx_print(request: Request, rx_id: int, db: Session = Depends(get_db)):
     rx = db.query(Prescription).filter(Prescription.id == rx_id).first()
-    if not rx: return HTMLResponse("Not found", status_code=404)
+    if not rx or not authz.can_view_patient(db, request.state.user, rx.patient_id):
+        return HTMLResponse("Not found", status_code=404)
     return templates.TemplateResponse(request, "prescriptions/print.html", {"rx": rx})
 
 

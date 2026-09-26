@@ -40,6 +40,26 @@ def _seed_users(db):
     return created
 
 
+def _link_demo_provider_users(db):
+    """Record-level authorization (BUILD_BACKLOG.md §37.6 follow-up): links
+    each seeded optometrist_provider login account to its matching Provider
+    row, so ehr.services.authz has a real "own patients" set to compute for
+    the demo accounts. Idempotent and independent of seeding order/idempotency
+    branches below -- runs every time, a no-op once already linked, so it also
+    backfills an already-seeded database upgrading to this feature."""
+    links = [
+        ("schen@newpathvision.example", "Sarah", "Chen"),
+        ("mrivera@newpathvision.example", "Marcus", "Rivera"),
+    ]
+    for email, first, last in links:
+        user = db.query(User).filter(User.email == email).first()
+        if not user or user.provider_id:
+            continue
+        provider = db.query(Provider).filter(Provider.first_name == first, Provider.last_name == last).first()
+        if provider:
+            user.provider_id = provider.id
+
+
 def seed_demo_data(db):
     """The actual seeding logic (accounts, then demo providers/patients/
     appointments/exam data), separate from running migrations first -- so it
@@ -67,12 +87,15 @@ def seed_demo_data(db):
         print()
 
     if db.query(Provider).count() > 0:
+        _link_demo_provider_users(db)
+        db.commit()
         print("Already seeded.")
         db.close()
         return
     p1 = Provider(first_name="Sarah", last_name="Chen", license_number="OD-12345", npi="1234567890")
     p2 = Provider(first_name="Marcus", last_name="Rivera", license_number="OD-67890", npi="0987654321")
     db.add_all([p1, p2]); db.flush()
+    _link_demo_provider_users(db)
 
     # Default Mon-Fri 9am-5pm working hours for both seeded providers, so the
     # open-slot availability search (ehr/services/scheduling.py's
