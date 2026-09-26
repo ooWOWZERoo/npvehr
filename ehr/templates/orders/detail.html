@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}Lab Order &mdash; New Path Vision EHR{% endblock %}
+{% block content %}
+{% set current_user = request.state.user %}
+{% set can_edit = current_user and current_user.role in ('system_administrator', 'practice_administrator', 'optician') %}
+{% set status_label = {'placed': 'Placed', 'in_fabrication': 'In Fabrication', 'shipped': 'Shipped',
+                        'received': 'Received', 'dispensed': 'Dispensed', 'cancelled': 'Cancelled'} %}
+{% set badge_class = {'placed': 'badge-ordered', 'in_fabrication': 'badge-in_progress', 'shipped': 'badge-scheduled',
+                       'received': 'badge-checked_in', 'dispensed': 'badge-completed', 'cancelled': 'badge-cancelled'} %}
+<div class="page-header">
+  <h1>Lab Order #{{ order.id }}
+    <span class="badge {{ badge_class[order.status] }}" style="margin-left:0.5rem;vertical-align:middle">{{ status_label[order.status] }}</span>
+  </h1>
+  <div style="display:flex;gap:0.5rem">
+    <a href="/patients/{{ order.patient_id }}" class="btn btn-secondary btn-sm">Patient</a>
+    <a href="/prescriptions/{{ order.rx_id }}" class="btn btn-secondary btn-sm">Prescription</a>
+    <a href="/orders/" class="btn btn-secondary btn-sm">All Orders</a>
+  </div>
+</div>
+<div class="detail-grid">
+  <div class="card"><h3>Order Info</h3><dl class="dl-grid">
+    <dt>Patient</dt><dd><a href="/patients/{{ order.patient_id }}">{{ order.patient.last_name }}, {{ order.patient.first_name }}</a></dd>
+    <dt>Type</dt><dd>{{ order.order_type|title }}</dd>
+    <dt>Lab</dt><dd>{{ order.lab_name }}</dd>
+    <dt>ETA</dt><dd>{{ order.eta_date or '—' }}</dd>
+    <dt>Placed</dt><dd>{{ order.placed_at.strftime('%Y-%m-%d %I:%M %p') if order.placed_at else '—' }}
+      {% if order.placed_by %}by {{ order.placed_by.first_name }} {{ order.placed_by.last_name }}{% endif %}</dd>
+    {% if order.remake_of_order_id %}<dt>Remake Of</dt><dd><a href="/orders/{{ order.remake_of_order_id }}">Order #{{ order.remake_of_order_id }}</a></dd>{% endif %}
+    {% if order.notes %}<dt>Notes</dt><dd>{{ order.notes }}</dd>{% endif %}
+  </dl></div>
+  <div class="card"><h3>Status Timeline</h3><dl class="dl-grid">
+    <dt>Placed</dt><dd>{{ order.placed_at.strftime('%Y-%m-%d %I:%M %p') if order.placed_at else '—' }}</dd>
+    <dt>Shipped</dt><dd>{{ order.shipped_at.strftime('%Y-%m-%d %I:%M %p') if order.shipped_at else '—' }}</dd>
+    <dt>Received</dt><dd>{{ order.received_at.strftime('%Y-%m-%d %I:%M %p') if order.received_at else '—' }}</dd>
+    <dt>Dispensed</dt><dd>{{ order.dispensed_at.strftime('%Y-%m-%d %I:%M %p') if order.dispensed_at else '—' }}
+      {% if order.dispensed_by %}by {{ order.dispensed_by.first_name }} {{ order.dispensed_by.last_name }}{% endif %}</dd>
+    {% if order.status == 'cancelled' %}
+    <dt>Cancelled</dt><dd>{{ order.cancelled_at.strftime('%Y-%m-%d %I:%M %p') if order.cancelled_at else '—' }}
+      {% if order.cancelled_reason %}&mdash; {{ order.cancelled_reason }}{% endif %}</dd>
+    {% endif %}
+  </dl></div>
+</div>
+
+{% if can_edit and next_statuses %}
+<div class="card" style="margin-top:1rem"><h3>Update Status</h3>
+  <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+    {% for s in next_statuses %}
+    <form method="post" action="/orders/{{ order.id }}/transition">
+      <input type="hidden" name="new_status" value="{{ s }}">
+      <button type="submit" class="btn btn-sm btn-primary">Mark {{ status_label[s] }}</button>
+    </form>
+    {% endfor %}
+  </div>
+  <form method="post" action="/orders/{{ order.id }}/transition" style="display:flex;gap:0.5rem;margin-top:0.75rem"
+        onsubmit="return confirm('Cancel this lab order?');">
+    <input type="hidden" name="new_status" value="cancelled">
+    <input type="text" name="cancelled_reason" placeholder="Cancellation reason (optional)" style="flex:1">
+    <button type="submit" class="btn btn-sm btn-secondary">Cancel Order</button>
+  </form>
+</div>
+{% endif %}
+
+{% if can_edit and order.status in ('dispensed', 'cancelled') %}
+<div class="card" style="margin-top:1rem"><h3>Reorder / Remake</h3>
+  <p style="color:var(--ink-muted);font-size:0.9rem">Place a new linked order against the same prescription and lab
+    -- for a warranty redo or a job that came back wrong -- without losing this order's own history.</p>
+  <form method="post" action="/orders/{{ order.id }}/remake">
+    <button type="submit" class="btn btn-sm btn-secondary">Create Remake Order</button>
+  </form>
+</div>
+{% endif %}
+
+{% if remakes %}
+<div class="card" style="margin-top:1rem"><h3>Remakes of This Order</h3>
+  <ul style="margin:0;padding-left:1.2rem">
+    {% for r in remakes %}
+    <li><a href="/orders/{{ r.id }}">Order #{{ r.id }}</a> &mdash;
+      <span class="badge {{ badge_class[r.status] }}">{{ status_label[r.status] }}</span></li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+{% endblock %}

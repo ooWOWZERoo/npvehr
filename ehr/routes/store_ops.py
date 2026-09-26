@@ -1,5 +1,6 @@
-"""Store Operations, Orders, Claim Management, and Catalog sidebar sections
-(competitive-review addition). Daily Closing is real/functional; everything
+"""Store Operations, Claim Management, and Catalog sidebar sections
+(competitive-review addition). Daily Closing is real/functional; Order
+Management is real (see ehr/routes/rx_lab_orders.py, "/orders/"); everything
 else here is an intentionally polished placeholder reserving the information
 architecture -- see the report for what's built vs. stubbed.
 """
@@ -86,22 +87,6 @@ def change_payments(request: Request):
         ["Enable or disable individual payment types (Cash, Check, Credit Card, ATM/Debit, CareCredit, American Express, etc.).",
          "Configure processor/merchant account details per payment type.",
          "Set default display order for the checkout and Daily Closing screens."])
-
-
-# --------------------------------------------------------------------------
-# Orders
-# --------------------------------------------------------------------------
-
-@router.get("/orders/", response_class=HTMLResponse, dependencies=[Depends(require_role(*CATALOG_ORDERS_VIEW))])
-def order_management(request: Request):
-    return _placeholder(request, "Order Management", "&#128230;",
-        "Order Management will track optical lab orders -- frames and lenses sent out for a patient's "
-        "glasses -- from the moment they're placed with a lab through fabrication and arrival in-office, "
-        "so staff always know the status of a patient's order without calling the lab.",
-        ["Create and track frame and lens orders against a specific patient and Rx.",
-         "Lab selection, order status (placed, in fabrication, shipped, received, dispensed), and ETA tracking.",
-         "Notifications when an order is ready for patient pickup.",
-         "Reorder/remake tracking for warranty and redo jobs."])
 
 
 # --------------------------------------------------------------------------

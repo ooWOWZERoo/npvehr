@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Place Lab Order &mdash; New Path Vision EHR{% endblock %}
+{% block content %}
+<div class="page-header"><h1>Place Lab Order</h1></div>
+<p style="color:var(--ink-muted);margin-top:-0.75rem">
+  For {{ rx.patient.last_name }}, {{ rx.patient.first_name }} &mdash; {{ rx.rx_type|title }} Rx signed
+  {{ rx.signed_at.strftime('%Y-%m-%d') if rx.signed_at else '' }} by Dr. {{ rx.signed_by.last_name }}.
+</p>
+<div class="card form-card">
+  <form method="post" action="/orders/new">
+    <input type="hidden" name="rx_id" value="{{ rx.id }}">
+    <div class="form-row cols-3">
+      <div class="form-group"><label>Order Type*</label>
+        <select name="order_type" required>
+          <option value="glasses" {{ 'selected' if rx.rx_type == 'glasses' }}>Glasses</option>
+          <option value="contacts" {{ 'selected' if rx.rx_type == 'contacts' }}>Contacts</option>
+        </select>
+      </div>
+      <div class="form-group"><label>Lab*</label>
+        <input name="lab_name" list="common_labs" required placeholder="Select or type a lab name">
+        <datalist id="common_labs">
+          {% for lab in common_labs %}<option value="{{ lab }}">{% endfor %}
+        </datalist>
+      </div>
+      <div class="form-group"><label>Expected Ready (ETA)</label><input type="date" name="eta_date"></div>
+    </div>
+    <div class="form-group"><label>Notes</label><textarea name="notes" rows="2" placeholder="Anything the lab or front desk should know"></textarea></div>
+    <button type="submit" class="btn btn-primary">Place Order</button>
+    <a href="/prescriptions/{{ rx.id }}" class="btn btn-secondary">Cancel</a>
+  </form>
+</div>
+{% endblock %}

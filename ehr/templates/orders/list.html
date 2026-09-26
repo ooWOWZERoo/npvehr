@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Order Management &mdash; New Path Vision EHR{% endblock %}
+{% block content %}
+{% set badge_class = {'placed': 'badge-ordered', 'in_fabrication': 'badge-in_progress', 'shipped': 'badge-scheduled',
+                       'received': 'badge-checked_in', 'dispensed': 'badge-completed', 'cancelled': 'badge-cancelled'} %}
+{% set status_label = {'placed': 'Placed', 'in_fabrication': 'In Fabrication', 'shipped': 'Shipped',
+                        'received': 'Received', 'dispensed': 'Dispensed', 'cancelled': 'Cancelled'} %}
+<div class="page-header">
+  <h1>Order Management</h1>
+</div>
+<p style="color:var(--ink-muted);margin-top:-0.75rem">Optical lab orders -- frames and lenses, or contacts, sent to a
+  lab against a signed prescription -- tracked from placement through fabrication, shipping, and dispensing to the
+  patient. {{ open_count }} order{{ 's' if open_count != 1 else '' }} currently open.</p>
+<div class="card" style="margin-bottom:1rem">
+  <form method="get" style="display:flex;gap:0.5rem;align-items:center">
+    <label for="status" style="font-size:0.85rem;color:var(--ink-muted)">Filter by status:</label>
+    <select name="status" id="status" onchange="this.form.submit()">
+      <option value="" {{ 'selected' if not status_filter }}>All</option>
+      {% for s in ['placed', 'in_fabrication', 'shipped', 'received', 'dispensed', 'cancelled'] %}
+      <option value="{{ s }}" {{ 'selected' if status_filter == s }}>{{ status_label[s] }}</option>
+      {% endfor %}
+    </select>
+  </form>
+</div>
+<div class="card">
+  <div class="table-responsive">
+  <table>
+    <thead><tr><th>Placed</th><th>Patient</th><th>Type</th><th>Lab</th><th>ETA</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+    {% for o in orders %}
+      <tr>
+        <td>{{ o.placed_at.strftime('%Y-%m-%d') if o.placed_at else '—' }}</td>
+        <td><a href="/patients/{{ o.patient_id }}">{{ o.patient.last_name }}, {{ o.patient.first_name }}</a></td>
+        <td>{{ o.order_type|title }}</td>
+        <td>{{ o.lab_name }}</td>
+        <td>{{ o.eta_date or '—' }}</td>
+        <td><span class="badge {{ badge_class[o.status] }}">{{ status_label[o.status] }}</span>
+          {% if o.remake_of_order_id %}<span class="badge-relationship" style="margin-left:0.3rem">Remake</span>{% endif %}</td>
+        <td><a href="/orders/{{ o.id }}" class="btn btn-sm btn-secondary">View</a></td>
+      </tr>
+    {% else %}<tr><td colspan="7" style="text-align:center;color:var(--ink-muted)">No lab orders {{ 'match this filter' if status_filter else 'yet' }}.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+{% endblock %}

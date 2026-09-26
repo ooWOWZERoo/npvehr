@@ -1118,6 +1118,58 @@ class PrescriptionAddendum(Base):
     rx = relationship("Prescription", back_populates="addenda", foreign_keys=[rx_id])
     author = relationship("User", foreign_keys=[author_user_id])
 
+
+class RxLabOrder(Base):
+    """Real Order Management: a written (signed) Prescription's optical lab
+    fulfillment -- frames/lenses or contacts sent out to a lab and tracked
+    through fabrication, shipping, and dispensing to the patient. This
+    replaces the "/orders/" sidebar placeholder in ehr/routes/store_ops.py.
+
+    Deliberately a separate table from DiagnosticOrder: that table tracks
+    clinical *testing* orders (OCT, visual field); this one tracks the
+    *optical goods manufacturing* pipeline for a specific Rx. `status` is a
+    plain String validated in ehr.services.rx_lab_orders, matching this
+    app's established convention for lifecycle status columns rather than a
+    DB enum.
+
+    A lab order can only be placed against a signed Prescription -- signing
+    is the "this Rx is final" attestation (see Prescription.signed_at), so
+    it's the natural gate for "this is now a real order sent to a lab."
+    """
+    __tablename__ = "rx_lab_orders"
+    id = Column(Integer, primary_key=True, index=True)
+    rx_id = Column(Integer, ForeignKey("prescriptions.id"), nullable=False)
+    patient_id = Column(Integer, ForeignKey("patients.id"), nullable=False)  # denormalized, matches DiagnosticOrder.patient_id
+    order_type = Column(String, nullable=False)  # glasses | contacts
+    lab_name = Column(String, nullable=False)
+    status = Column(String, default="placed")  # placed | in_fabrication | shipped | received | dispensed | cancelled
+    eta_date = Column(String)  # free-text date string, same convention as Prescription.issue_date/expiry_date
+    placed_by_user_id = Column(Integer, ForeignKey("users.id"))
+    placed_at = Column(DateTime, default=datetime.utcnow)
+    shipped_at = Column(DateTime)
+    received_at = Column(DateTime)
+    dispensed_at = Column(DateTime)
+    dispensed_by_user_id = Column(Integer, ForeignKey("users.id"))
+    cancelled_at = Column(DateTime)
+    cancelled_reason = Column(Text)
+    # Reorder/remake tracking (BUILD_BACKLOG.md's "/orders/" placeholder
+    # bullet list): a remake is its own order row, linked back to the order
+    # it's redoing, rather than mutating the original -- the original's
+    # history (what was sent, when, to which lab) stays intact.
+    remake_of_order_id = Column(Integer, ForeignKey("rx_lab_orders.id"))
+    notes = Column(Text)
+
+    rx = relationship("Prescription")
+    patient = relationship("Patient")
+    placed_by = relationship("User", foreign_keys=[placed_by_user_id])
+    dispensed_by = relationship("User", foreign_keys=[dispensed_by_user_id])
+    remake_of = relationship("RxLabOrder", remote_side=[id])
+
+    __table_args__ = (
+        Index("ix_rx_lab_orders_patient_status", "patient_id", "status"),
+        Index("ix_rx_lab_orders_rx", "rx_id"),
+    )
+
 # ---------------------------------------------------------------------------
 # Authentication / RBAC / auth-audit models (real-auth pass). See
 # ehr/auth/security.py for the password-hashing scheme and ehr/auth/deps.py
