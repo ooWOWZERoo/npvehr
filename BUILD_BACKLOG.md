@@ -1,6 +1,6 @@
 # New Path Vision EHR — Master Build Backlog
 
-**Status:** Living tracking document. **Baseline as of:** spec v2.51 / research doc v2.24 (2026-09-27).
+**Status:** Living tracking document. **Baseline as of:** spec v2.53 / research doc v2.24 (2026-09-27).
 
 ## Purpose and how to use this document
 
@@ -190,7 +190,7 @@ Tracked here for visibility; the authoritative detail lives in the spec's go-liv
 ## 10. Product Quality / UX (spec §18.3)
 
 - [x] **Form-label association fixed app-wide. Done, v2.49** — see baseline spec §76 (§18.3 item 2). 203 sibling `<label>Text</label><input>` occurrences across 27 templates converted to nested `<label>Text <input></label>`. No full accessibility audit beyond this (color-contrast, ARIA, keyboard-nav remain unaudited).
-- [ ] No user-friendly validation or confirmation messages, including for photo-upload failures
+- [x] **Photo/document upload failures now surface a user-facing message. Done, v2.52** — see baseline spec §79 (§18.3 item 4). A disallowed photo extension previously saved the patient record anyway with no photo and no indication anything was wrong; now the create/edit form re-renders with a clear error and creates/saves nothing. Same fix for the per-patient document upload (redirect-preserved flash message). Other list-screen/form confirmation messaging remains as-is.
 - [x] **Pagination/search/filters added to list screens. Done, v2.51** — see baseline spec §78 (§36.5 item 13). New `ehr.services.pagination` (page-number offset/limit, filter-preserving page links) applied to the patients list (search already existed), the previously-unbounded flat appointments list (gained provider/status/date-range filters), and the admin Users and Providers lists (gained name/email search). Calendar/board views are unaffected (they fetch a bounded date range via JSON, not an unbounded list).
 - [ ] Dependencies specify minimum versions only (`>=`), no upper bounds or lock file — reduces build reproducibility
 - [ ] Client's final logo asset still not supplied; navigation/print header show a placeholder mark
@@ -201,7 +201,7 @@ Tracked here for visibility; the authoritative detail lives in the spec's go-liv
 ## 11. Testing & QA
 
 - [~] **Expand Playwright coverage toward spec §20's baseline regression checklist. Partial, v2.49** — see baseline spec §75 (§36.5 item 5). 5 new tests: ineligible type/relationship rejection, practice-closure booking rejection, 404s on unknown IDs/placeholder sections, MRN conflict rejection, appointment status cycling. Most of §20 remains manual-only (dashboard counts, photo-upload edge cases, automated migration-idempotency suite, etc.) — large checklist, picked independently-valuable items rather than 100% automation in one pass.
-- [ ] No automated migration test suite — migrations are verified manually/via synthetic-database checks each round, not as a standing automated test (§18.3 item 7's note)
+- [x] **Automated migration test suite. Done, v2.53** — see baseline spec §80 (§18.3 item 7). New `tests/test_migrations.py` (unit-level, no browser/live server needed): fresh-database boot, idempotent-rerun (byte-for-byte column/row-count comparison), duplicate-id guard, and `_pk_ddl`/`_is_postgres` dialect-branch coverage via a fake connection. The manual fresh-DB/idempotent checks this app's build process has always done by hand are now also a standing automatic regression test.
 
 ---
 

@@ -4174,3 +4174,64 @@ No pagination added to the Appointment Types, Diagnostic Tests, Resources, Avail
 | New files | `ehr/services/pagination.py`, `ehr/templates/_pagination.html`. |
 | Updated | `ehr/routes/{patients,appointments,auth,admin_scheduling}.py`, `ehr/templates/{patients/list,appointments/list,admin/users/list,admin/scheduling/providers_list}.html`, `ehr/static/css/app.css` (new `.pagination` styles). `tests/test_smoke.py` gained two new tests. |
 | Explicitly not done | No pagination on the smaller practice-configuration admin lists (Appointment Types, Diagnostic Tests, Resources, Availability Templates, Holidays). No configurable page size or full-text search. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |
+
+## 79. User-Facing Validation Message for Photo/Document Upload Failures (v2.52)
+
+### 79.1 Origin
+
+Long-tracked v1.x gap (spec §18.3 item 4), explicitly framed as an open question: "uploading a photo with a disallowed extension does not crash the form (currently silently ignored — confirm this is the intended behavior or replace with a validation message)." `save_patient_photo`/`save_patient_document` (`ehr/services/media.py`) both silently returned `None` on a disallowed extension, and every calling route simply proceeded without a photo/document and without telling the user anything went wrong.
+
+### 79.2 What changed
+
+**New `ehr.services.media.photo_upload_error(upload)`/`document_upload_error(upload)`**: return a clear, user-facing message naming the rejected filename and the allowed extensions, or `None` when the upload is fine (including "nothing was uploaded," since both are optional). The underlying `save_patient_photo`/`save_patient_document` functions are unchanged.
+
+**Patient create/edit** (`POST /patients/new`, `POST /patients/{id}/edit`): a disallowed photo extension now re-renders the form with the error message and creates/saves nothing, the same "re-render with `error`, no partial write" pattern already used for an MRN conflict -- rather than silently creating/updating the record without the photo.
+
+**Per-patient document upload** (`POST /patients/{id}/correspondence/documents`): a disallowed extension now redirects back to the Documents tab with the error message preserved via a query-string flash (`?upload_error=...`), rendered as an alert banner above the upload form, instead of a silent no-op redirect.
+
+### 79.3 Verified
+
+`python3 -m py_compile` on every touched file; Jinja parse-check on the touched template. New Playwright test `test_photo_and_document_upload_rejects_disallowed_extension_with_message` confirms a disallowed-extension photo upload shows the error and creates no patient record, and a disallowed-extension document upload shows the error and adds no document row. Full suite (78 tests, up from 77) passed after this change.
+
+### 79.4 Explicitly not done
+
+No broader confirmation-message pass beyond the two named upload paths (spec §18.3 item 4's own text names photo-upload failures specifically) -- other silent-redirect patterns elsewhere in the app (if any) are unaudited. No client-side (JavaScript) pre-validation of the file extension before submit -- the check is server-side only, matching this app's existing "validate on the server, not just in the browser" posture. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6.
+
+**Version 2.52 change log (relative to v2.51) — Upload-Failure Validation Messages:**
+
+| Area | Change |
+| --- | --- |
+| Fix | A disallowed photo or document extension now shows a clear user-facing error and saves nothing, instead of silently proceeding without the file. |
+| Updated | `ehr/services/media.py`, `ehr/routes/patients.py`, `ehr/templates/patients/correspondence_documents_tab.html`. `tests/test_smoke.py` gained one new test. |
+| Explicitly not done | No broader confirmation-message audit beyond the two named upload paths. No client-side pre-validation. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |
+
+## 80. Automated Migration Test Suite (v2.53)
+
+### 80.1 Origin
+
+Long-tracked v1.x gap (spec §18.3 item 7's own note): "migrations are verified manually/via synthetic-database checks each round, not as a standing automated test." Every round of this project has run the same manual ritual (fresh-SQLite boot, idempotent re-run, sometimes an upgrade-in-place check) by hand rather than as a test that fails CI if broken.
+
+### 80.2 What changed
+
+**New `tests/test_migrations.py`**, unit-level (a throwaway file-backed SQLite database via a fresh `sqlalchemy.create_engine`, no Playwright/live server needed -- runs in well under a second):
+
+- `test_fresh_database_migration_boot_is_clean` -- runs `run_column_migrations` → `create_all()` → `run_post_create_all_migrations` against a brand-new database and confirms every registered migration id ends up recorded in `schema_migrations`.
+- `test_migration_rerun_against_already_migrated_database_is_idempotent` -- runs the full sequence twice and asserts every table's column set and row count are byte-for-byte identical before and after the second pass, formalizing the exact manual check this app's build process has always relied on.
+- `test_every_registered_migration_id_is_unique` -- guards against a copy/paste mistake where a duplicate id would silently shadow one migration under `_applied()`'s id-keyed lookup.
+- `test_pk_ddl_and_dialect_detection_for_both_supported_databases` -- exercises `_pk_ddl`/`_is_postgres` (the one place migration DDL genuinely branches between SQLite and Postgres/Neon) against both dialect names via a lightweight fake connection object, since a real Postgres instance isn't available in this environment.
+
+### 80.3 Verified
+
+All four new tests pass in isolation (0.65s) and as part of the full suite (82 tests, up from 78). `python3 -m py_compile` on the new test file.
+
+### 80.4 Explicitly not done
+
+No real Postgres instance exercised (the dialect-branch test uses a fake connection object, not an actual Postgres/Neon connection) -- still a gap, but a smaller one than "zero coverage of the branch at all." No automated *upgrade-in-place from an arbitrary prior schema snapshot* test (each round's manual verification against a real pre-existing database, as done for migrations `044`/`045` earlier in this session, remains a manual step for anything genuinely novel) -- the new suite covers "fresh boot" and "re-run against what it just built," which is what a from-scratch `run_column_migrations`/`run_post_create_all_migrations` pass can exercise generically for every past and future migration without needing a library of historical schema snapshots. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6.
+
+**Version 2.53 change log (relative to v2.52) — Automated Migration Test Suite:**
+
+| Area | Change |
+| --- | --- |
+| New capability | The manual fresh-DB-boot and idempotent-rerun migration checks are now a standing automated test suite. |
+| New files | `tests/test_migrations.py` (4 new tests). |
+| Explicitly not done | No real Postgres instance exercised. No automated arbitrary-prior-schema upgrade-in-place test. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |

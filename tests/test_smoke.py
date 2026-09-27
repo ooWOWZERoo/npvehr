@@ -2448,3 +2448,38 @@ def test_appointment_list_filters_and_pagination(logged_in_page, live_server):
     # shared session-scoped database) shows the pagination summary.
     page.goto(live_server + "/appointments/")
     assert page.locator(".pagination").count() == 1
+
+
+def test_photo_and_document_upload_rejects_disallowed_extension_with_message(logged_in_page, live_server):
+    """Spec §18.3 item 4 / §36.5 follow-up: "no user-friendly validation or
+    confirmation messages, including for photo-upload failures." A patient
+    photo with a disallowed extension previously saved the record anyway
+    with no photo and no indication anything was wrong; now the form
+    re-renders with a clear error and creates nothing. Same fix for the
+    per-patient document upload, via a redirect-preserved flash message."""
+    page = logged_in_page
+    page.goto(live_server + "/patients/new")
+    page.fill('input[name="first_name"]', "Badphoto")
+    page.fill('input[name="last_name"]', "Uploadtest")
+    page.locator('input[type="file"][name="photo"]').set_input_files(
+        files=[{"name": "not-a-photo.exe", "mimeType": "application/octet-stream", "buffer": b"nope"}])
+    page.locator('button[type="submit"]', has_text="Create Patient").click()
+    page.wait_for_load_state("networkidle")
+    assert "not a supported photo type" in page.content()
+    page.goto(live_server + "/patients?last_name=Uploadtest")
+    assert "Badphoto" not in page.content()  # rejected before the record was created
+
+    page.goto(live_server + "/patients/new")
+    page.fill('input[name="first_name"]', "Gooddoc")
+    page.fill('input[name="last_name"]', "Uploadtest")
+    page.locator('button[type="submit"]', has_text="Create Patient").click()
+    page.wait_for_url(re.compile(r"/patients/\d+$"))
+    patient_id = page.url.rstrip("/").split("/")[-1]
+
+    page.goto(live_server + f"/patients/{patient_id}/correspondence/documents")
+    page.locator('input[type="file"][name="document"]').set_input_files(
+        files=[{"name": "malware.exe", "mimeType": "application/octet-stream", "buffer": b"nope"}])
+    page.locator('button[type="submit"]', has_text="Upload").click()
+    page.wait_for_load_state("networkidle")
+    assert "not a supported document type" in page.content()
+    assert page.locator("table tbody tr", has_text="malware.exe").count() == 0

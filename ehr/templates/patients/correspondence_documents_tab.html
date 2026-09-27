@@ -2,6 +2,7 @@
 {% block wcontent %}
 <div class="card" style="margin-bottom:1rem">
   <h2>Upload a Document</h2>
+  {% if upload_error %}<div class="alert alert-error" role="alert">{{ upload_error }}</div>{% endif %}
   <form method="post" action="/patients/{{ patient.id }}/correspondence/documents" enctype="multipart/form-data">
     <div class="form-row cols-3">
       <div class="form-group"><label>File <input type="file" name="document" required></label></div>
