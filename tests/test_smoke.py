@@ -2794,9 +2794,9 @@ def test_return_visit_recommendation_carry_forward(logged_in_page, live_server):
     _test_chip_checkbox(page, "VF").check()
     banner = page.locator("#followup-ncci-warning-banner")
     assert not banner.is_visible()  # VF alone -- no conflicting pair checked
-    issues = page.locator("#ap_validation_issues")
+    issues = page.locator("#followup_validation_issue")
     assert issues.is_visible()
-    assert "Reason for Follow-up" in issues.inner_text()
+    assert "reason" in issues.inner_text().lower()
 
     page.fill("#follow_up_reason", "Recheck visual field in 3 months for glaucoma monitoring")
     assert not issues.is_visible()

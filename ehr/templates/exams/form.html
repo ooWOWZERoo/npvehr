@@ -506,6 +506,7 @@
       {% endfor %}
     </div>
     <div id="followup-ncci-warning-banner" class="alert alert-warning" style="display:none"></div>
+    <div id="followup_validation_issue" style="display:none;margin-bottom:var(--space-2);font-size:0.85rem;color:#b45309"></div>
     <div class="form-group"><label>Reason for Follow-up <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; required whenever a return interval or a follow-up test above is set; shown to whoever books the next appointment</span>
       <textarea name="follow_up_reason" id="follow_up_reason"></textarea></label>
     </div>
@@ -1139,9 +1140,6 @@ function checkFollowUpNcciWarnings() {
         issues.push('Glaucoma diagnosis requires a 7th-character stage (Mild/Moderate/Severe/Indeterminate) — select Glaucoma Stage.');
       }
     }
-    if ((fieldValue('follow_up_weeks') || checkedValues('return_visit_diagnostic_orders').length) && !fieldValue('follow_up_reason')) {
-      issues.push('A return interval or follow-up test is set without a Reason for Follow-up — the front desk and next visit won\'t know why the patient is coming back.');
-    }
     return issues;
   }
 
@@ -1154,6 +1152,22 @@ function checkFollowUpNcciWarnings() {
       validationIssuesEl.style.display = 'none';
       validationIssuesEl.innerHTML = '';
     }
+  }
+
+  // Kept separate from collectValidationIssues()/#ap_validation_issues above:
+  // that banner sits at the top of Assessment & Plan, but the Reason for
+  // Follow-up field it would be warning about lives down in Return Visit
+  // Planning -- a warning shown far from the field it describes is easy to
+  // miss or misread as applying to something else on screen. This one
+  // renders right next to the field it's actually about instead.
+  var followupValidationIssueEl = document.getElementById('followup_validation_issue');
+  function renderFollowupValidationIssue() {
+    var needsReason = (fieldValue('follow_up_weeks') || checkedValues('return_visit_diagnostic_orders').length)
+      && !fieldValue('follow_up_reason');
+    followupValidationIssueEl.style.display = needsReason ? '' : 'none';
+    followupValidationIssueEl.innerHTML = needsReason
+      ? '⚠ A return interval or follow-up test is set without a reason below — the front desk and next visit won\'t know why the patient is coming back.'
+      : '';
   }
 
   function refresh() {
@@ -1203,6 +1217,7 @@ function checkFollowUpNcciWarnings() {
     }
 
     renderValidationIssues();
+    renderFollowupValidationIssue();
   }
 
   document.querySelectorAll(
