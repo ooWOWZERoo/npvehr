@@ -270,6 +270,7 @@ class Appointment(Base):
     updated_by = relationship("User", foreign_keys=[updated_by_user_id])
     tests = relationship("AppointmentTest", back_populates="appointment", cascade="all, delete-orphan")
     resource_reservations = relationship("AppointmentResourceReservation", back_populates="appointment", cascade="all, delete-orphan")
+    resource_selections = relationship("AppointmentResourceSelection", back_populates="appointment", cascade="all, delete-orphan")
     audit_events = relationship("AppointmentAuditEvent", back_populates="appointment", cascade="all, delete-orphan")
 
     __table_args__ = (
@@ -493,6 +494,34 @@ class AppointmentResourceReservation(Base):
 
     __table_args__ = (
         Index("ix_resource_reservations_resource_window", "resource_id", "reserved_start_at", "reserved_end_at"),
+    )
+
+
+class AppointmentResourceSelection(Base):
+    """Room/lane/device manual-override picker (spec 31.3): records that staff
+    chose a SPECIFIC Resource for one of this appointment's resource
+    requirements, overriding what plan_resource_requirements would otherwise
+    auto-assign (the fixed requirement.resource_id, or the first active
+    Resource in requirement.resource_pool_code's class). One row per
+    (appointment, requirement) pair the booking form actually overrode --
+    a requirement left on "Automatic" gets no row here at all, so "no row"
+    and "automatic" are the same state. Rebuilt from scratch on every
+    create/edit alongside AppointmentResourceReservation (see
+    ehr.routes.appointments._sync_resource_reservations), not append-only --
+    this is current-state UI prefill data, not an audit trail (the audit
+    trail is the resource_reservations' own override_reason plus the
+    appointment's own audit_events)."""
+    __tablename__ = "appointment_resource_selections"
+    id = Column(Integer, primary_key=True, index=True)
+    appointment_id = Column(Integer, ForeignKey("appointments.id"), nullable=False)
+    requirement_id = Column(Integer, ForeignKey("appointment_type_resource_requirements.id"), nullable=False)
+    resource_id = Column(Integer, ForeignKey("resources.id"), nullable=False)
+
+    appointment = relationship("Appointment", back_populates="resource_selections")
+    resource = relationship("Resource")
+
+    __table_args__ = (
+        Index("ix_resource_selections_appointment", "appointment_id"),
     )
 
 

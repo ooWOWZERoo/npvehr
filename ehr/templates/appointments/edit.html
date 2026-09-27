@@ -32,7 +32,7 @@
     <div class="section-title">Appointment Type &amp; Color</div>
     <div class="form-row cols-2">
       <div class="form-group"><label for="appointment_type_version_id">Appointment Type*</label>
-        <select id="appointment_type_version_id" name="appointment_type_version_id" required>
+        <select id="appointment_type_version_id" name="appointment_type_version_id" required onchange="renderResourcePicker()">
           {% for v in types %}<option value="{{ v.id }}" {{ 'selected' if appt.appointment_type_version_id == v.id }}>{{ v.display_name }} ({{ v.calendar_abbreviation }})</option>{% endfor %}
         </select>
       </div>
@@ -41,6 +41,8 @@
         <label for="is_follow_up" style="margin:0">Follow-up visit</label>
       </div>
     </div>
+    <div class="section-title">Resource Assignment (spec 31.3)</div>
+    <div id="resource-picker-container"></div>
     <div class="section-title">Scheduled Tests</div>
     <div class="test-chip-list">
       {% set active_test_ids = appt.tests|selectattr('status','equalto','active')|map(attribute='diagnostic_test_id')|list %}
@@ -65,4 +67,49 @@
     <div class="form-actions"><button type="submit" class="btn btn-primary">Save Changes</button></div>
   </form>
 </div>
+<script>
+var RESOURCE_PICKER = {{ resource_picker|tojson }};
+var RESOURCE_OPTIONS_BY_CLASS = {{ resource_options_by_class|tojson }};
+var CURRENT_RESOURCE_SELECTIONS = {{ current_resource_selections|tojson }};
+
+function renderResourcePicker(){
+  var sel = document.getElementById('appointment_type_version_id');
+  var container = document.getElementById('resource-picker-container');
+  container.innerHTML = '';
+  var requirements = RESOURCE_PICKER[sel.value] || [];
+  if (requirements.length === 0) {
+    container.innerHTML = '<p style="font-size:0.85rem;color:#64748b">No manually-assignable resources for this appointment type -- assignment is automatic.</p>';
+    return;
+  }
+  requirements.forEach(function(req){
+    var options = RESOURCE_OPTIONS_BY_CLASS[req.resource_class] || [];
+    var currentId = CURRENT_RESOURCE_SELECTIONS[req.requirement_id];
+    var row = document.createElement('div');
+    row.className = 'form-row cols-2';
+    var group = document.createElement('div');
+    group.className = 'form-group';
+    var label = document.createElement('label');
+    label.textContent = req.resource_class.replace('_', ' ') + ' (default: ' + req.default_resource_name + ')';
+    group.appendChild(label);
+    var hidden = document.createElement('input');
+    hidden.type = 'hidden'; hidden.name = 'override_requirement_id'; hidden.value = req.requirement_id;
+    group.appendChild(hidden);
+    var picker = document.createElement('select');
+    picker.name = 'override_resource_id';
+    var autoOpt = document.createElement('option');
+    autoOpt.value = ''; autoOpt.textContent = 'Automatic (' + req.default_resource_name + ')';
+    picker.appendChild(autoOpt);
+    options.forEach(function(o){
+      var opt = document.createElement('option');
+      opt.value = o.id; opt.textContent = o.display_name;
+      if (currentId && String(currentId) === String(o.id)) opt.selected = true;
+      picker.appendChild(opt);
+    });
+    group.appendChild(picker);
+    row.appendChild(group);
+    container.appendChild(row);
+  });
+}
+renderResourcePicker();
+</script>
 {% endblock %}

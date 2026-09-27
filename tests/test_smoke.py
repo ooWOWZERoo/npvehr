@@ -2517,3 +2517,66 @@ def test_calendar_click_to_create_precheck_blocks_closed_dates(logged_in_page, l
     page.wait_for_load_state("networkidle")
     page.locator(".fc-timegrid-slot-lane").first.click()
     page.wait_for_url(re.compile(r"/appointments/new\?date="))
+
+
+def test_resource_picker_manual_override_on_booking_form(logged_in_page, live_server):
+    """Room/lane/device resource-picker UI (spec 31.3): "Comprehensive Vision
+    Exam" carries a fixed-resource requirement (Lane 1) in its seed data, and
+    a second exam lane (Lane 2) exists in the same resource_class -- so the
+    booking form should offer a manual override picker letting staff pick
+    Lane 2 instead of the automatic Lane 1 assignment. A type with only one
+    candidate resource in its class (e.g. Contact Lens Evaluation/Check, which
+    has just one fitting room) must NOT show a picker at all -- nothing to
+    choose between."""
+    page = logged_in_page
+    target_date = (datetime.utcnow() + timedelta(days=27)).strftime("%Y-%m-%d")
+
+    # This shared, session-scoped live_server database's Comprehensive Vision
+    # Exam type may have been deactivated by an earlier test in this file
+    # (test_appointment_type_created_and_updated_by_attribution) -- reactivate
+    # it defensively so it's guaranteed to appear in the booking form's type
+    # dropdown below, regardless of test execution order.
+    page.goto(live_server + "/admin/scheduling/appointment-types")
+    comp_vision_row = page.locator("tr", has_text="Comprehensive Vision Exam")
+    activate_form = comp_vision_row.locator('form[action$="/activate"]')
+    if activate_form.count() > 0:
+        activate_form.locator("button").click()
+        page.wait_for_load_state("networkidle")
+
+    page.goto(live_server + "/appointments/new")
+    type_options = page.locator('select[name="appointment_type_version_id"] option').all()
+    comp_vision_id = next(o.get_attribute("value") for o in type_options
+                           if "Comprehensive Vision Exam" in (o.inner_text() or ""))
+    cl_eval_id = next(o.get_attribute("value") for o in type_options
+                       if "Contact Lens Evaluation" in (o.inner_text() or ""))
+
+    page.select_option('select[name="appointment_type_version_id"]', comp_vision_id)
+    page.wait_for_timeout(150)
+    picker_select = page.locator('#resource-picker-container select[name="override_resource_id"]')
+    assert picker_select.count() == 1
+    assert "Automatic (Lane 1)" in picker_select.locator("option").first.inner_text()
+    assert "Lane 2" in picker_select.inner_text()
+
+    page.select_option('select[name="appointment_type_version_id"]', cl_eval_id)
+    page.wait_for_timeout(150)
+    assert page.locator('#resource-picker-container select[name="override_resource_id"]').count() == 0
+    assert "automatic" in page.locator("#resource-picker-container").inner_text().lower()
+
+    page.select_option('select[name="appointment_type_version_id"]', comp_vision_id)
+    page.wait_for_timeout(150)
+    page.select_option('select[name="patient_id"]', index=0)
+    page.select_option('select[name="provider_id"]', index=0)
+    page.locator('#resource-picker-container select[name="override_resource_id"]').select_option(label="Lane 2")
+    page.fill("#scheduled_at", f"{target_date}T14:00")
+    page.locator('button[type="submit"]', has_text="Schedule Appointment").click()
+    page.wait_for_url(re.compile(r"/appointments/\d+$"))
+    assert "Lane 2 (manual)" in page.content()
+
+    # Editing the appointment should prefill the manual selection rather
+    # than resetting silently to "Automatic".
+    page.locator("a", has_text="Edit / Reschedule").click()
+    page.wait_for_load_state("networkidle")
+    edit_select = page.locator('#resource-picker-container select[name="override_resource_id"]')
+    assert edit_select.input_value() != ""
+    selected_label = edit_select.locator("option:checked").inner_text()
+    assert "Lane 2" in selected_label

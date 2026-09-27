@@ -2416,7 +2416,7 @@ A `resource_pool_code` (rather than a specific `resource_id`) on a requirement r
 
 ### 31.3 UI
 
-The appointment detail page now shows a "Resources" row listing any reservation(s) tied to that appointment (e.g. "Lane 1"), alongside its existing type/provider/color/test info. No resource-picker UI was added to the booking form — resource assignment remains automatic based on the appointment type's requirements, consistent with the incremental approach the target-state specification itself allows (§12.1: "the initial product can activate provider-only conflict detection first, but the schema and service boundary must support all listed resource classes without redesign" — this release extends that activation to resources without requiring a UI redesign). A full visual Resource Schedule grid view remains a separately tracked, larger deferred item (§27.6) and was not built in this pass.
+The appointment detail page now shows a "Resources" row listing any reservation(s) tied to that appointment (e.g. "Lane 1"), alongside its existing type/provider/color/test info. As of v2.56 (§83), the booking form also offers a manual-override resource picker; see §83 for detail. A full visual Resource Schedule grid view remains a separately tracked, larger deferred item (§27.6) and was not built in this pass.
 
 ## 32. ECR Vault Removal (v1.9)
 
@@ -4296,3 +4296,34 @@ No pre-check of provider-specific availability (whether a given provider has any
 | New capability | Calendar/board day-cell clicks now pre-check practice-closure status before navigating to the New Appointment form. |
 | Updated | `ehr/routes/appointments.py` (new `/date-check.json` route), `ehr/templates/appointments/board.html` (`dateClick` handler). `tests/test_smoke.py` gained one new test. |
 | Explicitly not done | No provider-specific availability pre-check (advisory, not a hard rejection rule). No client-side caching of the check. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |
+
+## 83. Room/Lane/Device Resource-Picker UI (v2.56)
+
+### 83.1 Origin
+
+Long-tracked gap (§31.3's own note, and BUILD_BACKLOG.md's §31.3 follow-up): resource assignment (exam lane, fitting room, device) was entirely automatic -- a fixed `resource_id` or the first active `Resource` in a `resource_pool_code`'s class -- with no way for front-desk staff to hand-pick a different one (e.g. moving a booking from the default Lane 1 to Lane 2 because Lane 1 is being cleaned).
+
+### 83.2 What changed
+
+**`resolve_resource_for_requirement`/`plan_resource_requirements`** (`ehr/services/scheduling.py`) now accept an optional `override_resource_id`/`overrides` map. An override is honored only when it names another active `Resource` in the exact same `resource_class` the requirement would otherwise resolve to -- never a resource of a different class, which would silently satisfy a "needs a room" requirement with a device. An invalid override (wrong class, inactive, deleted) is ignored and automatic assignment is used, identical to leaving the picker on "Automatic".
+
+**New `appointment_resource_selections` table** (migration `046_create_appointment_resource_selections`, with a registered down-migration): records which specific `Resource` staff picked for a given appointment's resource requirement, when it differs from the automatic pick. This is current-state UI prefill data, not an audit trail -- it is fully rebuilt (not appended to) on every create/edit alongside `AppointmentResourceReservation`, in `_sync_resource_reservations`.
+
+**Booking form UI** (`ehr/templates/appointments/form.html` and `edit.html`): a new "Resource Assignment" section renders one dropdown per pickable requirement, populated client-side from a small JSON payload (`_resource_picker_payload` in `ehr/routes/appointments.py`) keyed by appointment-type-version id, re-rendered on type change. A requirement is only shown when its resource class has **two or more** active resources to choose between -- with only one candidate (or none), there is nothing to actually pick, so no picker renders (avoids dead, confusing UI for the seeded Contact Lens Fitting Room, which has no second room). The default option is always "Automatic (<name>)"; picking a specific resource submits it as an `override_requirement_id`/`override_resource_id` form-field pair. The appointment detail page's existing "Resources" row (§31.3) now suffixes a manually-picked resource with "(manual)".
+
+### 83.3 Verified
+
+`python3 -m py_compile` on every touched Python file; Jinja parse-check on the three touched templates. Migration idempotency/uniqueness tests (`tests/test_migrations.py`) cover the new migration generically (no migration-specific test needed -- see that file's own coverage of every registered id). New Playwright test `test_resource_picker_manual_override_on_booking_form` confirms: the picker appears for Comprehensive Vision Exam (Lane 1 default, Lane 2 available) and does NOT appear for Contact Lens Evaluation/Check (only one fitting room exists); picking Lane 2 and submitting persists the override (shown as "Lane 2 (manual)" on the detail page); and re-opening the appointment for edit correctly prefills the picker to the previously-selected Lane 2 rather than resetting to "Automatic". Full suite (87 tests, up from 86) passed after this change.
+
+### 83.4 Explicitly not done
+
+No admin UI was added to create new `AppointmentTypeResourceRequirement` rows (a separately tracked, larger gap -- today these can only be seeded via a migration, per the existing `admin_scheduling.py` comment noting this). No pool-balancing strategy beyond "first active resource, unless manually overridden" (§31.2's existing simple pool-resolution note still applies to the automatic case). None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6.
+
+**Version 2.56 change log (relative to v2.55) — Room/Lane/Device Resource-Picker UI:**
+
+| Area | Change |
+| --- | --- |
+| New capability | Booking form offers a manual resource-override picker (Automatic vs. a specific Lane/Room/Device) whenever a requirement's resource class has 2+ active candidates. |
+| New table | `appointment_resource_selections` (migration 046, with a registered down-migration). |
+| Updated | `ehr/models/database.py` (`AppointmentResourceSelection` model), `ehr/services/scheduling.py` (`resolve_resource_for_requirement`/`plan_resource_requirements` gain an override parameter), `ehr/routes/appointments.py` (`_resource_picker_payload`, `_parse_resource_overrides`, threaded through create/edit/detail), `ehr/templates/appointments/form.html`/`edit.html` (picker UI + JS), `ehr/templates/appointments/detail.html` ("(manual)" suffix). `tests/test_smoke.py` gained one new test. |
+| Explicitly not done | No admin UI to create resource requirements themselves. No pool-balancing beyond first-active-unless-overridden. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |
