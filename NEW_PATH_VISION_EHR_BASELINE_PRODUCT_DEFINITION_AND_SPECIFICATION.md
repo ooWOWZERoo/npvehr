@@ -4355,3 +4355,31 @@ Long-tracked gap (VISION_EHR_DATA_STANDARDS_RESEARCH.md §12, carried unresolved
 | New capability | General exam's Fundus section gains a numeric CD Ratio field (OD/OS) and a discrete Vitreous finding field (OD/OS). |
 | Updated | `ehr/models/database.py` (`EyeExam.cd_ratio_od/os`, `vitreous_od/os`), `ehr/db/migrations.py` (migration 047 + down-migration), `ehr/routes/exams.py` (`create_exam` reads the new fields), `ehr/templates/exams/form.html`/`detail.html` (Fundus table columns). `tests/test_smoke.py` gained one new test. |
 | Explicitly not done | `GlaucomaTracking`'s own cup_disc_ratio_od/os is unchanged and not synchronized with the new general-exam field. No structured Vitreous findings list (kept free text). None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |
+
+## 85. Structured Review of Systems + Structured Social History (v2.58)
+
+### 85.1 Origin
+
+The last two long-tracked gaps from VISION_EHR_DATA_STANDARDS_RESEARCH.md §12's original gap-analysis list against the source "Visit Note" PDF, both carried unresolved through every subsequent §12 build round (§40/§41/§42/§84's own closing notes): "structured review of systems" (the source document's large systemic-symptom checklist) and "structured social history" (alcohol/tobacco screening) -- before this, `Patient` had no social-history fields at all, and `EyeExam` had no ROS fields at all.
+
+### 85.2 What changed
+
+**Structured Review of Systems** (`EyeExam`, migration `048_ros_and_social_history`, with a registered down-migration): eight nullable `Boolean` columns -- `ros_constitutional`, `ros_cardiovascular`, `ros_respiratory`, `ros_gastrointestinal`, `ros_neurological`, `ros_musculoskeletal`, `ros_endocrine`, `ros_skin` -- plus a `ros_notes` `Text` column. Same tri-state convention already used for `strabismus_present`/`corneal_edema_present`: `None` = not reviewed this visit, `True` = positive finding, `False` = denies/negative. This is a representative, fixed set of the systems most clinically relevant to an eye visit (constitutional/vascular/neurological symptoms bear directly on many ocular findings), not the source document's full head-to-toe medical ROS -- narrower by deliberate choice, consistent with this app's existing narrow-lookup-table posture elsewhere (e.g. the ICD-10/CPT catalogs). The New Exam form gained a "Review of Systems" table (one Yes/No/blank dropdown per system) between Fundus and the Visit Focus dashboards; the exam detail page shows a card (Positive/Negative/Not reviewed per system, plus notes) only when at least one system was answered or notes were entered -- an exam where every system is left blank shows no card at all, matching the sibling Motility/Refractive Assessment cards' existing convention.
+
+**Structured Social History** (`Patient`, same migration): `tobacco_use_status` (`'Never'`/`'Former'`/`'Current'`/`None`) and `alcohol_use_status` (`'None'`/`'Occasional'`/`'Moderate'`/`'Heavy'`/`None`) as fixed-category dropdowns, plus a `social_history_notes` free-text column for anything beyond these two screened categories. Both new fields were added to `PATIENT_AUDITED_FIELDS` (the existing per-record field-change audit trail, §37.1/§37.6), so an edit to either is tracked the same way every other patient-record field already is. The patient edit form gained a "Social History" section (two dropdowns plus notes); the Demographics tab gained a "Social History" card showing "Not asked" for either field left unanswered, rather than a blank dash.
+
+### 85.3 Verified
+
+`python3 -m py_compile` on every touched Python file; Jinja parse-check on all four touched templates. Migration idempotency/uniqueness tests (`tests/test_migrations.py`) cover the new migration generically. Two new Playwright tests: `test_structured_review_of_systems_save_and_display` confirms a mix of positive/negative/not-reviewed answers save and display correctly, and that an exam with every system left blank (and no notes) shows no ROS card at all; `test_structured_social_history_save_and_display` confirms both social-history fields save and display, and that a patient created without answering either shows "Not asked" for both rather than a blank value or an error. Full suite (90 tests, up from 88) passed after this change.
+
+### 85.4 Explicitly not done
+
+No structured "positive ROS follow-up" workflow (e.g. auto-flagging a positive cardiovascular/neurological finding for referral) -- this is documentation capture only, same posture as every other structured exam finding in this app. No alcohol/tobacco "pack-years" or quantity-tracking fields -- kept to the same fixed-category screening level as the rest of this app's structured-history fields, not a full substance-use history intake. This closes out VISION_EHR_DATA_STANDARDS_RESEARCH.md §12's original gap-analysis list in its entirety (pupil exam, motility/confrontation VF, anterior segment structures, vitreous/CD ratio, structured ROS, structured social history all done; diagnostic-imaging order tracking, e-signature/lock, and PDF rendering remain separately tracked, larger items). None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6.
+
+**Version 2.58 change log (relative to v2.57) — Structured Review of Systems + Social History:**
+
+| Area | Change |
+| --- | --- |
+| New capability | General exam gains an 8-system Review of Systems section. Patient record gains structured Tobacco Use / Alcohol Use screening fields. |
+| Updated | `ehr/models/database.py` (`EyeExam.ros_*`/`ros_notes`, `Patient.tobacco_use_status`/`alcohol_use_status`/`social_history_notes`), `ehr/db/migrations.py` (migration 048 + down-migration), `ehr/routes/exams.py` (`create_exam` reads ROS fields), `ehr/routes/patients.py` (`create_patient`/`update_patient` read social-history fields; `PATIENT_AUDITED_FIELDS` extended), `ehr/templates/exams/form.html`/`detail.html` (ROS section/card), `ehr/templates/patients/form.html`/`demographics.html` (Social History section/card). `tests/test_smoke.py` gained two new tests. |
+| Explicitly not done | No auto-flagging or referral workflow from a positive ROS finding. No quantity/pack-years tracking for tobacco/alcohol. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |
