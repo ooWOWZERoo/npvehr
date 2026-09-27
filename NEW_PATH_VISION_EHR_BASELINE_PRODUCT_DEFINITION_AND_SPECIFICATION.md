@@ -4235,3 +4235,36 @@ No real Postgres instance exercised (the dialect-branch test uses a fake connect
 | New capability | The manual fresh-DB-boot and idempotent-rerun migration checks are now a standing automated test suite. |
 | New files | `tests/test_migrations.py` (4 new tests). |
 | Explicitly not done | No real Postgres instance exercised. No automated arbitrary-prior-schema upgrade-in-place test. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |
+
+## 81. Down-Migration/Rollback Capability (v2.54)
+
+### 81.1 Origin
+
+Long-tracked gap (spec §25.15, §36.5 item 4): "no Alembic-equivalent rollback/down-migration capability" -- the migration runner only ever applied forward, with no way to reverse a bad migration short of restoring a database backup.
+
+### 81.2 What changed
+
+**New `DOWN_MIGRATIONS` registry** in `ehr/db/migrations.py`: maps a migration id to a down-function, deliberately sparse (opt-in, not automatic) -- most of this app's 45 existing migrations either seed data or are built on by a later migration, and aren't safely reversible in isolation without real per-migration judgment. Backfilled for 5 representative migrations from this session (`038_patient_self_registered_at`, `039_provider_active`, `043_create_rx_lab_orders`, `044_appointment_type_updated_by`, `045_user_provider_link`) -- covering both mechanical shapes a down-migration needs (dropping one or more columns; dropping a whole table) -- as proof the mechanism works, not a claim that every past migration has been backfilled.
+
+**New `rollback_migration(engine, migration_id)`**: validates the id is a real, currently-applied migration with a registered down-function, then runs the down-function and removes its row from `schema_migrations` inside one transaction. Raises `ValueError` (never guesses or silently no-ops) for an unknown id, a real id with no registered down-migration, or a real registered id that isn't currently applied.
+
+**New `python -m ehr.db.rollback <migration_id>` CLI entrypoint**, mirroring `ehr/db/seed.py`'s `seed()` CLI shape.
+
+**Explicit operational caveat, documented directly in the code**: rolling back a migration is a disaster-recovery action meant to be paired with rolling the *application code* back too (e.g. via `git checkout` to a commit before that migration existed) -- not a way to selectively undo one schema change while continuing to run today's code, whose ORM models and routes still expect whatever the rollback just removed.
+
+### 81.3 Verified
+
+`python3 -m py_compile` on both new/touched files. New Playwright-free unit tests in `tests/test_migrations.py`: a column-migration rollback correctly drops the column and un-records it, and the migration cleanly re-applies afterward; a table-creation migration's rollback drops the whole table; rollback correctly rejects an unknown migration id, a real id with no registered down-migration, and a real registered id that isn't currently applied. Manually verified the CLI end to end against a real seeded SQLite database (rolled back `045_user_provider_link`, confirmed the column was gone, confirmed rolling back an unregistered migration fails with a clear message). Full suite (85 tests, up from 82) passed after this change.
+
+### 81.4 Explicitly not done
+
+No down-migration for the other 40 existing migrations -- most seed data (a down-migration would need to decide what, if anything, to do with rows a later migration or the app itself may have since created against that seed) or are built on by later migrations, and each needs its own real reversibility judgment rather than a blanket mechanical drop. No automatic "rollback to version N" chain (each rollback is one migration at a time, by id, matching this runner's existing "no framework, plain functions" philosophy). No rollback UI or admin route -- CLI only, matching the existing `seed()`/CI-only posture for schema operations. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6.
+
+**Version 2.54 change log (relative to v2.53) — Down-Migration/Rollback Capability:**
+
+| Area | Change |
+| --- | --- |
+| New capability | `rollback_migration(engine, id)` + `python -m ehr.db.rollback <id>` CLI. Opt-in `DOWN_MIGRATIONS` registry, backfilled for 5 representative migrations. |
+| New files | `ehr/db/rollback.py`. |
+| Updated | `ehr/db/migrations.py`. `tests/test_migrations.py` gained three new tests. |
+| Explicitly not done | No down-migration for the other 40 existing migrations. No multi-step rollback chain. No rollback UI. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |

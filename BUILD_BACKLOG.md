@@ -1,6 +1,6 @@
 # New Path Vision EHR — Master Build Backlog
 
-**Status:** Living tracking document. **Baseline as of:** spec v2.53 / research doc v2.24 (2026-09-27).
+**Status:** Living tracking document. **Baseline as of:** spec v2.54 / research doc v2.24 (2026-09-27).
 
 ## Purpose and how to use this document
 
@@ -155,7 +155,7 @@ User asked for a deep-dive rethink of the calendar/scheduling UX against ten spe
 ## 7. Security & Compliance
 
 - [x] **CSRF protection. Done, v2.19** — a pre-existing, long-tracked gap, present in every version's open-gaps list (spec §15.1, §26.10 item 4, §36.5 item 3, §37.6). See baseline spec §37.7: a session-bound synchronizer token verified on all 27 POST routes, delivered via a JS-injected hidden field, plus this app's first server-side secret (`SECRET_KEY`).
-- [ ] Down-migration/rollback capability in the migration runner — it only ever adds, never reverses (§25.15, §36.5 item 4)
+- [x] **Down-migration/rollback capability. Done, v2.54** — see baseline spec §81 (§25.15, §36.5 item 4). New `rollback_migration(engine, id)` + `python -m ehr.db.rollback <id>` CLI. Deliberately sparse: reversibility is opt-in per migration (a new `DOWN_MIGRATIONS` registry), backfilled for 5 representative migrations from this session (038, 039, 043, 044, 045) as proof the mechanism works — not a down-migration for all 45 existing migrations, most of which seed data or are built on by later ones and aren't safely reversible in isolation. Rollback is a disaster-recovery action meant to pair with rolling the application code back too, not a way to selectively undo one schema change under today's code.
 - [x] Per-record "who changed this specific clinical/administrative field" audit trail, beyond `AuthAuditEvent`'s authentication/access-event scope (§37.1, §37.6, §36.5 item 1's note). New generic `FieldChangeAuditEvent` table (keyed by table_name/record_id) wired into Patient and Provider edits -- the two records that had no change tracking at all. `AppointmentAuditEvent`/`AppointmentTypeAuditEvent` are left as their own separate, already-working thing, not migrated onto this. New `/admin/field-audit` staff page. **Done, v2.47** — see baseline spec §68.
 - [x] **Record-level authorization: Optometrist/Provider scoped to their own patients. Done, v2.49** — see baseline spec §74 (§37.6). New `User.provider_id` link + `ehr.services.authz`; wired into patient list/detail/photo/edit, exam detail, Rx detail/print. Not extended to the calendar/scheduling surfaces or diagnostic/lab-order lists (separately-scoped follow-up if needed). Surfaced a minor incidental gap, fixed the next round: the top-bar "recently viewed patients" list is a plain browser cookie, not scoped per logged-in user, so it could briefly show a prior session's patient name after switching accounts on the same browser (the record itself was still correctly protected). **Fixed, v2.50** — see baseline spec §77: `npv_recent_patients` is now cleared on both login and logout.
 - [ ] MFA/SSO, self-service password reset, password-complexity policy beyond a sane minimum, account lockout/rate-limiting — all explicitly scoped out of the v2.4 auth build as "solid baseline, not enterprise list" (§37.6); revisit only if requirements change

@@ -110,3 +110,58 @@ def test_pk_ddl_and_dialect_detection_for_both_supported_databases():
     assert mig._is_postgres(pg_conn) is True
     assert mig._pk_ddl(sqlite_conn) == "INTEGER PRIMARY KEY AUTOINCREMENT"
     assert mig._pk_ddl(pg_conn) == "SERIAL PRIMARY KEY"
+
+
+def test_rollback_reverses_a_column_migration_and_is_reapplyable(fresh_engine):
+    """Down-migration/rollback capability (spec §36.5 item 4 / §25.15
+    follow-up): the runner previously only ever added, never reversed.
+    A registered column-migration rollback drops the column and un-records
+    it from schema_migrations; running the migrations again cleanly
+    re-applies it."""
+    _run_all_migrations(fresh_engine)
+    inspector = inspect(fresh_engine)
+    assert "provider_id" in {c["name"] for c in inspector.get_columns("users")}
+
+    mig.rollback_migration(fresh_engine, "045_user_provider_link")
+    inspector = inspect(fresh_engine)
+    assert "provider_id" not in {c["name"] for c in inspector.get_columns("users")}
+    with fresh_engine.connect() as conn:
+        applied = {row[0] for row in conn.execute(text("SELECT id FROM schema_migrations")).fetchall()}
+    assert "045_user_provider_link" not in applied
+
+    _run_all_migrations(fresh_engine)
+    inspector = inspect(fresh_engine)
+    assert "provider_id" in {c["name"] for c in inspector.get_columns("users")}
+    with fresh_engine.connect() as conn:
+        applied = {row[0] for row in conn.execute(text("SELECT id FROM schema_migrations")).fetchall()}
+    assert "045_user_provider_link" in applied
+
+
+def test_rollback_of_table_creation_migration_drops_the_table(fresh_engine):
+    """A registered table-creation migration's rollback drops the whole
+    table, not just un-records it."""
+    _run_all_migrations(fresh_engine)
+    inspector = inspect(fresh_engine)
+    assert "rx_lab_orders" in inspector.get_table_names()
+
+    mig.rollback_migration(fresh_engine, "043_create_rx_lab_orders")
+    inspector = inspect(fresh_engine)
+    assert "rx_lab_orders" not in inspector.get_table_names()
+
+
+def test_rollback_rejects_unknown_or_unregistered_or_unapplied_migrations(fresh_engine):
+    """Reversibility is opt-in per migration (most migrations have no
+    down-migration at all) -- rollback_migration must reject an unknown id,
+    a real id with no registered down-migration, and a real registered id
+    that isn't currently applied, rather than guessing or silently no-oping."""
+    with pytest.raises(ValueError):
+        mig.rollback_migration(fresh_engine, "999_not_a_real_migration")
+
+    # Real migration, but not one of the (deliberately sparse) reversible ones.
+    with pytest.raises(ValueError):
+        mig.rollback_migration(fresh_engine, "001_appointment_columns")
+
+    # Real, reversible migration -- but nothing has been applied to this
+    # engine yet, so there's nothing to roll back.
+    with pytest.raises(ValueError):
+        mig.rollback_migration(fresh_engine, "045_user_provider_link")
