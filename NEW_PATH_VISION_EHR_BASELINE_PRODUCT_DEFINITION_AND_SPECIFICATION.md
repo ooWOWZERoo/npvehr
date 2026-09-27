@@ -4327,3 +4327,31 @@ No admin UI was added to create new `AppointmentTypeResourceRequirement` rows (a
 | New table | `appointment_resource_selections` (migration 046, with a registered down-migration). |
 | Updated | `ehr/models/database.py` (`AppointmentResourceSelection` model), `ehr/services/scheduling.py` (`resolve_resource_for_requirement`/`plan_resource_requirements` gain an override parameter), `ehr/routes/appointments.py` (`_resource_picker_payload`, `_parse_resource_overrides`, threaded through create/edit/detail), `ehr/templates/appointments/form.html`/`edit.html` (picker UI + JS), `ehr/templates/appointments/detail.html` ("(manual)" suffix). `tests/test_smoke.py` gained one new test. |
 | Explicitly not done | No admin UI to create resource requirements themselves. No pool-balancing beyond first-active-unless-overridden. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |
+
+## 84. Vitreous Fundus Structure + Numeric CD Ratio on General Exam (v2.57)
+
+### 84.1 Origin
+
+Long-tracked gap (VISION_EHR_DATA_STANDARDS_RESEARCH.md §12, carried unresolved through v2.21/§40, v2.22/§41, and v2.23/§42's own closing notes): "vitreous as a discrete fundus structure" and a numeric cup-to-disc (CD) ratio on the general exam's own Fundus section. Before this, `EyeExam`'s Fundus section had only free-text Disc/Macula/Vessels/Periphery columns with no discrete Vitreous field and no numeric ratio at all -- the only numeric `cup_disc_ratio_od/os` in the schema lived on `GlaucomaTracking`, a dashboard-specific table only ever populated when that dashboard is used for a glaucoma-diagnosis visit.
+
+### 84.2 What changed
+
+**Two new `EyeExam` column pairs** (migration `047_vitreous_and_cd_ratio`, with a registered down-migration): `cd_ratio_od`/`cd_ratio_os` (`Float`, 0.00-1.00, same range as `GlaucomaTracking.cup_disc_ratio_od/os` but a fully independent value -- captured on every comprehensive exam's routine disc assessment, not only glaucoma-focused visits) and `vitreous_od`/`vitreous_os` (`String`, free text -- e.g. "Clear", "Vitreous syneresis", "PVD present", "Vitreous hemorrhage").
+
+**Form and detail page**: the Fundus table on both `exams/form.html` and `exams/detail.html` gained a "CD Ratio" column (immediately after Disc, matching clinical documentation order) and a "Vitreous" column (after Periphery). The CD ratio inputs are `type="number" step="0.05" min="0" max="1"`, matching the light-touch numeric-range convention already used for IOP/pupil-size inputs elsewhere on this form (a soft browser-level guard, not a hard server-side rejection). The detail page formats a saved CD ratio to two decimal places and shows an em dash for either field when left blank, same convention as every other optional Fundus column.
+
+### 84.3 Verified
+
+`python3 -m py_compile` on every touched Python file; Jinja parse-check on both touched templates. Migration idempotency/uniqueness tests (`tests/test_migrations.py`) cover the new migration generically. New Playwright test `test_vitreous_and_cd_ratio_save_and_display` confirms both new field pairs save and render correctly formatted on the exam detail page's Fundus card, and confirms a blank submission (both fields left empty) renders without error and shows no stray value. Full suite (88 tests, up from 87) passed after this change.
+
+### 84.4 Explicitly not done
+
+`GlaucomaTracking.cup_disc_ratio_od/os` was left entirely as-is -- the two values are independent and intentionally not synchronized or defaulted from one another, since a clinician may reasonably assess the disc differently on the routine general-exam pass versus the dedicated glaucoma dashboard's more detailed review. No structured Vitreous options list (e.g. a dropdown of standard findings) was built -- kept as free text, consistent with the sibling Disc/Macula/Vessels/Periphery columns it sits beside. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6.
+
+**Version 2.57 change log (relative to v2.56) — Vitreous Fundus Structure + Numeric CD Ratio:**
+
+| Area | Change |
+| --- | --- |
+| New capability | General exam's Fundus section gains a numeric CD Ratio field (OD/OS) and a discrete Vitreous finding field (OD/OS). |
+| Updated | `ehr/models/database.py` (`EyeExam.cd_ratio_od/os`, `vitreous_od/os`), `ehr/db/migrations.py` (migration 047 + down-migration), `ehr/routes/exams.py` (`create_exam` reads the new fields), `ehr/templates/exams/form.html`/`detail.html` (Fundus table columns). `tests/test_smoke.py` gained one new test. |
+| Explicitly not done | `GlaucomaTracking`'s own cup_disc_ratio_od/os is unchanged and not synchronized with the new general-exam field. No structured Vitreous findings list (kept free text). None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |

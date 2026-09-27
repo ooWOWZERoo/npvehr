@@ -131,9 +131,9 @@
   <div class="card"><h3>Fundus</h3>
     <div class="table-responsive">
     <table class="exam-table">
-      <tr><th></th><th>Disc</th><th>Macula</th><th>Vessels</th><th>Periphery</th></tr>
-      <tr><td>OD</td><td>{{ exam.fundus_disc_od or '—' }}</td><td>{{ exam.fundus_macula_od or '—' }}</td><td>{{ exam.fundus_vessels_od or '—' }}</td><td>{{ exam.fundus_periphery_od or '—' }}</td></tr>
-      <tr><td>OS</td><td>{{ exam.fundus_disc_os or '—' }}</td><td>{{ exam.fundus_macula_os or '—' }}</td><td>{{ exam.fundus_vessels_os or '—' }}</td><td>{{ exam.fundus_periphery_os or '—' }}</td></tr>
+      <tr><th></th><th>Disc</th><th>CD Ratio</th><th>Macula</th><th>Vessels</th><th>Periphery</th><th>Vitreous</th></tr>
+      <tr><td>OD</td><td>{{ exam.fundus_disc_od or '—' }}</td><td>{{ '%.2f'|format(exam.cd_ratio_od) if exam.cd_ratio_od is not none else '—' }}</td><td>{{ exam.fundus_macula_od or '—' }}</td><td>{{ exam.fundus_vessels_od or '—' }}</td><td>{{ exam.fundus_periphery_od or '—' }}</td><td>{{ exam.vitreous_od or '—' }}</td></tr>
+      <tr><td>OS</td><td>{{ exam.fundus_disc_os or '—' }}</td><td>{{ '%.2f'|format(exam.cd_ratio_os) if exam.cd_ratio_os is not none else '—' }}</td><td>{{ exam.fundus_macula_os or '—' }}</td><td>{{ exam.fundus_vessels_os or '—' }}</td><td>{{ exam.fundus_periphery_os or '—' }}</td><td>{{ exam.vitreous_os or '—' }}</td></tr>
     </table>
     </div>
   </div>

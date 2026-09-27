@@ -1328,6 +1328,18 @@ def migration_045_user_provider_link(conn):
         return  # brand-new database; create_all() will create the full table with this column.
     _add_column_if_missing(conn, "users", "provider_id", "INTEGER")
 
+def migration_047_vitreous_and_cd_ratio(conn):
+    """Vitreous fundus structure + numeric CD ratio on the general exam
+    (VISION_EHR_DATA_STANDARDS_RESEARCH.md §12's long-tracked gaps). See the
+    new columns' own comments beside fundus_disc_od/os in
+    ehr/models/database.py."""
+    if not _table_exists(conn, "eye_exams"):
+        return  # brand-new database; create_all() will create the full table with these columns.
+    _add_column_if_missing(conn, "eye_exams", "cd_ratio_od", "FLOAT")
+    _add_column_if_missing(conn, "eye_exams", "cd_ratio_os", "FLOAT")
+    _add_column_if_missing(conn, "eye_exams", "vitreous_od", "VARCHAR")
+    _add_column_if_missing(conn, "eye_exams", "vitreous_os", "VARCHAR")
+
 def migration_046_create_appointment_resource_selections(conn):
     """Room/lane/device manual-override picker (spec 31.3): stores which
     specific Resource staff picked for a given appointment's resource
@@ -1420,6 +1432,7 @@ COLUMN_MIGRATIONS = [
     ("044_appointment_type_updated_by", migration_044_appointment_type_updated_by),
     ("045_user_provider_link", migration_045_user_provider_link),
     ("046_create_appointment_resource_selections", migration_046_create_appointment_resource_selections),
+    ("047_vitreous_and_cd_ratio", migration_047_vitreous_and_cd_ratio),
 ]
 POST_CREATE_ALL_MIGRATIONS = [
     ("002_seed_appointment_types", migration_002_seed_appointment_types),
@@ -1472,6 +1485,11 @@ def down_045_user_provider_link(conn):
 def down_046_create_appointment_resource_selections(conn):
     conn.execute(text("DROP TABLE IF EXISTS appointment_resource_selections"))
 
+def down_047_vitreous_and_cd_ratio(conn):
+    if _table_exists(conn, "eye_exams"):
+        for col in ("cd_ratio_od", "cd_ratio_os", "vitreous_od", "vitreous_os"):
+            conn.execute(text(f"ALTER TABLE eye_exams DROP COLUMN {col}"))
+
 # Sparse by design -- see this section's own docstring above. Extend this
 # alongside any new migration that a reviewer has actually confirmed is safe
 # to reverse (a plain ADD COLUMN or CREATE TABLE with no data-seeding and
@@ -1484,6 +1502,7 @@ DOWN_MIGRATIONS = {
     "044_appointment_type_updated_by": down_044_appointment_type_updated_by,
     "045_user_provider_link": down_045_user_provider_link,
     "046_create_appointment_resource_selections": down_046_create_appointment_resource_selections,
+    "047_vitreous_and_cd_ratio": down_047_vitreous_and_cd_ratio,
 }
 
 
