@@ -457,6 +457,14 @@ class DiagnosticOrder(Base):
     cancelled_at = Column(DateTime)
     cancelled_reason = Column(Text)
     notes = Column(Text)
+    # Which specific return-visit recommendation (EyeExamFollowUp) this order
+    # came from, if any -- an exam can now carry up to two independent
+    # return-visit recommendations (each with its own interval/tests/reason),
+    # so `ordered_exam_id` alone is no longer enough to tell which one a
+    # given order belongs to. Nullable: orders created off the Glaucoma
+    # dashboard's checkboxes (or a look-back alert's "Order Now") have no
+    # return-visit recommendation at all.
+    follow_up_id = Column(Integer, ForeignKey("eye_exam_followups.id"))
 
     patient = relationship("Patient")
     diagnostic_test = relationship("DiagnosticTest")
@@ -465,6 +473,7 @@ class DiagnosticOrder(Base):
     completed_exam = relationship("EyeExam", foreign_keys=[completed_exam_id])
     completed_by = relationship("User", foreign_keys=[completed_by_user_id])
     scheduled_appointment = relationship("Appointment", foreign_keys=[scheduled_appointment_id])
+    follow_up = relationship("EyeExamFollowUp", foreign_keys=[follow_up_id])
 
     __table_args__ = (
         Index("ix_diagnostic_orders_patient_status", "patient_id", "status"),
@@ -920,20 +929,17 @@ class EyeExam(Base):
     # Nullable/defaulted to "Week" so every pre-existing exam (all of which
     # predate this column and were entered in weeks) still reads correctly.
     follow_up_unit = Column(String, default="Week")
-    # Return-visit recommendation carry-forward: the provider's plain-language
-    # "why" for the follow-up, required whenever follow_up_weeks is set or a
-    # return-visit test is recommended (see recommended_tests_by_id in
-    # ehr.routes.exams) -- previously only ever visible on this exam's own
-    # detail page, so front desk booking the next visit and whoever documents
-    # it had nothing but this exam's free-text Plan to go on.
+    # follow_up_reason/follow_up_status/follow_up_fulfilled_appointment_id
+    # below are LEGACY as of the multi-return-visit round (user request):
+    # an exam can now carry up to two independent return-visit
+    # recommendations, each tracked as its own EyeExamFollowUp row (see that
+    # model, right after this class), so a single set of columns on EyeExam
+    # itself can no longer represent "the" recommendation. Left in place
+    # (never dropped, per this app's additive-migration convention) so
+    # nothing written before this round is lost, but no code past this round
+    # reads or writes them -- ehr.services.followup_recommendations and
+    # ehr.routes.exams/appointments all operate on EyeExamFollowUp now.
     follow_up_reason = Column(Text)
-    # 'pending' (nothing done yet) | 'scheduled' (booked via the patient
-    # overview's "Book Follow-Up" button, which also stamps
-    # follow_up_fulfilled_appointment_id) | 'dismissed' (staff manually
-    # marked it addressed, e.g. booked through the ordinary calendar instead
-    # of that button). Distinct from follow_up_fulfilled_appointment_id being
-    # null/set so a manually-dismissed recommendation doesn't need a fake
-    # appointment id to stop nagging the "Recommended Follow-Up" card.
     follow_up_status = Column(String, default="pending")
     follow_up_fulfilled_appointment_id = Column(Integer, ForeignKey("appointments.id"))
     # Structured Refractive Assessment (VISION_EHR_DATA_STANDARDS_RESEARCH.md
@@ -983,6 +989,83 @@ class EyeExam(Base):
     surgery_comanagement_trackings = relationship("SurgeryComanagementTracking", back_populates="exam", cascade="all, delete-orphan")
     addenda = relationship("EyeExamAddendum", back_populates="exam", cascade="all, delete-orphan",
                             order_by="EyeExamAddendum.created_at")
+    follow_ups = relationship("EyeExamFollowUp", back_populates="exam", cascade="all, delete-orphan",
+                               order_by="EyeExamFollowUp.id")
+
+
+class EyeExamFollowUp(Base):
+    """One independent return-visit recommendation on an exam (user request:
+    "allow for up to two return visit planning"). Replaces the single
+    follow_up_weeks/unit/reason/status/fulfilled_appointment_id columns that
+    used to live directly on EyeExam (see their docstring there) -- a
+    provider can now recommend, say, "OCT in 6 weeks" and, independently,
+    "Visual Field in 6 months," each carrying its own interval, tests,
+    reason, and booking/dismissal status, rather than one recommendation
+    trying to represent both. Capped at 2 per exam by the New Exam form's
+    UI (exams/form.html renders exactly two indexed blocks, the second
+    hidden until "Add another return visit" is clicked); nothing here
+    enforces that cap at the database level, since a hard schema constraint
+    on "at most 2 child rows" is unusual and the UI is the only place these
+    rows are ever created.
+
+    status: 'pending' (nothing done yet) | 'scheduled' (booked via the
+    patient overview's "Book Follow-Up" button, which also stamps
+    fulfilled_appointment_id) | 'dismissed' (staff manually marked it
+    addressed). Same three-state convention EyeExam.follow_up_status used."""
+    __tablename__ = "eye_exam_followups"
+    id = Column(Integer, primary_key=True, index=True)
+    eye_exam_id = Column(Integer, ForeignKey("eye_exams.id"), nullable=False)
+    follow_up_weeks = Column(Integer)
+    follow_up_unit = Column(String, default="Week")
+    reason = Column(Text)
+    status = Column(String, default="pending")
+    fulfilled_appointment_id = Column(Integer, ForeignKey("appointments.id"))
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    exam = relationship("EyeExam", back_populates="follow_ups", foreign_keys=[eye_exam_id])
+    fulfilled_appointment = relationship("Appointment", foreign_keys=[fulfilled_appointment_id])
+
+    __table_args__ = (
+        Index("ix_eye_exam_followups_exam", "eye_exam_id"),
+        Index("ix_eye_exam_followups_status", "status"),
+    )
+
+
+class BillingOverrideEvent(Base):
+    """Accountability log for the NCCI billing-rule override (user request:
+    "any exam that violates billing but is still requested can be
+    overridden by the OD(s) or General Manager only ... log who overrides,
+    time, date, etc"). One row per overridden CPT pair -- a single override
+    action covering two flagged pairs at once logs two rows, same
+    "generic table keyed loosely by source+record" shape as
+    FieldChangeAuditEvent, kept separate from it since this is a distinct,
+    narrower business event (a billing-rule decision), not a field diff.
+
+    source/record_id name what was being saved when the override happened:
+    ('exam', EyeExam.id) for a return-visit test selection on the New Exam
+    form (record_id is the exam's id, not the specific EyeExamFollowUp
+    block's -- simpler to look up, and an exam only ever has at most two
+    blocks to check anyway), or ('appointment', Appointment.id) for an
+    appointment's Scheduled Tests. Not a foreign key to either table --
+    the two are different tables, and by the time this fires the record in
+    question may not have a final id yet on every code path, so this stays
+    a loose reference like FieldChangeAuditEvent's, not an enforced FK."""
+    __tablename__ = "billing_override_events"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    source = Column(String, nullable=False)
+    record_id = Column(Integer, nullable=False)
+    column1 = Column(String, nullable=False)
+    column2 = Column(String, nullable=False)
+    reason = Column(Text, nullable=False)
+    occurred_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User", foreign_keys=[user_id])
+
+    __table_args__ = (
+        Index("ix_billing_override_source_record", "source", "record_id"),
+    )
+
 
 class EyeExamAddendum(Base):
     """An append-only dated note on a signed EyeExam -- the only way to add

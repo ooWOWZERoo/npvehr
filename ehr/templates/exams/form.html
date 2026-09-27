@@ -487,28 +487,72 @@
       </div>
     </div>
 
-    <div class="section-title">Return Visit Planning <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; what happens at the patient's next visit, not this one</span></div>
-    <div class="form-group" style="max-width:260px"><label>Follow-up Interval</label>
-      <div style="display:flex;gap:0.5rem">
-        <input name="follow_up_weeks" id="follow_up_weeks" type="number" style="flex:1">
-        <select name="follow_up_unit" id="follow_up_unit" style="flex:1">
-          <option value="Day">Days</option>
-          <option value="Week" selected>Weeks</option>
-          <option value="Month">Months</option>
-          <option value="Year">Years</option>
-        </select>
+    <div class="section-title">Return Visit Planning <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; what happens at the patient's next visit, not this one; up to two independent return visits can be recommended</span></div>
+    <div id="return-visit-block-1">
+      <div class="form-group" style="max-width:260px"><label>Follow-up Interval</label>
+        <div style="display:flex;gap:0.5rem">
+          <input name="follow_up_weeks" id="follow_up_weeks" type="number" style="flex:1">
+          <select name="follow_up_unit" id="follow_up_unit" style="flex:1">
+            <option value="Day">Days</option>
+            <option value="Week" selected>Weeks</option>
+            <option value="Month">Months</option>
+            <option value="Year">Years</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group"><label>Recommended Follow-Up Tests <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; creates a real tracked order and carries forward to the booking form and next-visit alerts (distinct from "Tests Ordered/Reviewed This Visit" above, which is E/M scoring only)</span></label></div>
+      <div class="test-chip-list">
+        {% for t in tests %}
+        <label class="test-chip"><input type="checkbox" name="return_visit_diagnostic_orders" value="{{ t.code }}" data-cpt="{{ t.cpt_code or '' }}" onchange="checkFollowUpNcciWarnings('')"> {{ t.calendar_abbreviation }}</label>
+        {% endfor %}
+      </div>
+      <div id="followup-ncci-warning-banner" class="alert alert-warning" style="display:none"></div>
+      {% if can_override_billing %}
+      <div class="form-row cols-2">
+        <div class="form-group checkbox-row"><input type="checkbox" name="followup_billing_override" value="true" id="followup_billing_override"><label for="followup_billing_override" style="margin:0">Override Billing Rule</label></div>
+        <div class="form-group"><label>Billing Override Reason <input name="followup_billing_override_reason" id="followup_billing_override_reason"></label></div>
+      </div>
+      {% endif %}
+      <div id="followup_validation_issue" style="display:none;margin-bottom:var(--space-2);font-size:0.85rem;color:#b45309"></div>
+      <div class="form-group"><label>Reason for Follow-up <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; required whenever a return interval or a follow-up test above is set; shown to whoever books the next appointment</span>
+        <textarea name="follow_up_reason" id="follow_up_reason"></textarea></label>
       </div>
     </div>
-    <div class="form-group"><label>Recommended Follow-Up Tests <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; creates a real tracked order and carries forward to the booking form and next-visit alerts (distinct from "Tests Ordered/Reviewed This Visit" above, which is E/M scoring only)</span></label></div>
-    <div class="test-chip-list">
-      {% for t in tests %}
-      <label class="test-chip"><input type="checkbox" name="return_visit_diagnostic_orders" value="{{ t.code }}" data-cpt="{{ t.cpt_code or '' }}" onchange="checkFollowUpNcciWarnings()"> {{ t.calendar_abbreviation }}</label>
-      {% endfor %}
+
+    <div id="return-visit-block-2" style="display:none;margin-top:1rem;padding-top:1rem;border-top:1px dashed var(--border)">
+      <div class="page-header" style="margin-bottom:0.5rem"><h4 style="margin:0">Return Visit 2</h4>
+        <button type="button" class="btn btn-sm btn-secondary" onclick="removeReturnVisit2()">Remove</button></div>
+      <div class="form-group" style="max-width:260px"><label>Follow-up Interval</label>
+        <div style="display:flex;gap:0.5rem">
+          <input name="follow_up_weeks_2" id="follow_up_weeks_2" type="number" style="flex:1">
+          <select name="follow_up_unit_2" id="follow_up_unit_2" style="flex:1">
+            <option value="Day">Days</option>
+            <option value="Week" selected>Weeks</option>
+            <option value="Month">Months</option>
+            <option value="Year">Years</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group"><label>Recommended Follow-Up Tests</label></div>
+      <div class="test-chip-list">
+        {% for t in tests %}
+        <label class="test-chip"><input type="checkbox" name="return_visit_diagnostic_orders_2" value="{{ t.code }}" data-cpt="{{ t.cpt_code or '' }}" onchange="checkFollowUpNcciWarnings('_2')"> {{ t.calendar_abbreviation }}</label>
+        {% endfor %}
+      </div>
+      <div id="followup-ncci-warning-banner_2" class="alert alert-warning" style="display:none"></div>
+      {% if can_override_billing %}
+      <div class="form-row cols-2">
+        <div class="form-group checkbox-row"><input type="checkbox" name="followup_billing_override_2" value="true" id="followup_billing_override_2"><label for="followup_billing_override_2" style="margin:0">Override Billing Rule</label></div>
+        <div class="form-group"><label>Billing Override Reason <input name="followup_billing_override_reason_2" id="followup_billing_override_reason_2"></label></div>
+      </div>
+      {% endif %}
+      <div id="followup_validation_issue_2" style="display:none;margin-bottom:var(--space-2);font-size:0.85rem;color:#b45309"></div>
+      <div class="form-group"><label>Reason for Follow-up <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; required whenever a return interval or a follow-up test above is set</span>
+        <textarea name="follow_up_reason_2" id="follow_up_reason_2"></textarea></label>
+      </div>
     </div>
-    <div id="followup-ncci-warning-banner" class="alert alert-warning" style="display:none"></div>
-    <div id="followup_validation_issue" style="display:none;margin-bottom:var(--space-2);font-size:0.85rem;color:#b45309"></div>
-    <div class="form-group"><label>Reason for Follow-up <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; required whenever a return interval or a follow-up test above is set; shown to whoever books the next appointment</span>
-      <textarea name="follow_up_reason" id="follow_up_reason"></textarea></label>
+    <div class="form-group" style="margin-top:0.5rem">
+      <button type="button" id="add-return-visit-2-btn" class="btn btn-sm btn-secondary" onclick="addReturnVisit2()">+ Add another return visit</button>
     </div>
 
     <div class="form-actions"><button type="submit" class="btn btn-primary">Save Exam</button></div>
@@ -705,8 +749,12 @@ function mentionsRxManagement(text) {
 // shared client-side JS module today and the two forms' surrounding markup
 // differs enough that a shared function would need its own indirection).
 var NCCI_PAIRS = {{ ncci_pairs|tojson }};
-function checkFollowUpNcciWarnings() {
-  var checked = document.querySelectorAll('input[name="return_visit_diagnostic_orders"]:checked');
+// suffix is '' for the first return-visit block, '_2' for the second --
+// each is checked independently (a flagged pair split across the two
+// blocks isn't being billed together on the same future visit, so it's not
+// this check's concern).
+function checkFollowUpNcciWarnings(suffix) {
+  var checked = document.querySelectorAll('input[name="return_visit_diagnostic_orders' + suffix + '"]:checked');
   var codes = [];
   checked.forEach(function (el) {
     var cpt = el.getAttribute('data-cpt');
@@ -723,13 +771,38 @@ function checkFollowUpNcciWarnings() {
       });
     }
   }
-  var banner = document.getElementById('followup-ncci-warning-banner');
+  var banner = document.getElementById('followup-ncci-warning-banner' + suffix);
   if (messages.length > 0) {
     banner.innerHTML = messages.join('<br>');
     banner.style.display = '';
   } else {
     banner.style.display = 'none';
   }
+}
+
+// Return Visit 2 (user request: "allow for up to two return visit
+// planning") stays hidden until asked for, so a clinician who only ever
+// recommends one return visit sees no change from before. Removing it
+// clears its fields rather than just hiding them, so a stray value can't
+// silently resubmit after being "removed."
+function addReturnVisit2() {
+  document.getElementById('return-visit-block-2').style.display = '';
+  document.getElementById('add-return-visit-2-btn').style.display = 'none';
+}
+function removeReturnVisit2() {
+  var block = document.getElementById('return-visit-block-2');
+  var cleared = block.querySelectorAll('input[type="text"], input[type="number"], textarea, input[type="checkbox"]');
+  cleared.forEach(function (el) {
+    if (el.type === 'checkbox') el.checked = false; else el.value = '';
+  });
+  block.style.display = 'none';
+  document.getElementById('add-return-visit-2-btn').style.display = '';
+  checkFollowUpNcciWarnings('_2');
+  // Dispatching 'change' (rather than calling the form's internal refresh()
+  // directly, which is private to the IIFE below) reuses the exact same
+  // field-change listener wiring every other tracked field already has, so
+  // clearing block 2 correctly re-runs validation without duplicating logic.
+  if (cleared.length) cleared[0].dispatchEvent(new Event('change', { bubbles: true }));
 }
 
 (function () {
@@ -1161,13 +1234,18 @@ function checkFollowUpNcciWarnings() {
   // miss or misread as applying to something else on screen. This one
   // renders right next to the field it's actually about instead.
   var followupValidationIssueEl = document.getElementById('followup_validation_issue');
-  function renderFollowupValidationIssue() {
-    var needsReason = (fieldValue('follow_up_weeks') || checkedValues('return_visit_diagnostic_orders').length)
-      && !fieldValue('follow_up_reason');
-    followupValidationIssueEl.style.display = needsReason ? '' : 'none';
-    followupValidationIssueEl.innerHTML = needsReason
+  var followupValidationIssueEl2 = document.getElementById('followup_validation_issue_2');
+  function renderFollowupValidationIssueFor(suffix, el) {
+    var needsReason = (fieldValue('follow_up_weeks' + suffix) || checkedValues('return_visit_diagnostic_orders' + suffix).length)
+      && !fieldValue('follow_up_reason' + suffix);
+    el.style.display = needsReason ? '' : 'none';
+    el.innerHTML = needsReason
       ? '⚠ A return interval or follow-up test is set without a reason below — the front desk and next visit won\'t know why the patient is coming back.'
       : '';
+  }
+  function renderFollowupValidationIssue() {
+    renderFollowupValidationIssueFor('', followupValidationIssueEl);
+    renderFollowupValidationIssueFor('_2', followupValidationIssueEl2);
   }
 
   function refresh() {
@@ -1227,7 +1305,9 @@ function checkFollowUpNcciWarnings() {
     '#focus-binocular input, #focus-binocular select, ' +
     '#focus-surgery input, #focus-surgery select, #focus-surgery textarea, ' +
     '.focus-toggle, [name="follow_up_weeks"], [name="follow_up_unit"], ' +
+    '[name="follow_up_weeks_2"], [name="follow_up_unit_2"], ' +
     '[name="return_visit_diagnostic_orders"], #follow_up_reason, ' +
+    '[name="return_visit_diagnostic_orders_2"], #follow_up_reason_2, ' +
     '#chief_complaint, #diagnosis_codes, [name="problems_addressed"], [name="em_tests_reviewed"], ' +
     '#exam_type_confirmed, #em_code_confirmed'
   ).forEach(function (el) {

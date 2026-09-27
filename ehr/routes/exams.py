@@ -5,17 +5,18 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from ehr.models.database import (get_db, EyeExam, EyeExamAddendum, Refraction, DryEyeAssessment, AnteriorSegmentAssessment,
     GlaucomaTracking, BinocularVisionAssessment, SurgeryComanagementTracking, Patient, Problem, ProblemAddendum,
-    DiagnosticTest, DiagnosticOrder)
+    DiagnosticTest, DiagnosticOrder, EyeExamFollowUp)
 from ehr.env_info import EHR_ENV
 from ehr.utils import patient_context
 from ehr.auth.deps import get_current_user
-from ehr.auth.permissions import require_role, EXAM_VIEW, EXAM_EDIT, EXAM_SIGN, ROLE_LABELS
+from ehr.auth.permissions import require_role, EXAM_VIEW, EXAM_EDIT, EXAM_SIGN, ROLE_LABELS, BILLING_OVERRIDE
 from ehr.auth import csrf
 from ehr.services import cpt_mapper
 from ehr.services import lookback_alerts
 from ehr.services import ncci_edits
 from ehr.services import scheduling as sched
 from ehr.services import authz
+from ehr.services import billing_override
 
 router = APIRouter(prefix="/exams", tags=["exams"])
 templates = Jinja2Templates(directory="ehr/templates")
@@ -69,6 +70,32 @@ def _create_diagnostic_orders(db: Session, exam: EyeExam, user_id: int, codes: l
             db.add(DiagnosticOrder(patient_id=exam.patient_id, diagnostic_test_id=test.id,
                 ordered_by_user_id=user_id, ordered_exam_id=exam.id, notes=notes))
 
+def _parse_return_visit_block(g, form, suffix: str):
+    """One of up to two independent return-visit recommendations on the New
+    Exam form (user request: "allow for up to two return visit planning").
+    suffix is '' for the first, always-visible block, or '_2' for the
+    second, hidden behind "Add another return visit" until used -- same
+    field names either way, just suffixed, rather than a fully dynamic/
+    JS-cloned field list, since the count is capped at exactly two.
+    Returns None if the block is entirely empty (nothing recommended);
+    otherwise raises ValueError if a reason is missing (checked here, before
+    the exam even exists, same as the single-block version this replaces),
+    or returns the block's parsed fields for the caller to act on once the
+    exam has an id."""
+    weeks = _i(g(f"follow_up_weeks{suffix}"))
+    codes = form.getlist(f"return_visit_diagnostic_orders{suffix}")
+    if not weeks and not codes:
+        return None
+    reason = g(f"follow_up_reason{suffix}").strip()
+    if not reason:
+        label = "Return Visit 2" if suffix else "Return Visit"
+        raise ValueError(f"{label}: a reason is required whenever a return interval or a follow-up test is set.")
+    return {
+        "weeks": weeks, "unit": g(f"follow_up_unit{suffix}") or "Week", "reason": reason, "codes": codes,
+        "override_checked": form.get(f"followup_billing_override{suffix}") == "true",
+        "override_reason": g(f"followup_billing_override_reason{suffix}"),
+    }
+
 @router.get("/new", response_class=HTMLResponse, dependencies=[Depends(require_role(*EXAM_EDIT))])
 def new_exam_form(request: Request, patient_id: int = None, appointment_id: int = None, db: Session = Depends(get_db)):
     ctx_patient = patient_context(db.query(Patient).filter(Patient.id == patient_id).first(), db) if patient_id else None
@@ -89,7 +116,8 @@ def new_exam_form(request: Request, patient_id: int = None, appointment_id: int 
         "selected_patient_id": patient_id, "today": str(date.today()), "context_patient": ctx_patient,
         "active_problems": active_problems, "appointment_id": appointment_id,
         "lookback_alerts": lookback_alerts_list,
-        "tests": _diagnostic_tests(db), "ncci_pairs": _ncci_pairs_json()})
+        "tests": _diagnostic_tests(db), "ncci_pairs": _ncci_pairs_json(),
+        "can_override_billing": request.state.user.role in BILLING_OVERRIDE})
 
 @router.post("/new", dependencies=[Depends(require_role(*EXAM_EDIT))])
 async def create_exam(request: Request, db: Session = Depends(get_db)):
@@ -97,15 +125,17 @@ async def create_exam(request: Request, db: Session = Depends(get_db)):
     csrf.verify_or_403(request.state.csrf_token, form.get("csrf_token"))
     g = lambda k: form.get(k, "")
     gl = lambda k: ", ".join(form.getlist(k))  # comma-join a multi-value (checkbox) field
-    return_visit_codes = form.getlist("return_visit_diagnostic_orders")
-    # Return-visit recommendation carry-forward (user request): a bare interval
-    # or a checked test with no stated reason is exactly the kind of ambiguous
-    # instruction that causes front-desk missteps downstream, so this is the
-    # one hard server-side requirement in an otherwise all-optional form.
-    if (_i(g("follow_up_weeks")) or return_visit_codes) and not g("follow_up_reason").strip():
-        return HTMLResponse(
-            "Reason for Follow-up is required whenever a return interval or a follow-up test is set.",
-            status_code=400)
+    # Return-visit recommendation carry-forward (user request): a bare
+    # interval or a checked test with no stated reason is exactly the kind
+    # of ambiguous instruction that causes front-desk missteps downstream,
+    # so this is the one hard server-side requirement in an otherwise
+    # all-optional form. Checked before the exam even exists (same as
+    # before) since neither block needs the exam's id yet.
+    try:
+        return_visit_blocks = [b for b in (
+            _parse_return_visit_block(g, form, ""), _parse_return_visit_block(g, form, "_2")) if b]
+    except ValueError as e:
+        return HTMLResponse(str(e), status_code=400)
     exam = EyeExam(
         patient_id=int(g("patient_id")), provider_id=int(g("provider_id")),
         appointment_id=_i(g("appointment_id")),
@@ -134,8 +164,7 @@ async def create_exam(request: Request, db: Session = Depends(get_db)):
         ros_neurological=_b(g("ros_neurological")), ros_musculoskeletal=_b(g("ros_musculoskeletal")),
         ros_endocrine=_b(g("ros_endocrine")), ros_skin=_b(g("ros_skin")), ros_notes=g("ros_notes"),
         assessment=g("assessment"), plan=g("plan"),
-        diagnosis_codes=g("diagnosis_codes"), follow_up_weeks=_i(g("follow_up_weeks")),
-        follow_up_unit=g("follow_up_unit") or "Week", follow_up_reason=g("follow_up_reason") or None,
+        diagnosis_codes=g("diagnosis_codes"),
         refractive_diagnosis=gl("refractive_diagnosis"), refractive_laterality=g("refractive_laterality"),
         refractive_stability=g("refractive_stability"), refractive_secondary_findings=gl("refractive_secondary_findings"),
         suggested_exam_type=g("suggested_exam_type") or None, exam_type_confirmed=g("exam_type_confirmed") or None,
@@ -218,12 +247,36 @@ async def create_exam(request: Request, db: Session = Depends(get_db)):
     # and can be checked at a later visit -- not just a free-text plan-line
     # note.
     _create_diagnostic_orders(db, exam, request.state.user.id, form.getlist("gt_diagnostic_orders"))
-    # Return-visit recommendation carry-forward (user request): the provider's
-    # "come back for these tests" checklist creates the same real
-    # DiagnosticOrder rows as the Glaucoma dashboard's checkboxes, tagged with
-    # the stated reason so it travels with the order to wherever it's next
-    # surfaced (patient overview card, booking-form prefill, look-back alerts).
-    _create_diagnostic_orders(db, exam, request.state.user.id, return_visit_codes, notes=g("follow_up_reason") or None)
+    # Return-visit recommendation carry-forward (user request, round 2 --
+    # "allow for up to two return visit planning"): each non-empty block
+    # becomes its own EyeExamFollowUp row plus the same real DiagnosticOrder
+    # rows the Glaucoma dashboard's checkboxes create, tagged with that
+    # block's own reason and follow_up_id so it travels with the order to
+    # wherever it's next surfaced (patient overview card, booking-form
+    # prefill, look-back alerts) and is attributable to the specific
+    # recommendation it came from. NCCI billing-rule enforcement (user
+    # request: "any exam that violates billing but is still requested can
+    # be overridden by the OD(s) or General Manager only") runs per block,
+    # against that block's own checked tests -- a flagged pair blocks the
+    # save unless the current user can override and has done so.
+    for block in return_visit_blocks:
+        test_by_code = {t.code: t for t in db.query(DiagnosticTest).filter(DiagnosticTest.code.in_(block["codes"])).all()}
+        block_tests = [test_by_code[c] for c in block["codes"] if c in test_by_code]
+        cpt_codes = [t.cpt_code for t in block_tests if t.cpt_code]
+        try:
+            billing_override.enforce(db, request.state.user, cpt_codes,
+                override_checked=block["override_checked"], override_reason=block["override_reason"],
+                source="exam", record_id=exam.id)
+        except billing_override.BillingRuleBlocked as e:
+            db.rollback()
+            return HTMLResponse(str(e), status_code=400)
+        followup = EyeExamFollowUp(eye_exam_id=exam.id, follow_up_weeks=block["weeks"],
+            follow_up_unit=block["unit"], reason=block["reason"])
+        db.add(followup); db.flush()
+        for t in block_tests:
+            db.add(DiagnosticOrder(patient_id=exam.patient_id, diagnostic_test_id=t.id,
+                ordered_by_user_id=request.state.user.id, ordered_exam_id=exam.id,
+                follow_up_id=followup.id, notes=block["reason"]))
     # Binocular Vision & Pediatrics (Vision Therapy) assessment (5.4) -- same
     # all-optional rule.
     bv_fields = dict(

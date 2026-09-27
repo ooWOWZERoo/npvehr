@@ -1294,6 +1294,51 @@ def migration_051_followup_recommendation_tracking(conn):
     # this migration) ever surface there.
     conn.execute(text("UPDATE eye_exams SET follow_up_status = 'dismissed' WHERE follow_up_status IS NULL"))
 
+def migration_052_followup_per_visit(conn):
+    """Return-visit recommendation carry-forward, round 2 (user request:
+    "allow for up to two return visit planning"): a single exam can now
+    carry up to two independent return-visit recommendations, each its own
+    EyeExamFollowUp row (that table itself needs no CREATE TABLE here --
+    it's an ordinary new SQLAlchemy model, created for free by
+    Base.metadata.create_all() before this migration ever runs; see
+    EyeExamFollowUp in ehr/models/database.py for the full rationale).
+    This migration only needs to (1) add the new
+    diagnostic_orders.follow_up_id column, and (2) migrate forward any
+    exam that already has an active (non-dismissed) recommendation under
+    the old single-recommendation columns (EyeExam.follow_up_weeks/unit/
+    reason/status/follow_up_fulfilled_appointment_id -- now legacy, see
+    their docstring) into one EyeExamFollowUp row, re-pointing that exam's
+    already-created DiagnosticOrder rows at it so the patient overview's
+    card keeps showing their tests correctly. Idempotent: an exam that
+    already has an eye_exam_followups row is skipped on a re-run."""
+    if _table_exists(conn, "diagnostic_orders"):
+        _add_column_if_missing(conn, "diagnostic_orders", "follow_up_id", "INTEGER")
+    if not (_table_exists(conn, "eye_exams") and _table_exists(conn, "eye_exam_followups")):
+        return
+    exams = conn.execute(text("""
+        SELECT id, follow_up_weeks, follow_up_unit, follow_up_reason, follow_up_status,
+               follow_up_fulfilled_appointment_id
+        FROM eye_exams
+        WHERE follow_up_weeks IS NOT NULL AND follow_up_status IN ('pending', 'scheduled')
+    """)).fetchall()
+    for exam_id, weeks, unit, reason, status, fulfilled_appt_id in exams:
+        already = conn.execute(text(
+            "SELECT id FROM eye_exam_followups WHERE eye_exam_id = :eid"), {"eid": exam_id}).fetchone()
+        if already:
+            continue
+        new_id = conn.execute(text("""
+            INSERT INTO eye_exam_followups
+                (eye_exam_id, follow_up_weeks, follow_up_unit, reason, status, fulfilled_appointment_id, created_at)
+            VALUES (:eid, :weeks, :unit, :reason, :status, :fulfilled, :now)
+            RETURNING id
+        """), {"eid": exam_id, "weeks": weeks, "unit": unit or "Week", "reason": reason,
+                "status": status, "fulfilled": fulfilled_appt_id,
+                "now": datetime.utcnow().isoformat()}).scalar_one()
+        conn.execute(text("""
+            UPDATE diagnostic_orders SET follow_up_id = :fid
+            WHERE ordered_exam_id = :eid AND follow_up_id IS NULL
+        """), {"fid": new_id, "eid": exam_id})
+
 def migration_038_patient_self_registered_at(conn):
     """Patient Self-Registration (BUILD_BACKLOG.md 5a follow-up): flags a
     chart created by the patient themselves via /portal/register, so staff
@@ -1542,6 +1587,7 @@ POST_CREATE_ALL_MIGRATIONS = [
     ("049_seed_glaucoma_oct_test", migration_049_seed_glaucoma_oct_test),
     ("050_backfill_glaucoma_oct_onh_orders", migration_050_backfill_glaucoma_oct_onh_orders),
     ("051_followup_recommendation_tracking", migration_051_followup_recommendation_tracking),
+    ("052_followup_per_visit", migration_052_followup_per_visit),
 ]
 
 # ---------------------------------------------------------------------------

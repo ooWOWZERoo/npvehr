@@ -21,7 +21,17 @@
     <dt>IOP OD/OS</dt><dd>{{ exam.iop_od or '—' }} / {{ exam.iop_os or '—' }} mmHg</dd>
     <dt>Cover Test</dt><dd>{{ exam.cover_test or '—' }}</dd>
     <dt>Dx Codes</dt><dd class="mono-data">{{ exam.diagnosis_codes or '—' }}</dd>
-    <dt>Follow-up</dt><dd>{% if exam.follow_up_weeks %}{{ exam.follow_up_weeks }} {{ (exam.follow_up_unit or 'Week')|lower }}{{ 's' if exam.follow_up_weeks != 1 }}{% if exam.follow_up_reason %} &mdash; {{ exam.follow_up_reason }}{% endif %} <span class="badge badge-{{ exam.follow_up_status or 'pending' }}">{{ (exam.follow_up_status or 'pending')|replace('_',' ') }}</span>{% else %}—{% endif %}</dd>
+    <dt>Follow-up</dt><dd>
+      {% if exam.follow_ups %}
+        {% for f in exam.follow_ups %}
+        <div{% if not loop.last %} style="margin-bottom:0.35rem"{% endif %}>
+          {{ f.follow_up_weeks }} {{ (f.follow_up_unit or 'Week')|lower }}{{ 's' if f.follow_up_weeks != 1 }}
+          {% if f.reason %} &mdash; {{ f.reason }}{% endif %}
+          <span class="badge badge-{{ f.status or 'pending' }}">{{ (f.status or 'pending')|replace('_',' ') }}</span>
+        </div>
+        {% endfor %}
+      {% else %}—{% endif %}
+    </dd>
   </dl></div>
   <div class="card"><h3>Visual Acuity</h3>
     <div class="table-responsive">

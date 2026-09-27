@@ -12,9 +12,9 @@
     {% if f.reason %}&mdash; {{ f.reason }}{% endif %}
   </span>
   <div style="display:flex;gap:0.4rem;flex-shrink:0">
-    <a href="/appointments/new?patient_id={{ patient_id }}&follow_up_exam_id={{ f.exam_id }}"
+    <a href="/appointments/new?patient_id={{ patient_id }}&follow_up_id={{ f.followup_id }}"
        class="btn btn-sm btn-primary">Book Follow-Up</a>
-    <form method="post" action="/patients/{{ patient_id }}/exams/{{ f.exam_id }}/follow-up/dismiss">
+    <form method="post" action="/patients/{{ patient_id }}/followups/{{ f.followup_id }}/dismiss">
       <button type="submit" class="btn btn-sm btn-secondary"
         title="Mark this recommendation as addressed without using Book Follow-Up (e.g. it was booked through the ordinary calendar)">Mark Addressed</button>
     </form>

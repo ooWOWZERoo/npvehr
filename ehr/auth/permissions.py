@@ -58,6 +58,14 @@ EXAM_EDIT = {SYSTEM_ADMINISTRATOR, PRACTICE_ADMINISTRATOR, TECHNICIAN, OPTOMETRI
 # never sign one themselves.
 EXAM_SIGN = {SYSTEM_ADMINISTRATOR, OPTOMETRIST_PROVIDER}
 
+# User request: an NCCI billing-rule conflict (ehr.services.ncci_edits) can
+# only be overridden by "the OD(s) or General Manager" -- this app has no
+# distinct "General Manager" role, so Practice Administrator (the existing
+# top non-clinical role) stands in for it, per the user's own confirmed
+# mapping. System Administrator included for the same override-everything
+# reason it's in EXAM_SIGN/USER_MANAGEMENT above.
+BILLING_OVERRIDE = {SYSTEM_ADMINISTRATOR, PRACTICE_ADMINISTRATOR, OPTOMETRIST_PROVIDER}
+
 # JUDGMENT CALL: Front Desk and Technician get NO prescription access at all --
 # prescriptions are not part of either role's listed scope.
 RX_VIEW = {SYSTEM_ADMINISTRATOR, PRACTICE_ADMINISTRATOR, OPTOMETRIST_PROVIDER, OPTICIAN,

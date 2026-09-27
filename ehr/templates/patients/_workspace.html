@@ -30,7 +30,7 @@
     </div>
   </div>
   <div class="pw-header-actions no-print">
-    <a href="/appointments/new?patient_id={{ patient.id }}" class="btn btn-primary btn-sm">Schedule Appt</a>
+    <a href="{{ schedule_href }}" class="btn btn-primary btn-sm">Schedule Appt</a>
     <a href="/exams/new?patient_id={{ patient.id }}" class="btn btn-primary btn-sm">New Exam</a>
     <a href="/prescriptions/new?patient_id={{ patient.id }}" class="btn btn-primary btn-sm">New Rx</a>
     <button type="button" class="btn btn-secondary btn-sm" onclick="window.print()">Print</button>
