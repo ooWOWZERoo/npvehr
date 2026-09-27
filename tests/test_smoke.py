@@ -2370,3 +2370,81 @@ def test_appointment_status_cycles_through_all_six_values(logged_in_page, live_s
         assert resp.status in (200, 303), f"status={status} returned {resp.status}"
     page.goto(live_server + f"/appointments/{appt_id}")
     assert "Scheduled" in page.content() or "scheduled" in page.content()
+
+
+def test_recently_viewed_cookie_cleared_on_login_and_logout(logged_in_page, live_server):
+    """Record-level authorization follow-up (spec §74.3): the sidebar
+    "recently viewed patients" cookie (npv_recent_patients) is cleared on
+    both login and logout, so a new session on the same browser never
+    inherits a prior session's patient names."""
+    page = logged_in_page
+    page.goto(live_server + "/")
+    page.evaluate("document.cookie = 'npv_recent_patients=' + encodeURIComponent(JSON.stringify([{id:1,name:'Leaked Patient'}])) + '; path=/'")
+    page.reload()
+    assert "Leaked Patient" in page.content()
+
+    resp = page.request.post(live_server + "/logout",
+        form={"csrf_token": page.locator('meta[name="csrf-token"]').get_attribute("content")})
+    assert resp.status in (200, 303)
+    cookies = {c["name"]: c["value"] for c in page.context.cookies()}
+    assert "npv_recent_patients" not in cookies
+
+    page.evaluate("document.cookie = 'npv_recent_patients=' + encodeURIComponent(JSON.stringify([{id:1,name:'Leaked Patient'}])) + '; path=/'")
+    page.goto(live_server + "/login")
+    page.fill("#email", DEMO_EMAIL)
+    page.fill("#password", DEMO_PASSWORD)
+    page.click("button[type=submit]")
+    page.wait_for_url(f"{live_server}/")
+    cookies = {c["name"]: c["value"] for c in page.context.cookies()}
+    assert "npv_recent_patients" not in cookies
+    assert "Leaked Patient" not in page.content()
+
+
+def test_patient_list_pagination_preserves_filters(logged_in_page, live_server):
+    """Pagination on the patients list (spec §36.5 item 13 / §18.3 item 5
+    follow-up: "no pagination, advanced search, filters, or large-data
+    handling on any list screen"). Creates enough patients matching a unique
+    last name to force a second page, confirms the page-2 link preserves the
+    active last_name filter, and confirms page 2 actually shows different
+    rows than page 1."""
+    page = logged_in_page
+    token = page.locator('meta[name="csrf-token"]').get_attribute("content")
+    for i in range(27):
+        resp = page.request.post(live_server + "/patients/new",
+            form={"first_name": f"Pagetest{i:02d}", "last_name": "Paginationsubject", "csrf_token": token})
+        assert resp.status in (200, 303)
+
+    page.goto(live_server + "/patients?last_name=Paginationsubject")
+    assert "Page 1 of 2" in page.content()
+    assert "Showing 1" in page.content()
+    page1_names = page.locator("table tbody tr td a.patient-name-cell").all_inner_texts()
+    assert len(page1_names) == 25
+
+    next_link = page.locator(".pagination-controls a", has_text="Next")
+    href = next_link.get_attribute("href")
+    assert "last_name=Paginationsubject" in href
+    assert "page=2" in href
+    next_link.click()
+    page.wait_for_load_state("networkidle")
+    assert "Page 2 of 2" in page.content()
+    page2_names = page.locator("table tbody tr td a.patient-name-cell").all_inner_texts()
+    assert len(page2_names) == 2
+    assert set(page1_names).isdisjoint(set(page2_names))
+
+
+def test_appointment_list_filters_and_pagination(logged_in_page, live_server):
+    """Filters and pagination on the flat appointments list (previously had
+    neither, loading every appointment in the practice's history unbounded).
+    Filters by status; confirms every returned row actually has that status."""
+    page = logged_in_page
+    page.goto(live_server + "/appointments/?status=cancelled")
+    rows = page.locator("table tbody tr")
+    count = rows.count()
+    if count and "No appointments" not in rows.first.inner_text():
+        for i in range(count):
+            assert "cancelled" in rows.nth(i).inner_text().lower()
+
+    # The unfiltered list (real appointment data from other tests in this
+    # shared session-scoped database) shows the pagination summary.
+    page.goto(live_server + "/appointments/")
+    assert page.locator(".pagination").count() == 1

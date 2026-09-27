@@ -13,6 +13,7 @@ from ehr.services import lookback_alerts
 from ehr.services import authz
 from ehr.services import scheduling as sched
 from ehr.services import field_audit
+from ehr.services import pagination as pg
 from ehr.env_info import EHR_ENV
 from ehr.utils import patient_context, compute_age, display_name
 from ehr.auth.permissions import require_role, PATIENT_EDIT, ROLE_LABELS
@@ -55,7 +56,7 @@ def _parse_balance(raw: str):
 @router.get("/", response_class=HTMLResponse)
 def list_patients(request: Request, q: str = "",
     last_name: str = "", first_name: str = "", dob: str = "", phone: str = "", mrn: str = "",
-    db: Session = Depends(get_db)):
+    page: int = 1, db: Session = Depends(get_db)):
     """Multi-field patient search (Last Name / First Name / DOB / Phone / MRN, AND-combined,
     partial+case-insensitive) with a legacy `q` fallback for the top-bar quick-switcher and any
     old bookmarks -- `q` alone still does the original OR-across-first/last/phone match."""
@@ -78,20 +79,24 @@ def list_patients(request: Request, q: str = "",
             (Patient.last_name.ilike(f"%{q}%")) |
             (Patient.phone.ilike(f"%{q}%"))
         )
-    patients = query.order_by(Patient.last_name).all()
+    query = query.order_by(Patient.last_name)
+    patients, total, total_pages, page = pg.paginate(query, page)
     ages = {p.id: compute_age(p.date_of_birth) for p in patients}
-    # NOTE: one query per patient row -- fine at seed-data scale, but would need a single
-    # GROUP BY/eager-loaded query (or a denormalized "last_exam_date" column) at real scale.
+    # NOTE: one query per patient row -- fine at a page's worth of rows at a time
+    # (now that this is paginated), but would need a single GROUP BY/eager-loaded
+    # query (or a denormalized "last_exam_date" column) if page size ever grows.
     last_exam_dates = {}
     for p in patients:
         last = (db.query(EyeExam.exam_date).filter(EyeExam.patient_id == p.id)
                 .order_by(EyeExam.exam_date.desc()).first())
         last_exam_dates[p.id] = last[0] if last else None
-    return templates.TemplateResponse(request, "patients/list.html", {
+    ctx = {
         "patients": patients, "q": q,
         "last_name": last_name, "first_name": first_name, "dob": dob, "phone": phone, "mrn": mrn,
         "ages": ages, "last_exam_dates": last_exam_dates,
-    })
+    }
+    ctx.update(pg.pagination_context(request, page, total, total_pages))
+    return templates.TemplateResponse(request, "patients/list.html", ctx)
 
 @router.get("/merge", response_class=HTMLResponse)
 def merge_patient_stub(request: Request):

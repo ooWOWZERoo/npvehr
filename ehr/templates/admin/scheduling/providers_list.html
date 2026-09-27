@@ -17,7 +17,16 @@
     <button type="submit" class="btn btn-primary">Add Provider</button>
   </form>
 </div>
-<div class="card" style="margin-top:1rem">
+<div class="card" style="margin-top:1rem;margin-bottom:1rem">
+  <form method="get" style="display:flex;gap:0.5rem;align-items:flex-end">
+    <div class="form-group" style="margin-bottom:0;flex:1"><label>Search Name <input type="text" name="q" value="{{ q }}"></label></div>
+    <div class="form-actions" style="margin-top:0">
+      <button type="submit" class="btn btn-secondary">Search</button>
+      {% if q %}<a href="/admin/scheduling/providers" class="btn btn-secondary">Clear</a>{% endif %}
+    </div>
+  </form>
+</div>
+<div class="card">
   <table><thead><tr><th>Name</th><th>Specialty</th><th>License #</th><th>NPI</th><th>Status</th><th></th></tr></thead><tbody>
   {% for p in providers %}
     <tr>
@@ -33,9 +42,10 @@
         </form>
       </td>
     </tr>
-  {% else %}<tr><td colspan="6" style="text-align:center;color:#64748b">No providers defined yet.</td></tr>
+  {% else %}<tr><td colspan="6" style="text-align:center;color:#64748b">No providers found.</td></tr>
   {% endfor %}
   </tbody></table>
+  {% include "_pagination.html" %}
   <p style="font-size:0.8rem;color:#64748b;margin-top:0.75rem">
     Deactivating a provider does not remove them from any existing appointment, exam, or prescription record --
     it only marks them as no longer active. Every booking form and availability search across the app still

@@ -11,6 +11,7 @@ from ehr.models.database import (get_db, Appointment, Patient, Provider, Appoint
 from ehr.services import scheduling as sched
 from ehr.services import notifications as notify
 from ehr.services import cpt_mapper
+from ehr.services import pagination as pg
 from ehr.env_info import EHR_ENV, CRON_SECRET
 from ehr.utils import patient_context
 from ehr.auth.permissions import require_role, APPOINTMENT_EDIT, ROLE_LABELS
@@ -287,11 +288,40 @@ def _form_context(db: Session, patient_id=None, prefill_date=None, appt: Appoint
 
 
 @router.get("/", response_class=HTMLResponse)
-def list_appointments(request: Request, patient_id: int = None, db: Session = Depends(get_db)):
-    appts = db.query(Appointment).order_by(Appointment.scheduled_at).all()
+def list_appointments(request: Request, patient_id: int = None, provider_id: int = None,
+    status: str = "", date_from: str = "", date_to: str = "", page: int = 1, db: Session = Depends(get_db)):
+    """Flat, filterable, paginated appointment list -- distinct from the
+    calendar/board views (which fetch live JSON from /appointments/feed.json
+    and are meant for visual date-range browsing, not searching a specific
+    subset). Spec §36.5 item 13 / §18.3 item 5 follow-up: no filters or
+    pagination previously existed here at all, loading every appointment in
+    the practice's history unbounded on every visit."""
+    query = db.query(Appointment)
+    if patient_id:
+        query = query.filter(Appointment.patient_id == patient_id)
+    if provider_id:
+        query = query.filter(Appointment.provider_id == provider_id)
+    if status:
+        try:
+            query = query.filter(Appointment.status == AppointmentStatus(status))
+        except ValueError:
+            pass
+    if date_from:
+        query = query.filter(Appointment.scheduled_at >= date_from)
+    if date_to:
+        query = query.filter(Appointment.scheduled_at < date_to + "T23:59:59")
+    query = query.order_by(Appointment.scheduled_at.desc())
+    appts, total, total_pages, page = pg.paginate(query, page)
     ctx_patient = patient_context(db.query(Patient).filter(Patient.id == patient_id).first(), db) if patient_id else None
-    return templates.TemplateResponse(request, "appointments/list.html",
-        {"appointments": appts, "context_patient": ctx_patient})
+    ctx = {
+        "appointments": appts, "context_patient": ctx_patient,
+        "providers": db.query(Provider).order_by(Provider.last_name).all(),
+        "statuses": list(AppointmentStatus),
+        "patient_id": patient_id, "provider_id": provider_id, "status": status,
+        "date_from": date_from, "date_to": date_to,
+    }
+    ctx.update(pg.pagination_context(request, page, total, total_pages))
+    return templates.TemplateResponse(request, "appointments/list.html", ctx)
 
 
 def _board_context(request: Request, db: Session, initial_view: str, initial_date: date, providers_mode: bool,

@@ -1,0 +1,20 @@
+{# Shared pagination control. Expects `page`, `total`, `total_pages`, `page_size`,
+   `prev_url`, `next_url` in scope (ehr.services.pagination.pagination_context). #}
+{% if total_pages > 1 or total > 0 %}
+<div class="pagination">
+  <span class="pagination-summary">
+    {% if total == 0 %}No results{% else %}
+    Showing {{ (page - 1) * page_size + 1 }}&ndash;{{ [page * page_size, total] | min }} of {{ total }}
+    {% endif %}
+  </span>
+  {% if total_pages > 1 %}
+  <span class="pagination-controls">
+    {% if prev_url %}<a href="{{ prev_url }}" class="btn btn-sm btn-secondary">&laquo; Prev</a>
+    {% else %}<span class="btn btn-sm btn-secondary" aria-disabled="true">&laquo; Prev</span>{% endif %}
+    <span class="pagination-page">Page {{ page }} of {{ total_pages }}</span>
+    {% if next_url %}<a href="{{ next_url }}" class="btn btn-sm btn-secondary">Next &raquo;</a>
+    {% else %}<span class="btn btn-sm btn-secondary" aria-disabled="true">Next &raquo;</span>{% endif %}
+  </span>
+  {% endif %}
+</div>
+{% endif %}

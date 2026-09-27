@@ -7,6 +7,15 @@
   <a href="/admin/users/new" class="btn btn-primary">+ New User</a>
   <a href="/admin/audit" class="btn btn-secondary">Auth Audit Log</a>
 </div>
+<div class="card" style="margin-bottom:1rem">
+  <form method="get" style="display:flex;gap:0.5rem;align-items:flex-end">
+    <div class="form-group" style="margin-bottom:0;flex:1"><label>Search Name or Email <input type="text" name="q" value="{{ q }}"></label></div>
+    <div class="form-actions" style="margin-top:0">
+      <button type="submit" class="btn btn-secondary">Search</button>
+      {% if q %}<a href="/admin/users" class="btn btn-secondary">Clear</a>{% endif %}
+    </div>
+  </form>
+</div>
 <div class="card">
   <div class="table-responsive">
   <table>
@@ -26,9 +35,11 @@
           </form>
         </td>
       </tr>
+    {% else %}<tr><td colspan="7" style="text-align:center;color:var(--ink-muted)">No users found.</td></tr>
     {% endfor %}
     </tbody>
   </table>
   </div>
+  {% include "_pagination.html" %}
 </div>
 {% endblock %}
