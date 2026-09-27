@@ -7,7 +7,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from ehr.models.database import (get_db, Appointment, Patient, Provider, AppointmentStatus, AppointmentType,
     AppointmentTypeVersion, DiagnosticTest, AppointmentTest, AppointmentAuditEvent, AppointmentResourceReservation,
-    Resource, WaitlistEntry, User, AppointmentReminder, WaitlistNotification)
+    Resource, WaitlistEntry, User, AppointmentReminder, WaitlistNotification, PracticeClosure)
 from ehr.services import scheduling as sched
 from ehr.services import notifications as notify
 from ehr.services import cpt_mapper
@@ -407,6 +407,22 @@ def board_view(request: Request, date_str: str = None, appointment_type_version_
     return templates.TemplateResponse(request, "appointments/board.html", _board_context(
         request, db, "timeGridDay", d, True, None, _qi(appointment_type_version_id), relationship, status,
         _qi(room_resource_id), has_notes, patient_id))
+
+
+@router.get("/date-check.json")
+def date_availability_check(date_str: str, db: Session = Depends(get_db)):
+    """Calendar click-to-create pre-check (spec §18.2 item 7 follow-up):
+    previously a day-cell click navigated straight to the New Appointment
+    form with no idea whether the date was even bookable, so a practice
+    closure was only ever discovered after filling out the whole form and
+    submitting it. The board's dateClick handler calls this first and, on a
+    closed date, shows the closure inline instead of navigating at all --
+    the exact rejection rule _apply_scheduling_rules already enforces at
+    submit time (ehr.services.scheduling.find_closure), just surfaced a step
+    earlier. Route must be registered before GET /{appt_id} for the same
+    reason feed.json is (a literal path segment ahead of a parameterized one)."""
+    closure = db.query(PracticeClosure).filter(PracticeClosure.closure_date == date_str).first()
+    return JSONResponse({"closed": closure is not None, "label": closure.label if closure else None})
 
 
 @router.get("/feed.json")

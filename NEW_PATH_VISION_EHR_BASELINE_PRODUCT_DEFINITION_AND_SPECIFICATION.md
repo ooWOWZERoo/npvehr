@@ -4268,3 +4268,31 @@ No down-migration for the other 40 existing migrations -- most seed data (a down
 | New files | `ehr/db/rollback.py`. |
 | Updated | `ehr/db/migrations.py`. `tests/test_migrations.py` gained three new tests. |
 | Explicitly not done | No down-migration for the other 40 existing migrations. No multi-step rollback chain. No rollback UI. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |
+
+## 82. Calendar Click-to-Create Availability Pre-Check (v2.55)
+
+### 82.1 Origin
+
+Long-tracked gap (spec §18.2 item 7's own note): "calendar click-to-create still does not itself pre-check availability before opening the form." A day-cell click on the calendar/board views navigated straight to the New Appointment form with no idea whether the date was even bookable -- a practice closure was only ever discovered after filling out and submitting the whole form.
+
+### 82.2 What changed
+
+**New `GET /appointments/date-check.json?date_str=YYYY-MM-DD`**: a small JSON endpoint returning `{closed, label}` for a given date, backed by the same `PracticeClosure` table `_apply_scheduling_rules`/`find_closure` already check at submit time -- this surfaces the identical rejection rule one step earlier, not a new rule.
+
+**The board's `dateClick` handler** (`ehr/templates/appointments/board.html`, shared by all of `/calendar`, `/day`, `/week`, and `/board`) now calls this endpoint before navigating: a closed date shows the closure's own label and does not navigate at all; an open date navigates to `/appointments/new?date=...` exactly as before. A network hiccup on the pre-check itself doesn't block booking -- it falls through to navigating anyway, since the form's own submit-time check remains the real guard; this is purely a saved round trip on the common case.
+
+### 82.3 Verified
+
+`python3 -m py_compile` on the touched route file; Jinja parse-check on the touched template. New Playwright test `test_calendar_click_to_create_precheck_blocks_closed_dates` adds a practice closure, confirms clicking a time slot on that date shows the closure's label and never navigates away from the calendar, and confirms clicking a genuinely open date still navigates to the New Appointment form. Full suite (86 tests, up from 85) passed after this change.
+
+### 82.4 Explicitly not done
+
+No pre-check of provider-specific availability (whether a given provider has any configured working hours on that date) -- that's an advisory signal the availability-search page already surfaces, not a hard server-side rejection rule the way a practice closure is, so pre-checking and blocking on it would be over-restrictive (a provider can still be booked manually outside their usual template hours). No caching of the date-check result across repeated clicks on the same date in one session -- each click is a small, cheap query, matching this app's existing simplicity convention. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6.
+
+**Version 2.55 change log (relative to v2.54) — Calendar Click-to-Create Pre-Check:**
+
+| Area | Change |
+| --- | --- |
+| New capability | Calendar/board day-cell clicks now pre-check practice-closure status before navigating to the New Appointment form. |
+| Updated | `ehr/routes/appointments.py` (new `/date-check.json` route), `ehr/templates/appointments/board.html` (`dateClick` handler). `tests/test_smoke.py` gained one new test. |
+| Explicitly not done | No provider-specific availability pre-check (advisory, not a hard rejection rule). No client-side caching of the check. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |
