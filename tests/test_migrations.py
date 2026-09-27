@@ -165,3 +165,39 @@ def test_rollback_rejects_unknown_or_unregistered_or_unapplied_migrations(fresh_
     # engine yet, so there's nothing to roll back.
     with pytest.raises(ValueError):
         mig.rollback_migration(fresh_engine, "045_user_provider_link")
+
+
+def test_glaucoma_oct_onh_backfill_only_recodes_exam_linked_orders(fresh_engine):
+    """migration_050's backfill must recode only DiagnosticOrder rows created
+    via the Glaucoma dashboard's "OCT RNFL" checkbox (ordered_exam_id set) --
+    a quick-ordered "OCT" row from a look-back alert (ordered_exam_id NULL)
+    could have come from the glaucoma, AMD, or diabetic-retinopathy profile,
+    all of which used to share the generic "OCT" code, so it must be left
+    untouched rather than guessed at."""
+    _run_all_migrations(fresh_engine)
+    with fresh_engine.begin() as conn:
+        oct_id = conn.execute(text("SELECT id FROM diagnostic_tests WHERE code = 'OCT'")).fetchone()[0]
+        oct_onh_id = conn.execute(text("SELECT id FROM diagnostic_tests WHERE code = 'OCT_ONH'")).fetchone()[0]
+        conn.execute(text("""
+            INSERT INTO patients (first_name, last_name, sms_opt_in, email_opt_in)
+            VALUES ('Backfill', 'Testpatient', 0, 0)
+        """))
+        patient_id = conn.execute(text("SELECT id FROM patients WHERE last_name = 'Testpatient'")).fetchone()[0]
+        conn.execute(text("""
+            INSERT INTO diagnostic_orders (patient_id, diagnostic_test_id, ordered_exam_id, status)
+            VALUES (:pid, :oct, 1, 'ordered')
+        """), {"pid": patient_id, "oct": oct_id})
+        conn.execute(text("""
+            INSERT INTO diagnostic_orders (patient_id, diagnostic_test_id, ordered_exam_id, status)
+            VALUES (:pid, :oct, NULL, 'ordered')
+        """), {"pid": patient_id, "oct": oct_id})
+
+    with fresh_engine.begin() as conn:
+        mig.migration_050_backfill_glaucoma_oct_onh_orders(conn)
+
+    with fresh_engine.connect() as conn:
+        rows = conn.execute(text("""
+            SELECT diagnostic_test_id, ordered_exam_id FROM diagnostic_orders ORDER BY id
+        """)).fetchall()
+    assert rows[0] == (oct_onh_id, 1)  # exam-linked -- recoded
+    assert rows[1] == (oct_id, None)  # quick-ordered -- left alone

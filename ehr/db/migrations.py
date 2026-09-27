@@ -1221,14 +1221,13 @@ def migration_049_seed_glaucoma_oct_test(conn):
     (OCT, optic nerve), so that code could never appear anywhere in this
     app's Scheduled Tests selection or billing preview. Adds a second,
     distinct catalog test for it, same pattern as migration_037's
-    Gonioscopy/Pachymetry addition. Deliberately does NOT touch the existing
-    "OCT" test, the Glaucoma dashboard's "OCT RNFL" diagnostic-order
-    checkbox, or lookback_alerts.CONDITION_PROFILES' "OCT" required-test-code
-    entries -- those already point at code 92134 for glaucoma/AMD/diabetic-
-    retinopathy monitoring, a pre-existing conflation (RNFL/optic-nerve
-    monitoring clinically corresponds to 92133) left alone here since
-    repointing it would change already-relied-on look-back/order-tracking
-    behavior nobody asked to change in this round."""
+    Gonioscopy/Pachymetry addition. The Glaucoma dashboard's "OCT RNFL"
+    diagnostic-order checkbox and lookback_alerts.CONDITION_PROFILES'
+    Standard Glaucoma Protocol -- both previously pointed at the generic
+    "OCT" (92134, retina) test, a pre-existing conflation since "OCT RNFL"
+    clinically corresponds to 92133 -- were repointed at this new catalog
+    entry in a follow-up code change (see migration_050 for the matching
+    historical-data backfill)."""
     if not _table_exists(conn, "diagnostic_tests"):
         return
     existing = {r[0] for r in conn.execute(text("SELECT code FROM diagnostic_tests")).fetchall()}
@@ -1241,6 +1240,39 @@ def migration_049_seed_glaucoma_oct_test(conn):
     if _table_exists(conn, "cpt_codes"):
         conn.execute(text("UPDATE diagnostic_tests SET cpt_code = '92133' "
             "WHERE code = 'OCT_ONH' AND cpt_code IS NULL"))
+
+def migration_050_backfill_glaucoma_oct_onh_orders(conn):
+    """Historical-data backfill for the OCT/OCT_ONH conflation fix (see
+    migration_049 and the Glaucoma dashboard/lookback_alerts code change
+    that repointed the "OCT RNFL" checkbox and Standard Glaucoma Protocol
+    profile at the new OCT_ONH catalog entry). Existing DiagnosticOrder rows
+    created via that exact checkbox -- and ONLY those -- are recoded from
+    the generic "OCT" (92134, retina) test to "OCT_ONH" (92133, optic
+    nerve), so a patient's real prior glaucoma OCT still counts toward the
+    look-back interval instead of triggering a spurious "overdue" alert.
+
+    Scope is precise, not a guess: `ehr.routes.exams.create_exam`'s
+    gt_diagnostic_orders loop (the Glaucoma dashboard's checkbox) is the
+    ONLY place in this codebase that ever creates a DiagnosticOrder with
+    ordered_exam_id set for the "OCT" test -- confirmed by inspecting every
+    `DiagnosticOrder(` call site. The other creation site
+    (`ehr.routes.patients.quick_order_diagnostic_test`, the look-back
+    alert's "Order Now" button) never sets ordered_exam_id, and is
+    deliberately left untouched here: a quick-ordered "OCT" row could have
+    originated from the glaucoma, AMD, or diabetic-retinopathy look-back
+    profile (all three used to reference the generic "OCT" code), and
+    nothing on that row records which one -- recoding it would be a guess,
+    not a correction, so those rows keep their original code."""
+    if not _table_exists(conn, "diagnostic_orders") or not _table_exists(conn, "diagnostic_tests"):
+        return
+    oct_row = conn.execute(text("SELECT id FROM diagnostic_tests WHERE code = 'OCT'")).fetchone()
+    oct_onh_row = conn.execute(text("SELECT id FROM diagnostic_tests WHERE code = 'OCT_ONH'")).fetchone()
+    if not oct_row or not oct_onh_row:
+        return
+    conn.execute(text("""
+        UPDATE diagnostic_orders SET diagnostic_test_id = :oct_onh_id
+        WHERE diagnostic_test_id = :oct_id AND ordered_exam_id IS NOT NULL
+    """), {"oct_onh_id": oct_onh_row[0], "oct_id": oct_row[0]})
 
 def migration_038_patient_self_registered_at(conn):
     """Patient Self-Registration (BUILD_BACKLOG.md 5a follow-up): flags a
@@ -1488,6 +1520,7 @@ POST_CREATE_ALL_MIGRATIONS = [
     ("035_seed_cpt_codes", migration_035_seed_cpt_codes),
     ("037_seed_gonioscopy_pachymetry", migration_037_seed_gonioscopy_pachymetry),
     ("049_seed_glaucoma_oct_test", migration_049_seed_glaucoma_oct_test),
+    ("050_backfill_glaucoma_oct_onh_orders", migration_050_backfill_glaucoma_oct_onh_orders),
 ]
 
 # ---------------------------------------------------------------------------
