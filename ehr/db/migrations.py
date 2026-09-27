@@ -1214,6 +1214,34 @@ def migration_037_seed_gonioscopy_pachymetry(conn):
             conn.execute(text("UPDATE diagnostic_tests SET cpt_code = :cpt "
                 "WHERE code = :test_code AND cpt_code IS NULL"), {"cpt": cpt, "test_code": test_code})
 
+def migration_049_seed_glaucoma_oct_test(conn):
+    """NCCI PTP-edit advisory check (BUILD_BACKLOG.md, spec 86): before this,
+    the single "OCT" catalog test (migration_003) was mapped to only one CPT
+    code, 92134 (OCT, retina) -- there was no catalog entry at all for 92133
+    (OCT, optic nerve), so that code could never appear anywhere in this
+    app's Scheduled Tests selection or billing preview. Adds a second,
+    distinct catalog test for it, same pattern as migration_037's
+    Gonioscopy/Pachymetry addition. Deliberately does NOT touch the existing
+    "OCT" test, the Glaucoma dashboard's "OCT RNFL" diagnostic-order
+    checkbox, or lookback_alerts.CONDITION_PROFILES' "OCT" required-test-code
+    entries -- those already point at code 92134 for glaucoma/AMD/diabetic-
+    retinopathy monitoring, a pre-existing conflation (RNFL/optic-nerve
+    monitoring clinically corresponds to 92133) left alone here since
+    repointing it would change already-relied-on look-back/order-tracking
+    behavior nobody asked to change in this round."""
+    if not _table_exists(conn, "diagnostic_tests"):
+        return
+    existing = {r[0] for r in conn.execute(text("SELECT code FROM diagnostic_tests")).fetchall()}
+    if "OCT_ONH" not in existing:
+        conn.execute(text("""
+            INSERT INTO diagnostic_tests (code, display_name, calendar_abbreviation, active,
+                counts_toward_color, default_duration_minutes, display_order)
+            VALUES ('OCT_ONH', 'OCT, Optic Nerve (Glaucoma)', 'OCT-ONH', TRUE, TRUE, 10, 100)
+        """))
+    if _table_exists(conn, "cpt_codes"):
+        conn.execute(text("UPDATE diagnostic_tests SET cpt_code = '92133' "
+            "WHERE code = 'OCT_ONH' AND cpt_code IS NULL"))
+
 def migration_038_patient_self_registered_at(conn):
     """Patient Self-Registration (BUILD_BACKLOG.md 5a follow-up): flags a
     chart created by the patient themselves via /portal/register, so staff
@@ -1459,6 +1487,7 @@ POST_CREATE_ALL_MIGRATIONS = [
     ("011_seed_resources_and_requirements", migration_011_seed_resources_and_requirements),
     ("035_seed_cpt_codes", migration_035_seed_cpt_codes),
     ("037_seed_gonioscopy_pachymetry", migration_037_seed_gonioscopy_pachymetry),
+    ("049_seed_glaucoma_oct_test", migration_049_seed_glaucoma_oct_test),
 ]
 
 # ---------------------------------------------------------------------------

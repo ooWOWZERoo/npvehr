@@ -62,9 +62,10 @@
     <div class="section-title">Scheduled Tests (spec 13)</div>
     <div class="test-chip-list">
       {% for t in tests %}
-      <label class="test-chip"><input type="checkbox" name="test_ids" value="{{ t.id }}" {{ 'checked' if t.id in (posted.test_ids or []) }}> {{ t.calendar_abbreviation }}</label>
+      <label class="test-chip"><input type="checkbox" name="test_ids" value="{{ t.id }}" data-cpt="{{ t.cpt_code or '' }}" onchange="checkNcciWarnings()" {{ 'checked' if t.id in (posted.test_ids or []) }}> {{ t.calendar_abbreviation }}</label>
       {% endfor %}
     </div>
+    <div id="ncci-warning-banner" class="alert alert-warning" style="display:none"></div>
 
     <div class="section-title">Resource Assignment (spec 31.3)</div>
     <div id="resource-picker-container"></div>
@@ -86,11 +87,39 @@
 var RESOURCE_PICKER = {{ resource_picker|tojson }};
 var RESOURCE_OPTIONS_BY_CLASS = {{ resource_options_by_class|tojson }};
 var CURRENT_RESOURCE_SELECTIONS = {{ current_resource_selections|tojson }};
+var NCCI_PAIRS = {{ ncci_pairs|tojson }};
 
 function onRelationshipChange(){
   document.getElementById('relationship_source').value = 'manual_override';
 }
 function updateSuggestion(){ /* suggestion is computed server-side on load; changing patient/date requires reload for a fresh suggestion */ }
+
+function checkNcciWarnings(){
+  var checked = document.querySelectorAll('input[name="test_ids"]:checked');
+  var codes = [];
+  checked.forEach(function(el){
+    var cpt = el.getAttribute('data-cpt');
+    if (cpt) codes.push(cpt);
+  });
+  var messages = [];
+  for (var i = 0; i < codes.length; i++) {
+    for (var j = i + 1; j < codes.length; j++) {
+      NCCI_PAIRS.forEach(function(pair){
+        if ((pair.column1 === codes[i] && pair.column2 === codes[j]) ||
+            (pair.column1 === codes[j] && pair.column2 === codes[i])) {
+          messages.push(pair.message);
+        }
+      });
+    }
+  }
+  var banner = document.getElementById('ncci-warning-banner');
+  if (messages.length > 0) {
+    banner.innerHTML = messages.join('<br>');
+    banner.style.display = '';
+  } else {
+    banner.style.display = 'none';
+  }
+}
 
 function renderResourcePicker(){
   var sel = document.getElementById('appointment_type_version_id');
@@ -147,5 +176,6 @@ function onTypeChange(){
 }
 document.getElementById('relationship').addEventListener('change', onTypeChange);
 onTypeChange();
+checkNcciWarnings();
 </script>
 {% endblock %}

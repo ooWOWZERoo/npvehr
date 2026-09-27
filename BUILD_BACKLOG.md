@@ -1,6 +1,6 @@
 # New Path Vision EHR — Master Build Backlog
 
-**Status:** Living tracking document. **Baseline as of:** spec v2.58 / research doc v2.24 (2026-09-27).
+**Status:** Living tracking document. **Baseline as of:** spec v2.59 / research doc v2.24 (2026-09-27).
 
 ## Purpose and how to use this document
 
@@ -78,12 +78,12 @@ All five dashboards from the original reviewed requirements document are now bui
 
 ---
 
-## 2. Billing, Claims & Insurance (research doc §6) — target-state only
+## 2. Billing, Claims & Insurance (research doc §6) — target-state only, with one narrow exception below
 
-**Explicitly gated**: do not begin implementation without (a) a real clearinghouse/payer relationship, (b) compliance/legal review, and (c) the go-live BAA prerequisite (§9 below) resolved first — this domain has materially higher compliance and financial risk than any clinical dashboard, and this app remains marked "do not use with real patient data." Listed here for completeness/tracking, not as a queued build item.
+**Still explicitly gated**: do not begin implementation on anything below without (a) a real clearinghouse/payer relationship, (b) compliance/legal review, and (c) the go-live BAA prerequisite (§9 below) resolved first — this domain has materially higher compliance and financial risk than any clinical dashboard, and this app remains marked "do not use with real patient data." Listed here for completeness/tracking, not as a queued build item.
 
 - [ ] Billing invoice / service-line data model (CMS-1500-shaped fields — research doc §6.1)
-- [ ] CCI-edit / medical-necessity rule-matrix lookup tables (§6.2) — the lookup-table-over-hardcoded-logic pattern itself is reusable even before/if the billing domain is greenlit
+- [x] **CCI-edit / medical-necessity rule-matrix lookup tables (§6.2) — narrow slice done, v2.59.** See baseline spec §86. A deliberate, narrow exception to this section's gate: a curated NCCI Procedure-to-Procedure (PTP) edit advisory table for the three ophthalmology testing-code pairs this app can actually produce (92133/92134/92083/92250), sourced from the real CMS NCCI PTP Edits v32.3 file (not a third-party sample dataset -- see §86.1 for why one candidate MCP data source was rejected). Advisory-only, same posture as the existing CPT billing preview (§55): never blocks saving, never alters billing, nothing transmitted. This does NOT open the rest of this section's gate -- no invoice/service-line model, no checkout-block workflow, no EDI 837/claims submission exists or is planned without the clearinghouse/compliance/BAA prerequisites above.
 - [ ] Checkout-block workflow ("Pending Conflict" status + remediation surfacing, §6.3) — no checkout/payment flow exists in this app at all yet, so this depends on that existing first
 - [ ] EDI 837 (X12) / CMS-1500 generation (§6.4) — flagged as a compliance-gated capability, not a formatting exercise; needs a real clearinghouse relationship before any code is written
 

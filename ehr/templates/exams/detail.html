@@ -89,6 +89,9 @@
     {% for t in cpt_summary.testing_codes %}<li class="mono-data">{{ t.code }} &mdash; {{ t.description }}</li>{% endfor %}
   </ul>
   {% endif %}
+  {% for warning in cpt_summary.ncci_warnings %}
+  <div class="alert alert-warning" style="margin-top:0.75rem">{{ warning.message }}</div>
+  {% endfor %}
   <p style="color:var(--ink-muted);font-size:0.75rem;margin-top:0.75rem">Preview only &mdash; no claim has been filed or transmitted.</p>
 </div>
 {% endif %}

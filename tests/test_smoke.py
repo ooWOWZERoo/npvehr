@@ -2682,3 +2682,85 @@ def test_structured_review_of_systems_save_and_display(logged_in_page, live_serv
     page.locator('button[type="submit"]', has_text="Save Exam").click()
     page.wait_for_url(re.compile(r"/exams/\d+"))
     assert page.locator(".card", has_text="Review of Systems").count() == 0
+
+
+def _test_chip_checkbox(page, abbreviation):
+    """Locates a Scheduled Tests checkbox by its exact calendar_abbreviation
+    label text -- a plain has_text substring match would let 'OCT' match
+    the 'OCT-ONH' chip too, so this anchors to an exact match."""
+    return page.locator(".test-chip", has_text=re.compile(r"^\s*" + re.escape(abbreviation) + r"\s*$")).locator("input")
+
+
+def test_ncci_advisory_warning_on_booking_form(logged_in_page, live_server):
+    """NCCI PTP-edit advisory check (BUILD_BACKLOG.md, spec 86), sourced from
+    the real CMS NCCI PTP Edits v32.3 file: checking OCT (retina, 92134) and
+    OPTOS (fundus photo, 92250) together should show a modifier-required
+    warning (indicator 1); checking OCT and OCT-ONH (optic nerve, 92133)
+    together should show a cannot-bill-together warning (indicator 0, no
+    modifier possible); checking VF (92083) and OCT-ONH together -- a real
+    NCCI pair with NO edit -- should show no warning at all. Purely
+    advisory: the appointment still saves successfully regardless."""
+    page = logged_in_page
+    page.goto(live_server + "/appointments/new")
+    banner = page.locator("#ncci-warning-banner")
+    assert not banner.is_visible()
+
+    _test_chip_checkbox(page, "OCT").check()
+    _test_chip_checkbox(page, "OPTOS").check()
+    assert banner.is_visible()
+    assert "92134" in banner.inner_text() and "92250" in banner.inner_text()
+    assert "modifier" in banner.inner_text().lower()
+
+    _test_chip_checkbox(page, "OPTOS").uncheck()
+    assert not banner.is_visible()
+
+    _test_chip_checkbox(page, "OCT-ONH").check()
+    assert banner.is_visible()
+    onh_warning_text = banner.inner_text()
+    assert "92133" in onh_warning_text and "92134" in onh_warning_text
+    assert "cannot be billed together" in onh_warning_text
+
+    _test_chip_checkbox(page, "OCT").uncheck()
+    assert not banner.is_visible()  # OCT-ONH + nothing else -- no conflicting pair
+
+    _test_chip_checkbox(page, "VF").check()
+    assert not banner.is_visible()  # VF + OCT-ONH: a real NCCI pair with no edit
+
+    # Advisory only -- saving still succeeds with the conflicting pair checked.
+    _test_chip_checkbox(page, "OCT").check()
+    page.select_option('select[name="patient_id"]', index=0)
+    page.select_option('select[name="provider_id"]', index=0)
+    target_date = (datetime.utcnow() + timedelta(days=28)).strftime("%Y-%m-%d")
+    page.fill("#scheduled_at", f"{target_date}T15:00")
+    page.locator('button[type="submit"]', has_text="Schedule Appointment").click()
+    page.wait_for_url(re.compile(r"/appointments/\d+$"))
+
+
+def test_ncci_advisory_warning_on_billing_preview(logged_in_page, live_server):
+    """The same NCCI advisory surfaces server-side on the exam detail page's
+    read-only Billing Preview card, for a visit whose already-saved
+    AppointmentTest rows contain a conflicting pair."""
+    page = logged_in_page
+    page.goto(live_server + "/appointments/new")
+    page.select_option('select[name="patient_id"]', index=0)
+    page.select_option('select[name="provider_id"]', index=0)
+    target_date = (datetime.utcnow() + timedelta(days=29)).strftime("%Y-%m-%d")
+    page.fill("#scheduled_at", f"{target_date}T15:00")
+    _test_chip_checkbox(page, "OCT").check()
+    _test_chip_checkbox(page, "OPTOS").check()
+    page.locator('button[type="submit"]', has_text="Schedule Appointment").click()
+    page.wait_for_url(re.compile(r"/appointments/\d+$"))
+    appt_id = page.url.rstrip("/").split("/")[-1]
+
+    page.locator('form[action$="/visit-flow"] button[type="submit"]').click()
+    page.wait_for_load_state("networkidle")
+    page.goto(live_server + f"/appointments/{appt_id}")
+    exam_href = page.locator("a", has_text="Start Exam").get_attribute("href")
+    page.goto(live_server + exam_href)
+    page.locator('button[type="submit"]', has_text="Save Exam").click()
+    page.wait_for_url(re.compile(r"/exams/\d+"))
+
+    billing_card = page.locator(".card", has_text="Billing Preview")
+    billing_text = billing_card.inner_text()
+    assert "92134" in billing_text and "92250" in billing_text
+    assert "modifier" in billing_text.lower()
