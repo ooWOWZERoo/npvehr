@@ -920,6 +920,22 @@ class EyeExam(Base):
     # Nullable/defaulted to "Week" so every pre-existing exam (all of which
     # predate this column and were entered in weeks) still reads correctly.
     follow_up_unit = Column(String, default="Week")
+    # Return-visit recommendation carry-forward: the provider's plain-language
+    # "why" for the follow-up, required whenever follow_up_weeks is set or a
+    # return-visit test is recommended (see recommended_tests_by_id in
+    # ehr.routes.exams) -- previously only ever visible on this exam's own
+    # detail page, so front desk booking the next visit and whoever documents
+    # it had nothing but this exam's free-text Plan to go on.
+    follow_up_reason = Column(Text)
+    # 'pending' (nothing done yet) | 'scheduled' (booked via the patient
+    # overview's "Book Follow-Up" button, which also stamps
+    # follow_up_fulfilled_appointment_id) | 'dismissed' (staff manually
+    # marked it addressed, e.g. booked through the ordinary calendar instead
+    # of that button). Distinct from follow_up_fulfilled_appointment_id being
+    # null/set so a manually-dismissed recommendation doesn't need a fake
+    # appointment id to stop nagging the "Recommended Follow-Up" card.
+    follow_up_status = Column(String, default="pending")
+    follow_up_fulfilled_appointment_id = Column(Integer, ForeignKey("appointments.id"))
     # Structured Refractive Assessment (VISION_EHR_DATA_STANDARDS_RESEARCH.md
     # 5.1), alongside the free-text assessment/diagnosis_codes above -- diagnosis
     # coding itself stays free-text (deferred terminology-server work, 4.4); these
@@ -955,7 +971,8 @@ class EyeExam(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     patient = relationship("Patient", back_populates="eye_exams")
     provider = relationship("Provider", back_populates="eye_exams")
-    appointment = relationship("Appointment")
+    appointment = relationship("Appointment", foreign_keys=[appointment_id])
+    follow_up_fulfilled_appointment = relationship("Appointment", foreign_keys=[follow_up_fulfilled_appointment_id])
     signed_by = relationship("User", foreign_keys=[signed_by_user_id])
     refractions = relationship("Refraction", back_populates="exam", cascade="all, delete-orphan")
     prescriptions = relationship("Prescription", back_populates="exam")

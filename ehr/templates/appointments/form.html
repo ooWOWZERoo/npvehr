@@ -5,6 +5,7 @@
 {% if error %}<div class="alert alert-error" role="alert">{{ error }}</div>{% endif %}
 <div class="card form-card">
   <form method="post" action="/appointments/new">
+    <input type="hidden" name="follow_up_exam_id" value="{{ follow_up_exam_id or '' }}">
     <div class="form-row cols-2">
       <div class="form-group"><label for="patient_id">Patient*</label>
         <select id="patient_id" name="patient_id" required onchange="updateSuggestion()">

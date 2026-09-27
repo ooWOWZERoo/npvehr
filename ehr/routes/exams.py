@@ -13,6 +13,7 @@ from ehr.auth.permissions import require_role, EXAM_VIEW, EXAM_EDIT, EXAM_SIGN, 
 from ehr.auth import csrf
 from ehr.services import cpt_mapper
 from ehr.services import lookback_alerts
+from ehr.services import ncci_edits
 from ehr.services import scheduling as sched
 from ehr.services import authz
 
@@ -43,6 +44,31 @@ def _b(v):
 GT_DIAGNOSTIC_ORDER_LABELS = {"OCT_ONH": "OCT RNFL", "VF": "Humphrey VF 24-2",
     "GONIOSCOPY": "Gonioscopy", "PACHYMETRY": "Pachymetry"}
 
+def _diagnostic_tests(db: Session):
+    return db.query(DiagnosticTest).filter(DiagnosticTest.active == True).order_by(DiagnosticTest.display_order).all()
+
+def _ncci_pairs_json():
+    return [{"column1": e.column1, "column2": e.column2,
+             "modifier_indicator": e.modifier_indicator, "message": e.message}
+            for e in ncci_edits.PTP_EDITS]
+
+def _create_diagnostic_orders(db: Session, exam: EyeExam, user_id: int, codes: list, notes: str = None):
+    """Creates a real, patient-scoped DiagnosticOrder (status='ordered') per
+    catalog code, tied back to this exam via ordered_exam_id. Shared by the
+    Glaucoma dashboard's "Diagnostic Orders" checkboxes (notes=None, as
+    before) and the general "Recommended Follow-Up" checklist below (notes=
+    the provider's stated reason, so it travels with the order and shows up
+    wherever that order is later surfaced) -- same underlying mechanism
+    regardless of which visit section a test was recommended from.
+    Unknown/deactivated codes are silently skipped rather than failing the
+    whole exam save."""
+    test_by_code = {t.code: t for t in db.query(DiagnosticTest).filter(DiagnosticTest.code.in_(codes)).all()}
+    for code in codes:
+        test = test_by_code.get(code)
+        if test:
+            db.add(DiagnosticOrder(patient_id=exam.patient_id, diagnostic_test_id=test.id,
+                ordered_by_user_id=user_id, ordered_exam_id=exam.id, notes=notes))
+
 @router.get("/new", response_class=HTMLResponse, dependencies=[Depends(require_role(*EXAM_EDIT))])
 def new_exam_form(request: Request, patient_id: int = None, appointment_id: int = None, db: Session = Depends(get_db)):
     ctx_patient = patient_context(db.query(Patient).filter(Patient.id == patient_id).first(), db) if patient_id else None
@@ -62,7 +88,8 @@ def new_exam_form(request: Request, patient_id: int = None, appointment_id: int 
         "providers": sched.bookable_providers(db),
         "selected_patient_id": patient_id, "today": str(date.today()), "context_patient": ctx_patient,
         "active_problems": active_problems, "appointment_id": appointment_id,
-        "lookback_alerts": lookback_alerts_list})
+        "lookback_alerts": lookback_alerts_list,
+        "tests": _diagnostic_tests(db), "ncci_pairs": _ncci_pairs_json()})
 
 @router.post("/new", dependencies=[Depends(require_role(*EXAM_EDIT))])
 async def create_exam(request: Request, db: Session = Depends(get_db)):
@@ -70,6 +97,15 @@ async def create_exam(request: Request, db: Session = Depends(get_db)):
     csrf.verify_or_403(request.state.csrf_token, form.get("csrf_token"))
     g = lambda k: form.get(k, "")
     gl = lambda k: ", ".join(form.getlist(k))  # comma-join a multi-value (checkbox) field
+    return_visit_codes = form.getlist("return_visit_diagnostic_orders")
+    # Return-visit recommendation carry-forward (user request): a bare interval
+    # or a checked test with no stated reason is exactly the kind of ambiguous
+    # instruction that causes front-desk missteps downstream, so this is the
+    # one hard server-side requirement in an otherwise all-optional form.
+    if (_i(g("follow_up_weeks")) or return_visit_codes) and not g("follow_up_reason").strip():
+        return HTMLResponse(
+            "Reason for Follow-up is required whenever a return interval or a follow-up test is set.",
+            status_code=400)
     exam = EyeExam(
         patient_id=int(g("patient_id")), provider_id=int(g("provider_id")),
         appointment_id=_i(g("appointment_id")),
@@ -99,7 +135,7 @@ async def create_exam(request: Request, db: Session = Depends(get_db)):
         ros_endocrine=_b(g("ros_endocrine")), ros_skin=_b(g("ros_skin")), ros_notes=g("ros_notes"),
         assessment=g("assessment"), plan=g("plan"),
         diagnosis_codes=g("diagnosis_codes"), follow_up_weeks=_i(g("follow_up_weeks")),
-        follow_up_unit=g("follow_up_unit") or "Week",
+        follow_up_unit=g("follow_up_unit") or "Week", follow_up_reason=g("follow_up_reason") or None,
         refractive_diagnosis=gl("refractive_diagnosis"), refractive_laterality=g("refractive_laterality"),
         refractive_stability=g("refractive_stability"), refractive_secondary_findings=gl("refractive_secondary_findings"),
         suggested_exam_type=g("suggested_exam_type") or None, exam_type_confirmed=g("exam_type_confirmed") or None,
@@ -180,17 +216,14 @@ async def create_exam(request: Request, db: Session = Depends(get_db)):
     # of the Glaucoma dashboard's diagnostic-order boxes also creates a real
     # DiagnosticOrder row (status='ordered'), patient-scoped so it persists
     # and can be checked at a later visit -- not just a free-text plan-line
-    # note. Unknown codes (there shouldn't be any -- the form's checkboxes
-    # are the only source -- but a catalog row could theoretically be
-    # deactivated between page load and submit) are silently skipped rather
-    # than failing the whole exam save.
-    test_by_code = {t.code: t for t in db.query(DiagnosticTest)
-        .filter(DiagnosticTest.code.in_(form.getlist("gt_diagnostic_orders"))).all()}
-    for code in form.getlist("gt_diagnostic_orders"):
-        test = test_by_code.get(code)
-        if test:
-            db.add(DiagnosticOrder(patient_id=exam.patient_id, diagnostic_test_id=test.id,
-                ordered_by_user_id=request.state.user.id, ordered_exam_id=exam.id))
+    # note.
+    _create_diagnostic_orders(db, exam, request.state.user.id, form.getlist("gt_diagnostic_orders"))
+    # Return-visit recommendation carry-forward (user request): the provider's
+    # "come back for these tests" checklist creates the same real
+    # DiagnosticOrder rows as the Glaucoma dashboard's checkboxes, tagged with
+    # the stated reason so it travels with the order to wherever it's next
+    # surfaced (patient overview card, booking-form prefill, look-back alerts).
+    _create_diagnostic_orders(db, exam, request.state.user.id, return_visit_codes, notes=g("follow_up_reason") or None)
     # Binocular Vision & Pediatrics (Vision Therapy) assessment (5.4) -- same
     # all-optional rule.
     bv_fields = dict(

@@ -123,6 +123,8 @@ h3 { font-size: 1.05rem; font-weight: 600; margin: 0 0 var(--space-3); line-heig
 .badge-cancelled { background: #fee2e2; color: #991b1b; }
 .badge-no_show { background: var(--surface-sunken); color: var(--ink-muted); }
 .badge-ordered { background: #fef9c3; color: #854d0e; }
+.badge-pending { background: #fef9c3; color: #854d0e; }
+.badge-dismissed { background: var(--surface-sunken); color: var(--ink-muted); }
 table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
 th { text-align: left; padding: var(--space-3) var(--space-4); background: var(--surface-sunken); border-bottom: 1px solid var(--border); color: var(--ink-muted); font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
 td { padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--border); }

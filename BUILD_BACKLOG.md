@@ -1,6 +1,6 @@
 # New Path Vision EHR — Master Build Backlog
 
-**Status:** Living tracking document. **Baseline as of:** spec v2.59 / research doc v2.24 (2026-09-27).
+**Status:** Living tracking document. **Baseline as of:** spec v2.60 / research doc v2.24 (2026-09-27).
 
 ## Purpose and how to use this document
 
@@ -42,6 +42,8 @@ This consolidates every outstanding build item, investigation, and test scattere
 - [x] **CPT mapping + two-flow billing preview (Phase 2 of 4)** — curated CPT catalog + diagnostic-test mapping, a per-patient insurance-plan table (vision + medical can coexist), the `EyeExam`-to-`Appointment` link that never existed before, a check-in step selecting the billing flow, and a read-only split-invoice preview card. Still staff-facing decision support only -- no claim is ever generated or transmitted. **Done, v2.36** — see baseline spec §55.
 - [x] **Diagnostic order tracking (Phase 3 of 4)** — a real `DiagnosticOrder` lifecycle (`ordered → scheduled → in_progress → completed/cancelled`), wired to the Glaucoma dashboard's existing diagnostic-orders checkboxes, with a Pending Diagnostic Orders card and one-click Mark Complete/Cancel on the patient overview tab. **Done, v2.37** — see baseline spec §56.
 - [x] **Look-back & clinical alert engine (Phase 4 of 4)** — no new schema; ambient `.alert-warning`/`.alert-info` banners (never a blocking modal) for outstanding diagnostic orders and overdue chronic-condition testing (glaucoma, Plaquenil monitoring), each with one-click resolution, on the patient overview tab and New Exam form header. **This closes out the 4-phase chief-complaint/CPT/billing-flow plan.** **Done, v2.38** — see baseline spec §57. Pick up the follow-up refinements logged in §0a below, the Phase 3 real-vendor follow-up (a different "Phase 3", from the Calendar overhaul), patient self-registration, or another item from the sections below.
+- [x] **NCCI Procedure-to-Procedure edit advisory** — curated CMS NCCI PTP-edit lookup (4 code pairs, sourced from the real CMS v32.3 file), surfaced as a non-blocking booking-form/Billing-Preview warning; also fixed a pre-existing OCT/OCT_ONH (92134/92133) conflation in the Glaucoma dashboard's order checkbox and the look-back engine's glaucoma profile, with a scoped historical-data backfill. **Done, v2.59** — see baseline spec §86.
+- [x] **Return-visit recommendation carry-forward** — user request: a provider's return-visit interval/tests/reason on an exam now carries forward as a "Recommended Follow-Up" banner on the patient overview, pre-fills the booking form via a "Book Follow-Up" link, and (once actually booked) transitions the recommendation and its underlying diagnostic orders to "scheduled" -- closing a front-desk-dependent handoff gap. Reuses the existing NCCI advisory and diagnostic-order machinery rather than building new. **Done, v2.60** — see baseline spec §87.
 
 ### 0a. Chief-Complaint Triage, E/M Coding, CPT Mapping, Orders & Look-Back Alerts (user request, 2026-09-23) — closed out, v2.38
 
