@@ -4115,3 +4115,29 @@ No full manual accessibility audit (screen-reader testing, color-contrast, keybo
 | New files | `ehr/services/authz.py` (§74). |
 | Updated | `ehr/services/lookback_alerts.py`, `ehr/routes/{patients,exams}.py`, `ehr/templates/patients/{overview,_lookback_alerts}.html`, `ehr/templates/exams/form.html` (§70). `ehr/utils.py`, `ehr/routes/{exams,patients,appointments,prescriptions}.py`, `ehr/templates/base.html`, `ehr/static/css/app.css` (§71). `ehr/models/database.py`, `ehr/routes/admin_scheduling.py`, `ehr/templates/admin/scheduling/type_detail.html` (§72). `ehr/routes/prescriptions.py` (§73). `ehr/models/database.py`, `ehr/routes/{patients,exams,prescriptions,auth}.py`, `ehr/db/seed.py`, `ehr/templates/admin/users/{form,list}.html` (§74). `tests/test_smoke.py` (§75, plus one new test per §70-74). `ehr/static/css/app.css`, `ehr/templates/base.html`, and 27 form templates app-wide (§76). |
 | Explicitly not done | No calendar/scheduling-surface record-level restriction (§74). No full accessibility audit beyond label association (§76). No 100% automation of the §20 checklist (§75). No user-edit route for changing a linked provider after account creation (§74). None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |
+
+## 77. Recently-Viewed-Patients Cookie Cross-Session Leak Fix (v2.50)
+
+### 77.1 Origin
+
+Incidentally surfaced (not fixed) during the v2.49 record-level authorization round (§74.3): the top-bar "recently viewed patients" sidebar list is backed by a plain browser cookie (`npv_recent_patients`, `ehr/static/js/app.js`), not scoped per logged-in user -- switching accounts on the same browser could still show a previous session's patient name in that list, even though the underlying record itself was already correctly protected by that round's authorization work (clicking through to it would 404 for a restricted user).
+
+### 77.2 What changed
+
+**`npv_recent_patients` is now cleared on both login and logout** (`ehr/routes/auth.py`'s `login_submit`/`logout`, via `response.delete_cookie(...)`, matching the existing `path=/` the cookie is set with client-side) -- a new session on a shared browser never inherits any prior session's recently-viewed list, regardless of which user was previously signed in or which one signs in next.
+
+### 77.3 Verified
+
+`python3 -m py_compile` on the touched route file. New Playwright test `test_recently_viewed_cookie_cleared_on_login_and_logout` seeds the cookie directly, confirms it's gone (and its content no longer renders) after both a logout and a fresh login. Full suite (75 tests, up from 74) passed after this change.
+
+### 77.4 Explicitly not done
+
+The list still isn't scoped *per user* within a single browser session in any deeper sense (e.g. two different users signed in in two different tabs of the same browser would still share one cookie) -- browsers don't offer per-tab cookie isolation, and this app's session model doesn't attempt multi-account-same-browser support at all. Clearing on login/logout is the correct fix for the actual reported symptom (a stale name surviving a session switch), not a redesign of the underlying storage mechanism. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6.
+
+**Version 2.50 change log (relative to v2.49) — Recently-Viewed-Patients Cookie Fix:**
+
+| Area | Change |
+| --- | --- |
+| Fix | `npv_recent_patients` cookie now cleared on login and logout, closing the cross-session name leak noted in §74.3. |
+| Updated | `ehr/routes/auth.py`. `tests/test_smoke.py` gained one new test. |
+| Explicitly not done | No multi-account-same-browser support (out of scope for this app's session model). None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |

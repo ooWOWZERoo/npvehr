@@ -2370,3 +2370,31 @@ def test_appointment_status_cycles_through_all_six_values(logged_in_page, live_s
         assert resp.status in (200, 303), f"status={status} returned {resp.status}"
     page.goto(live_server + f"/appointments/{appt_id}")
     assert "Scheduled" in page.content() or "scheduled" in page.content()
+
+
+def test_recently_viewed_cookie_cleared_on_login_and_logout(logged_in_page, live_server):
+    """Record-level authorization follow-up (spec §74.3): the sidebar
+    "recently viewed patients" cookie (npv_recent_patients) is cleared on
+    both login and logout, so a new session on the same browser never
+    inherits a prior session's patient names."""
+    page = logged_in_page
+    page.goto(live_server + "/")
+    page.evaluate("document.cookie = 'npv_recent_patients=' + encodeURIComponent(JSON.stringify([{id:1,name:'Leaked Patient'}])) + '; path=/'")
+    page.reload()
+    assert "Leaked Patient" in page.content()
+
+    resp = page.request.post(live_server + "/logout",
+        form={"csrf_token": page.locator('meta[name="csrf-token"]').get_attribute("content")})
+    assert resp.status in (200, 303)
+    cookies = {c["name"]: c["value"] for c in page.context.cookies()}
+    assert "npv_recent_patients" not in cookies
+
+    page.evaluate("document.cookie = 'npv_recent_patients=' + encodeURIComponent(JSON.stringify([{id:1,name:'Leaked Patient'}])) + '; path=/'")
+    page.goto(live_server + "/login")
+    page.fill("#email", DEMO_EMAIL)
+    page.fill("#password", DEMO_PASSWORD)
+    page.click("button[type=submit]")
+    page.wait_for_url(f"{live_server}/")
+    cookies = {c["name"]: c["value"] for c in page.context.cookies()}
+    assert "npv_recent_patients" not in cookies
+    assert "Leaked Patient" not in page.content()
