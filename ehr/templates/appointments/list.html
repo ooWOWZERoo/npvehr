@@ -13,7 +13,33 @@
     <a href="/appointments/new" class="btn btn-primary btn-sm">+ New Appointment</a>
   </div>
 </div>
+<div class="card" style="margin-bottom:1rem">
+  <form method="get" class="patient-search-form">
+    <div class="form-row cols-4">
+      <div class="form-group"><label>Provider
+        <select name="provider_id">
+          <option value="">&mdash; Any &mdash;</option>
+          {% for p in providers %}<option value="{{ p.id }}" {{ 'selected' if provider_id == p.id }}>Dr. {{ p.last_name }}</option>{% endfor %}
+        </select>
+      </label></div>
+      <div class="form-group"><label>Status
+        <select name="status">
+          <option value="">&mdash; Any &mdash;</option>
+          {% for s in statuses %}<option value="{{ s.value }}" {{ 'selected' if status == s.value }}>{{ s.value.replace('_',' ')|title }}</option>{% endfor %}
+        </select>
+      </label></div>
+      <div class="form-group"><label>From <input type="date" name="date_from" value="{{ date_from }}"></label></div>
+      <div class="form-group"><label>To <input type="date" name="date_to" value="{{ date_to }}"></label></div>
+    </div>
+    <div class="form-actions" style="margin-top:0">
+      {% if patient_id %}<input type="hidden" name="patient_id" value="{{ patient_id }}">{% endif %}
+      <button type="submit" class="btn btn-secondary">Filter</button>
+      {% if provider_id or status or date_from or date_to %}<a href="/appointments/{{ '?patient_id=' + patient_id|string if patient_id }}" class="btn btn-secondary">Clear</a>{% endif %}
+    </div>
+  </form>
+</div>
 <div class="card">
+  <div class="table-responsive">
   <table><thead><tr><th>Date/Time</th><th>Type</th><th>Rel.</th><th>Patient</th><th>Provider</th><th>Reason</th><th>Status</th><th></th></tr></thead><tbody>
   {% for a in appointments %}
     <tr>
@@ -34,5 +60,7 @@
   {% else %}<tr><td colspan="8" style="text-align:center;color:#64748b">No appointments.</td></tr>
   {% endfor %}
   </tbody></table>
+  </div>
+  {% include "_pagination.html" %}
 </div>
 {% endblock %}

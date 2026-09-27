@@ -9,6 +9,7 @@ from ehr.models.database import (get_db, AppointmentType, AppointmentTypeVersion
     AppointmentTypeResourceRequirement, PortalAccessAuditEvent)
 from ehr.services import scheduling as sched
 from ehr.services import field_audit
+from ehr.services import pagination
 from ehr.env_info import EHR_ENV
 from ehr.auth.permissions import require_role, ADMIN_SCHEDULING_VIEW, ADMIN_SCHEDULING_EDIT, ROLE_LABELS
 from ehr.auth.deps import get_current_user
@@ -459,9 +460,15 @@ def update_provider_slot_granularity(request: Request, provider_id: int, slot_gr
 # ---------------------------------------------------------------------------
 
 @router.get("/providers", response_class=HTMLResponse, dependencies=[Depends(require_role(*ADMIN_SCHEDULING_VIEW))])
-def list_providers(request: Request, db: Session = Depends(get_db)):
-    providers = db.query(Provider).order_by(Provider.last_name, Provider.first_name).all()
-    return templates.TemplateResponse(request, "admin/scheduling/providers_list.html", {"providers": providers})
+def list_providers(request: Request, q: str = "", page: int = 1, db: Session = Depends(get_db)):
+    query = db.query(Provider)
+    if q:
+        query = query.filter((Provider.first_name.ilike(f"%{q}%")) | (Provider.last_name.ilike(f"%{q}%")))
+    query = query.order_by(Provider.last_name, Provider.first_name)
+    providers, total, total_pages, page = pagination.paginate(query, page)
+    ctx = {"providers": providers, "q": q}
+    ctx.update(pagination.pagination_context(request, page, total, total_pages))
+    return templates.TemplateResponse(request, "admin/scheduling/providers_list.html", ctx)
 
 
 @router.post("/providers/new", dependencies=[Depends(require_role(*ADMIN_SCHEDULING_EDIT))])

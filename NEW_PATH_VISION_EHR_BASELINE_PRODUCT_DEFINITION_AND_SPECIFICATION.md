@@ -4141,3 +4141,36 @@ The list still isn't scoped *per user* within a single browser session in any de
 | Fix | `npv_recent_patients` cookie now cleared on login and logout, closing the cross-session name leak noted in §74.3. |
 | Updated | `ehr/routes/auth.py`. `tests/test_smoke.py` gained one new test. |
 | Explicitly not done | No multi-account-same-browser support (out of scope for this app's session model). None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |
+
+## 78. Pagination, Search, and Filters on List Screens (v2.51)
+
+### 78.1 Origin
+
+Long-tracked v1.x gap (spec §36.5 item 13, §18.3 item 5): "no pagination, advanced search, filters, or large-data handling on any list screen." Every list screen loaded its entire backing table, unbounded, on every visit.
+
+### 78.2 What changed
+
+**New `ehr.services.pagination`**: `paginate(query, page, page_size=25)` applies offset/limit to an already-filtered query and clamps an out-of-range page number into range; `pagination_context(request, page, total, total_pages)` builds prev/next URLs that preserve every other active query-string parameter (so paging never drops a filter). A new shared `_pagination.html` partial renders the "Showing X-Y of Z" summary and Prev/Page N of M/Next controls.
+
+**Patients list** (`/patients/`): multi-field search already existed (last name/first name/DOB/phone/MRN); gained pagination on top of it.
+
+**Appointments list** (`/appointments/`): previously had no filters or pagination at all -- loaded every appointment in the practice's entire history on every visit. Now filterable by provider, status, and a date range, plus pagination. Distinct from the calendar/board views (`/appointments/calendar`, `/day`, `/week`, `/board`), which fetch a bounded date range live via `/appointments/feed.json` and were never part of this gap.
+
+**Admin Users list** (`/admin/users`) and **admin Providers list** (`/admin/scheduling/providers`): gained name/email search and pagination.
+
+### 78.3 Verified
+
+`python3 -m py_compile` on every touched route file; Jinja parse-check on every touched template. New Playwright test `test_patient_list_pagination_preserves_filters` creates 27 patients sharing a unique last name, confirms page 1 shows exactly 25 and page 2 the remaining 2 with no overlap, and confirms the Next link's href preserves the active `last_name` filter. New Playwright test `test_appointment_list_filters_and_pagination` confirms every row returned under a status filter actually has that status, and that the pagination summary renders on the unfiltered list. Full suite (77 tests, up from 75) passed after this change.
+
+### 78.4 Explicitly not done
+
+No pagination added to the Appointment Types, Diagnostic Tests, Resources, Availability Templates, or Holidays admin lists -- these are practice-configuration lists bounded by how many distinct types/resources a single practice defines (typically a handful to a few dozen), not scale-sensitive the way Patients/Appointments/Users are. No "jump to page N" input or configurable page size (fixed at 25) -- a plain Prev/Next scheme matches this app's existing simplicity convention. No large-data handling beyond offset/limit pagination (e.g. no database-level full-text search, no async/streaming result sets) -- out of scope at this app's target scale (a single practice). None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6.
+
+**Version 2.51 change log (relative to v2.50) — Pagination, Search, and Filters:**
+
+| Area | Change |
+| --- | --- |
+| New capability | Pagination on the patients, appointments, admin Users, and admin Providers lists. New provider/status/date-range filters on the previously-unfiltered flat appointments list. New name/email search on the admin Users and Providers lists. |
+| New files | `ehr/services/pagination.py`, `ehr/templates/_pagination.html`. |
+| Updated | `ehr/routes/{patients,appointments,auth,admin_scheduling}.py`, `ehr/templates/{patients/list,appointments/list,admin/users/list,admin/scheduling/providers_list}.html`, `ehr/static/css/app.css` (new `.pagination` styles). `tests/test_smoke.py` gained two new tests. |
+| Explicitly not done | No pagination on the smaller practice-configuration admin lists (Appointment Types, Diagnostic Tests, Resources, Availability Templates, Holidays). No configurable page size or full-text search. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |

@@ -1,6 +1,6 @@
 # New Path Vision EHR — Master Build Backlog
 
-**Status:** Living tracking document. **Baseline as of:** spec v2.50 / research doc v2.24 (2026-09-27).
+**Status:** Living tracking document. **Baseline as of:** spec v2.51 / research doc v2.24 (2026-09-27).
 
 ## Purpose and how to use this document
 
@@ -191,7 +191,7 @@ Tracked here for visibility; the authoritative detail lives in the spec's go-liv
 
 - [x] **Form-label association fixed app-wide. Done, v2.49** — see baseline spec §76 (§18.3 item 2). 203 sibling `<label>Text</label><input>` occurrences across 27 templates converted to nested `<label>Text <input></label>`. No full accessibility audit beyond this (color-contrast, ARIA, keyboard-nav remain unaudited).
 - [ ] No user-friendly validation or confirmation messages, including for photo-upload failures
-- [ ] No pagination, advanced search, filters, or large-data handling on any list screen (patients, appointments, admin lists) — spec §36.5 item 13 also names this
+- [x] **Pagination/search/filters added to list screens. Done, v2.51** — see baseline spec §78 (§36.5 item 13). New `ehr.services.pagination` (page-number offset/limit, filter-preserving page links) applied to the patients list (search already existed), the previously-unbounded flat appointments list (gained provider/status/date-range filters), and the admin Users and Providers lists (gained name/email search). Calendar/board views are unaffected (they fetch a bounded date range via JSON, not an unbounded list).
 - [ ] Dependencies specify minimum versions only (`>=`), no upper bounds or lock file — reduces build reproducibility
 - [ ] Client's final logo asset still not supplied; navigation/print header show a placeholder mark
 - [x] **App-wide horizontal overflow at ~400px width fixed. Done, v2.49** — see baseline spec §76 (§43.3). Root cause: `.staff-picker`'s `flex-shrink: 0` with an unbounded name/role string; now shrinks with ellipsis truncation, plus a defensive `overflow-x: hidden` safety net.

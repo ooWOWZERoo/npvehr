@@ -12,6 +12,7 @@ from ehr.auth.permissions import require_role, USER_MANAGEMENT, AUTH_AUDIT_VIEW,
 from ehr.auth.audit import log_auth_event
 from ehr.auth import csrf
 from ehr.env_info import EHR_ENV
+from ehr.services import pagination
 
 RECENT_PATIENTS_COOKIE_NAME = "npv_recent_patients"  # must match ehr/static/js/app.js's RECENT_COOKIE
 
@@ -112,10 +113,17 @@ async def logout(request: Request, db: Session = Depends(get_db)):
 # to Practice Administrator, which otherwise has full access to everything else).
 # ---------------------------------------------------------------------------
 @router.get("/admin/users", response_class=HTMLResponse)
-def list_users(request: Request, db: Session = Depends(get_db), _user=Depends(get_current_user),
-               _role=Depends(require_role(*USER_MANAGEMENT))):
-    users = db.query(User).order_by(User.last_name, User.first_name).all()
-    return templates.TemplateResponse(request, "admin/users/list.html", {"users": users, "roles": ALL_ROLES})
+def list_users(request: Request, q: str = "", page: int = 1, db: Session = Depends(get_db),
+               _user=Depends(get_current_user), _role=Depends(require_role(*USER_MANAGEMENT))):
+    query = db.query(User)
+    if q:
+        query = query.filter(
+            (User.first_name.ilike(f"%{q}%")) | (User.last_name.ilike(f"%{q}%")) | (User.email.ilike(f"%{q}%")))
+    query = query.order_by(User.last_name, User.first_name)
+    users, total, total_pages, page = pagination.paginate(query, page)
+    ctx = {"users": users, "roles": ALL_ROLES, "q": q}
+    ctx.update(pagination.pagination_context(request, page, total, total_pages))
+    return templates.TemplateResponse(request, "admin/users/list.html", ctx)
 
 
 @router.get("/admin/users/new", response_class=HTMLResponse)
