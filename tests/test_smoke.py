@@ -2580,3 +2580,37 @@ def test_resource_picker_manual_override_on_booking_form(logged_in_page, live_se
     assert edit_select.input_value() != ""
     selected_label = edit_select.locator("option:checked").inner_text()
     assert "Lane 2" in selected_label
+
+
+def test_vitreous_and_cd_ratio_save_and_display(logged_in_page, live_server):
+    """Vitreous fundus structure + numeric CD ratio on the general exam
+    (VISION_EHR_DATA_STANDARDS_RESEARCH.md §12's long-tracked gaps): the
+    Fundus section previously had no discrete Vitreous column at all, and no
+    numeric cup-to-disc ratio of its own (only GlaucomaTracking's own
+    dashboard-specific cup_disc_ratio_od/os, entered only when that dashboard
+    is used). Verifies both new fields save and display on the exam detail
+    page's Fundus card."""
+    page = logged_in_page
+    page.goto(live_server + "/exams/new")
+    page.fill('input[name="cd_ratio_od"]', "0.35")
+    page.fill('input[name="cd_ratio_os"]', "0.4")
+    page.fill('input[name="vitreous_od"]', "Clear")
+    page.fill('input[name="vitreous_os"]', "PVD present")
+    page.locator('button[type="submit"]', has_text="Save Exam").click()
+
+    page.wait_for_url(re.compile(r"/exams/\d+"))
+    fundus_card = page.locator(".card", has_text="Fundus")
+    fundus_text = fundus_card.inner_text()
+    assert "0.35" in fundus_text
+    assert "0.40" in fundus_text
+    assert "Clear" in fundus_text
+    assert "PVD present" in fundus_text
+
+    # Left blank, both fields render as an em dash, same as every other
+    # optional Fundus column -- no crash on a None numeric value.
+    page.goto(live_server + "/exams/new")
+    page.locator('select[name="provider_id"]').select_option(index=1)
+    page.locator('button[type="submit"]', has_text="Save Exam").click()
+    page.wait_for_url(re.compile(r"/exams/\d+"))
+    blank_fundus_text = page.locator(".card", has_text="Fundus").inner_text()
+    assert "0.35" not in blank_fundus_text

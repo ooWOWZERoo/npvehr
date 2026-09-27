@@ -865,9 +865,22 @@ class EyeExam(Base):
     sl_cornea_od = Column(String); sl_cornea_os = Column(String)
     sl_lens_od = Column(String); sl_lens_os = Column(String)
     fundus_disc_od = Column(String); fundus_disc_os = Column(String)
+    # Numeric cup-to-disc ratio (0.00-1.00) on the general exam's own Fundus
+    # section (VISION_EHR_DATA_STANDARDS_RESEARCH.md 5.1/§12) -- distinct from
+    # GlaucomaTracking.cup_disc_ratio_od/os (a glaucoma-DASHBOARD-specific
+    # value, only ever entered when that dashboard is used). This one is
+    # captured on every comprehensive exam's routine disc assessment,
+    # regardless of whether glaucoma is a diagnosis on this visit at all.
+    cd_ratio_od = Column(Float); cd_ratio_os = Column(Float)
     fundus_macula_od = Column(String); fundus_macula_os = Column(String)
     fundus_vessels_od = Column(String); fundus_vessels_os = Column(String)
     fundus_periphery_od = Column(String); fundus_periphery_os = Column(String)
+    # Vitreous as a discrete fundus structure (VISION_EHR_DATA_STANDARDS_RESEARCH.md
+    # §12's long-tracked "vitreous as a discrete fundus structure" gap --
+    # distinct from the anterior-segment structures built in §42; vitreous is
+    # a posterior-segment/fundus finding, e.g. "Clear", "PVD present",
+    # "Vitreous syneresis", "Vitreous hemorrhage").
+    vitreous_od = Column(String); vitreous_os = Column(String)
     assessment = Column(Text); plan = Column(Text)
     diagnosis_codes = Column(String); follow_up_weeks = Column(Integer)
     # The unit follow_up_weeks is expressed in -- Day/Week/Month/Year -- so a

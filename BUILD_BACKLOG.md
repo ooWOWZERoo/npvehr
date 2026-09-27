@@ -1,6 +1,6 @@
 # New Path Vision EHR — Master Build Backlog
 
-**Status:** Living tracking document. **Baseline as of:** spec v2.56 / research doc v2.24 (2026-09-27).
+**Status:** Living tracking document. **Baseline as of:** spec v2.57 / research doc v2.24 (2026-09-27).
 
 ## Purpose and how to use this document
 
@@ -212,7 +212,7 @@ A real visit-summary document export prompted a full component-by-component gap 
 - [x] **Pupil exam — size/reactivity/APD per eye, light/dark/near measurements. Done, v2.21** — see baseline spec §40, research doc §8.1. Ten new nullable columns on `EyeExam` (flat columns like Visual Acuity/Slit Lamp/Fundus, not a new Visit Focus dashboard).
 - [x] **Motility and confrontation visual fields as structured OD/OS data. Done, v2.22** — see baseline spec §41, research doc §8.2. Four new nullable columns on `EyeExam` (flat columns, same treatment as pupil exam fields), distinct from the pre-existing `cover_test` field (ocular alignment, a different clinical concept).
 - [x] **Conjunctiva / anterior chamber / iris as discrete slit-lamp structures. Done, v2.23** — see baseline spec §42, research doc §8.3. Built as part of a full structural Anterior Segment dashboard (also covering cornea pathology and lens/cataract grading), split out from the old "Anterior Segment / Dry Eye" dashboard which was entirely dry-eye content.
-- [ ] Vitreous as a discrete fundus structure, and a numeric CD ratio on the general exam (today it only exists on `GlaucomaTracking`)
+- [x] **Vitreous as a discrete fundus structure, and a numeric CD ratio on the general exam. Done, v2.57** — see baseline spec §84. New `EyeExam.vitreous_od/os` and `cd_ratio_od/os` columns on the general exam's own Fundus section (migration 047, with a registered down-migration), distinct from `GlaucomaTracking.cup_disc_ratio_od/os`'s dashboard-specific value.
 - [ ] Structured review of systems (the source document's large systemic-symptom checklist)
 - [ ] Structured social history (alcohol/tobacco screening) — no fields exist on `Patient` at all
 - [ ] Diagnostic-imaging order + structured result tracking (fundus photos, OCT) — this is `DiagnosticOrder`/Phase 3-4 look-back territory, a separate model from the optical-goods `RxLabOrder` lifecycle now built (§3 above, spec §69)
