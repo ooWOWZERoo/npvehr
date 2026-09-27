@@ -1,6 +1,6 @@
 # New Path Vision EHR — Master Build Backlog
 
-**Status:** Living tracking document. **Baseline as of:** spec v2.54 / research doc v2.24 (2026-09-27).
+**Status:** Living tracking document. **Baseline as of:** spec v2.55 / research doc v2.24 (2026-09-27).
 
 ## Purpose and how to use this document
 
@@ -117,7 +117,7 @@ The foundational, largest-scope item underlying much of the above — deliberate
 - [x] **`AppointmentType`/`AppointmentTypeVersion` `created_by`/`updated_by` attribution. Done, v2.49** — see baseline spec §72 (§36.5 item 10). New migration `044_appointment_type_updated_by`; both columns now real FKs and actually set.
 - [~] Visual **Resource Schedule grid view** — subsumed by the Calendar & Appointments UX Overhaul below (Phase 1's board view covers per-provider scheduling; a dedicated non-provider Resource grid, e.g. rooms/lanes/devices as their own board, is still open)
 - [ ] Room/lane/device resource conflict enforcement extended to a resource-picker UI on the booking form itself (today, resource assignment is automatic based on type requirements — no manual override UI, §31.3)
-- [ ] Calendar click-to-create does not itself pre-check availability before opening the form (§18.2 item 7, still open per that item's own note)
+- [x] **Calendar click-to-create pre-checks availability. Done, v2.55** — see baseline spec §82 (§18.2 item 7). New `GET /appointments/date-check.json`; the board's `dateClick` handler checks it first and blocks navigation with the closure's own label on a closed date, instead of only discovering the rejection after filling out and submitting the whole New Appointment form.
 - [x] **`publish_new_version` doesn't carry resource requirements forward** (found while verifying the slot/duration reconciliation round, baseline spec §52.4): it carried a type's color rules onto a newly published version but left `AppointmentTypeResourceRequirement` rows attached to the now-inactive previous version, so republishing a type that needs a room/resource silently dropped that requirement. Resolved: there is no admin UI anywhere to view or edit a resource requirement, at publish time or otherwise, so there's no legitimate workflow a blanket carry-forward could break — same treatment as color rules just above it in that route. **Done, v2.39** — see baseline spec §58.
 
 ---

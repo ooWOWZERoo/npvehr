@@ -207,10 +207,30 @@
       },
       eventClick: function (info) { window.location = '/appointments/' + info.event.id; },
       dateClick: function (info) {
-        // Same target regardless of view -- the New Appointment form only
-        // takes a date prefill (staff picks the exact time there), matching
-        // the old month view's day-cell click behavior.
-        window.location = '/appointments/new?date=' + info.dateStr.slice(0, 10);
+        // Calendar click-to-create pre-check (spec §18.2 item 7 follow-up):
+        // previously this navigated straight to the New Appointment form
+        // with no idea whether the date was even bookable, so a practice
+        // closure was only ever discovered after filling out the whole form
+        // and submitting it. Check first; a closed date shows the closure
+        // inline instead of navigating at all. Same target regardless of
+        // view otherwise -- the form only takes a date prefill (staff picks
+        // the exact time there), matching the old month view's behavior.
+        var dateStr = info.dateStr.slice(0, 10);
+        fetch('/appointments/date-check.json?date_str=' + encodeURIComponent(dateStr))
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            if (data.closed) {
+              alert('The practice is closed on ' + dateStr + ': ' + data.label + '. Choose a different date.');
+            } else {
+              window.location = '/appointments/new?date=' + dateStr;
+            }
+          })
+          .catch(function () {
+            // Network hiccup on the pre-check itself shouldn't block booking
+            // entirely -- the form's own submit-time check is still the real
+            // guard; this is only meant to save a wasted round trip.
+            window.location = '/appointments/new?date=' + dateStr;
+          });
       },
       eventDrop: function (info) {
         postReschedule(info.event.id, info.event.start.toISOString(), null, info.revert);

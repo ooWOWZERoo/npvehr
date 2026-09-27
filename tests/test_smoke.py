@@ -2483,3 +2483,37 @@ def test_photo_and_document_upload_rejects_disallowed_extension_with_message(log
     page.wait_for_load_state("networkidle")
     assert "not a supported document type" in page.content()
     assert page.locator("table tbody tr", has_text="malware.exe").count() == 0
+
+
+def test_calendar_click_to_create_precheck_blocks_closed_dates(logged_in_page, live_server):
+    """Calendar click-to-create availability pre-check (spec §18.2 item 7
+    follow-up): previously a day-cell click navigated straight to the New
+    Appointment form with no idea whether the date was bookable at all, so a
+    practice closure was only discovered after filling out and submitting
+    the whole form. Now dateClick checks first (GET /appointments/date-check.json)
+    and blocks navigation with the closure's own label on a closed date,
+    while a genuinely open date still navigates through normally."""
+    page = logged_in_page
+    closure_date = (datetime.utcnow() + timedelta(days=25)).strftime("%Y-%m-%d")
+    open_date = (datetime.utcnow() + timedelta(days=26)).strftime("%Y-%m-%d")
+
+    page.goto(live_server + "/admin/scheduling/holidays")
+    page.fill('input[name="closure_date"]', closure_date)
+    page.fill('input[name="label"]', "Regression Precheck Closure")
+    page.locator('button[type="submit"]', has_text="Add Closure").click()
+    page.wait_for_load_state("networkidle")
+
+    dialog_messages = []
+    page.on("dialog", lambda d: (dialog_messages.append(d.message), d.accept()))
+
+    page.goto(live_server + f"/appointments/day?date_str={closure_date}")
+    page.wait_for_load_state("networkidle")
+    page.locator(".fc-timegrid-slot-lane").first.click()
+    page.wait_for_timeout(300)
+    assert any("Regression Precheck Closure" in m for m in dialog_messages)
+    assert page.url == live_server + f"/appointments/day?date_str={closure_date}"  # never navigated
+
+    page.goto(live_server + f"/appointments/day?date_str={open_date}")
+    page.wait_for_load_state("networkidle")
+    page.locator(".fc-timegrid-slot-lane").first.click()
+    page.wait_for_url(re.compile(r"/appointments/new\?date="))
