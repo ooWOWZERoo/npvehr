@@ -4174,3 +4174,33 @@ No pagination added to the Appointment Types, Diagnostic Tests, Resources, Avail
 | New files | `ehr/services/pagination.py`, `ehr/templates/_pagination.html`. |
 | Updated | `ehr/routes/{patients,appointments,auth,admin_scheduling}.py`, `ehr/templates/{patients/list,appointments/list,admin/users/list,admin/scheduling/providers_list}.html`, `ehr/static/css/app.css` (new `.pagination` styles). `tests/test_smoke.py` gained two new tests. |
 | Explicitly not done | No pagination on the smaller practice-configuration admin lists (Appointment Types, Diagnostic Tests, Resources, Availability Templates, Holidays). No configurable page size or full-text search. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |
+
+## 79. User-Facing Validation Message for Photo/Document Upload Failures (v2.52)
+
+### 79.1 Origin
+
+Long-tracked v1.x gap (spec §18.3 item 4), explicitly framed as an open question: "uploading a photo with a disallowed extension does not crash the form (currently silently ignored — confirm this is the intended behavior or replace with a validation message)." `save_patient_photo`/`save_patient_document` (`ehr/services/media.py`) both silently returned `None` on a disallowed extension, and every calling route simply proceeded without a photo/document and without telling the user anything went wrong.
+
+### 79.2 What changed
+
+**New `ehr.services.media.photo_upload_error(upload)`/`document_upload_error(upload)`**: return a clear, user-facing message naming the rejected filename and the allowed extensions, or `None` when the upload is fine (including "nothing was uploaded," since both are optional). The underlying `save_patient_photo`/`save_patient_document` functions are unchanged.
+
+**Patient create/edit** (`POST /patients/new`, `POST /patients/{id}/edit`): a disallowed photo extension now re-renders the form with the error message and creates/saves nothing, the same "re-render with `error`, no partial write" pattern already used for an MRN conflict -- rather than silently creating/updating the record without the photo.
+
+**Per-patient document upload** (`POST /patients/{id}/correspondence/documents`): a disallowed extension now redirects back to the Documents tab with the error message preserved via a query-string flash (`?upload_error=...`), rendered as an alert banner above the upload form, instead of a silent no-op redirect.
+
+### 79.3 Verified
+
+`python3 -m py_compile` on every touched file; Jinja parse-check on the touched template. New Playwright test `test_photo_and_document_upload_rejects_disallowed_extension_with_message` confirms a disallowed-extension photo upload shows the error and creates no patient record, and a disallowed-extension document upload shows the error and adds no document row. Full suite (78 tests, up from 77) passed after this change.
+
+### 79.4 Explicitly not done
+
+No broader confirmation-message pass beyond the two named upload paths (spec §18.3 item 4's own text names photo-upload failures specifically) -- other silent-redirect patterns elsewhere in the app (if any) are unaudited. No client-side (JavaScript) pre-validation of the file extension before submit -- the check is server-side only, matching this app's existing "validate on the server, not just in the browser" posture. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6.
+
+**Version 2.52 change log (relative to v2.51) — Upload-Failure Validation Messages:**
+
+| Area | Change |
+| --- | --- |
+| Fix | A disallowed photo or document extension now shows a clear user-facing error and saves nothing, instead of silently proceeding without the file. |
+| Updated | `ehr/services/media.py`, `ehr/routes/patients.py`, `ehr/templates/patients/correspondence_documents_tab.html`. `tests/test_smoke.py` gained one new test. |
+| Explicitly not done | No broader confirmation-message audit beyond the two named upload paths. No client-side pre-validation. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |

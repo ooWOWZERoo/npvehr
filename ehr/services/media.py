@@ -53,6 +53,22 @@ def _cloudinary_configured() -> bool:
     return bool(os.environ.get("CLOUDINARY_URL"))
 
 
+def photo_upload_error(upload: Optional[UploadFile]) -> Optional[str]:
+    """User-facing validation message for a photo upload, or None if it's
+    fine to proceed (including "nothing was uploaded," which is valid --
+    a photo is always optional). Spec §18.3 item 4 follow-up: a disallowed
+    extension previously made save_patient_photo silently return None with
+    no indication to the user that anything went wrong -- the patient record
+    still saved, just without the photo they thought they'd attached."""
+    if not upload or not upload.filename:
+        return None
+    ext = os.path.splitext(upload.filename)[1].lower()
+    if ext not in ALLOWED_EXT:
+        allowed = ", ".join(sorted(ALLOWED_EXT))
+        return f'"{upload.filename}" is not a supported photo type. Allowed types: {allowed}.'
+    return None
+
+
 def save_patient_photo(upload: UploadFile) -> Optional[str]:
     """Save an uploaded patient photo, returning the opaque marker to store
     on the Patient row, or None if there's nothing valid to save."""
@@ -147,6 +163,21 @@ def delete_patient_photo(photo_path: Optional[str]):
             cloudinary.uploader.destroy(public_id, type="authenticated")
         except Exception:
             pass  # best-effort; never let cleanup failure block saving the patient record
+
+
+def document_upload_error(upload) -> Optional[str]:
+    """User-facing validation message for a document upload, or None if it's
+    fine to proceed. Mirrors photo_upload_error above (spec §18.3 item 4
+    follow-up) -- previously a disallowed document type was silently
+    dropped with no indication to the user that nothing was actually saved."""
+    filename = getattr(upload, "filename", None) if upload else None
+    if not filename:
+        return None
+    ext = os.path.splitext(filename)[1].lower()
+    if ext not in ALLOWED_DOCUMENT_EXT:
+        allowed = ", ".join(sorted(ALLOWED_DOCUMENT_EXT))
+        return f'"{filename}" is not a supported document type. Allowed types: {allowed}.'
+    return None
 
 
 def save_patient_document(upload: UploadFile) -> Optional[str]:

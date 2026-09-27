@@ -20,7 +20,8 @@ from ehr.auth.permissions import require_role, PATIENT_EDIT, ROLE_LABELS
 from ehr.auth import csrf
 from ehr.services.media import (save_patient_photo as _save_photo, delete_patient_photo as _delete_photo_file,
     get_photo_bytes as _get_photo_bytes, save_patient_document as _save_document,
-    get_document_bytes as _get_document_bytes, delete_patient_document as _delete_document_file)
+    get_document_bytes as _get_document_bytes, delete_patient_document as _delete_document_file,
+    photo_upload_error, document_upload_error)
 
 router = APIRouter(prefix="/patients", tags=["patients"])
 templates = Jinja2Templates(directory="ehr/templates")
@@ -171,6 +172,18 @@ def create_patient(request: Request,
     csrf_token: str = Form(""),
     db: Session = Depends(get_db)):
     csrf.verify_or_403(request.state.csrf_token, csrf_token)
+    photo_error = photo_upload_error(photo)
+    if photo_error:
+        pending = Patient(first_name=first_name, last_name=last_name, preferred_name=preferred_name or None,
+            mrn=mrn, date_of_birth=date_of_birth or None, gender=gender, phone=phone, email=email,
+            address=address, city=city, state=state, zip_code=zip_code,
+            insurance_provider=insurance_provider, insurance_id=insurance_id,
+            emergency_contact_name=emergency_contact_name, emergency_contact_phone=emergency_contact_phone,
+            allergies=allergies, medical_history=medical_history, ocular_history=ocular_history,
+            family_ocular_history=family_ocular_history, balance_due=_parse_balance(balance_due),
+            sms_opt_in=sms_opt_in, email_opt_in=email_opt_in)
+        return templates.TemplateResponse(request, "patients/form.html",
+            {"patient": pending, "error": photo_error}, status_code=400)
     conflict = _mrn_conflict(db, mrn)
     if conflict:
         pending = Patient(first_name=first_name, last_name=last_name, preferred_name=preferred_name or None,
@@ -317,6 +330,18 @@ def update_patient(request: Request, patient_id: int,
     csrf.verify_or_403(request.state.csrf_token, csrf_token)
     p = _get_patient_or_404(db, patient_id, request.state.user)
     if not p: return HTMLResponse("Not found", status_code=404)
+    photo_error = photo_upload_error(photo)
+    if photo_error:
+        pending = Patient(id=p.id, first_name=first_name, last_name=last_name,
+            preferred_name=preferred_name or None, mrn=mrn, date_of_birth=date_of_birth or None,
+            gender=gender, phone=phone, email=email, address=address, city=city, state=state,
+            zip_code=zip_code, insurance_provider=insurance_provider, insurance_id=insurance_id,
+            emergency_contact_name=emergency_contact_name, emergency_contact_phone=emergency_contact_phone,
+            allergies=allergies, medical_history=medical_history, ocular_history=ocular_history,
+            family_ocular_history=family_ocular_history, balance_due=_parse_balance(balance_due),
+            sms_opt_in=sms_opt_in, email_opt_in=email_opt_in, photo_path=p.photo_path)
+        return templates.TemplateResponse(request, "patients/form.html",
+            {"patient": pending, "error": photo_error}, status_code=400)
     conflict = _mrn_conflict(db, mrn, exclude_patient_id=patient_id)
     if conflict:
         pending = Patient(id=p.id, first_name=first_name, last_name=last_name,
@@ -802,13 +827,15 @@ DOCUMENT_CATEGORIES = ["Outside Records", "Consent Form", "Correspondence", "Vis
 
 
 @router.get("/{patient_id}/correspondence/documents", response_class=HTMLResponse)
-def patient_correspondence_documents(request: Request, patient_id: int, db: Session = Depends(get_db)):
+def patient_correspondence_documents(request: Request, patient_id: int, upload_error: str = "",
+    db: Session = Depends(get_db)):
     p = _get_patient_or_404(db, patient_id, request.state.user)
     if not p: return HTMLResponse("Not found", status_code=404)
     ctx = _workspace_ctx(db, p, "correspondence-documents")
     ctx["documents"] = (db.query(PatientDocument).filter(PatientDocument.patient_id == patient_id)
                          .order_by(PatientDocument.uploaded_at.desc()).all())
     ctx["categories"] = DOCUMENT_CATEGORIES
+    ctx["upload_error"] = upload_error
     return templates.TemplateResponse(request, "patients/correspondence_documents_tab.html", ctx)
 
 
@@ -823,6 +850,11 @@ async def upload_patient_document(request: Request, patient_id: int, db: Session
     description = form.get("description") or None
     if not upload or not getattr(upload, "filename", None):
         return RedirectResponse(f"/patients/{patient_id}/correspondence/documents", status_code=303)
+    upload_error = document_upload_error(upload)
+    if upload_error:
+        from urllib.parse import quote
+        return RedirectResponse(
+            f"/patients/{patient_id}/correspondence/documents?upload_error={quote(upload_error)}", status_code=303)
     marker = _save_document(upload)
     if not marker:
         return RedirectResponse(f"/patients/{patient_id}/correspondence/documents", status_code=303)
