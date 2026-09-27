@@ -1274,6 +1274,26 @@ def migration_050_backfill_glaucoma_oct_onh_orders(conn):
         WHERE diagnostic_test_id = :oct_id AND ordered_exam_id IS NOT NULL
     """), {"oct_onh_id": oct_onh_row[0], "oct_id": oct_row[0]})
 
+def migration_051_followup_recommendation_tracking(conn):
+    """Return-visit recommendation carry-forward (user request): before this,
+    EyeExam.follow_up_weeks/follow_up_unit was captured but visible only on
+    that exam's own detail page -- nothing surfaced it to whoever books the
+    patient's next appointment, and nothing tracked whether it was ever
+    actually addressed. See the new columns' own comments beside
+    follow_up_unit in ehr/models/database.py."""
+    if not _table_exists(conn, "eye_exams"):
+        return
+    _add_column_if_missing(conn, "eye_exams", "follow_up_reason", "TEXT")
+    _add_column_if_missing(conn, "eye_exams", "follow_up_status", "VARCHAR")
+    _add_column_if_missing(conn, "eye_exams", "follow_up_fulfilled_appointment_id", "INTEGER")
+    # Every pre-existing exam predates this column and has NULL here, which
+    # would make it look "pending" forever under the new Patient Overview
+    # card's query even for exams whose follow-up interval has long since
+    # passed or was already handled the old way -- backfill them to
+    # 'dismissed' so only genuinely new recommendations (documented after
+    # this migration) ever surface there.
+    conn.execute(text("UPDATE eye_exams SET follow_up_status = 'dismissed' WHERE follow_up_status IS NULL"))
+
 def migration_038_patient_self_registered_at(conn):
     """Patient Self-Registration (BUILD_BACKLOG.md 5a follow-up): flags a
     chart created by the patient themselves via /portal/register, so staff
@@ -1521,6 +1541,7 @@ POST_CREATE_ALL_MIGRATIONS = [
     ("037_seed_gonioscopy_pachymetry", migration_037_seed_gonioscopy_pachymetry),
     ("049_seed_glaucoma_oct_test", migration_049_seed_glaucoma_oct_test),
     ("050_backfill_glaucoma_oct_onh_orders", migration_050_backfill_glaucoma_oct_onh_orders),
+    ("051_followup_recommendation_tracking", migration_051_followup_recommendation_tracking),
 ]
 
 # ---------------------------------------------------------------------------

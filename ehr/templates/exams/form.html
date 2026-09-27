@@ -480,6 +480,16 @@
         </div>
       </div>
     </div>
+    <div class="form-group"><label>Recommended Follow-Up Tests <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; creates a real tracked order and carries forward to the booking form and next-visit alerts (distinct from "Tests Ordered/Reviewed This Visit" below, which is E/M scoring only)</span></label></div>
+    <div class="test-chip-list">
+      {% for t in tests %}
+      <label class="test-chip"><input type="checkbox" name="return_visit_diagnostic_orders" value="{{ t.code }}" data-cpt="{{ t.cpt_code or '' }}" onchange="checkFollowUpNcciWarnings()"> {{ t.calendar_abbreviation }}</label>
+      {% endfor %}
+    </div>
+    <div id="followup-ncci-warning-banner" class="alert alert-warning" style="display:none"></div>
+    <div class="form-group"><label>Reason for Follow-up <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; required whenever a return interval or a follow-up test above is set; shown to whoever books the next appointment</span>
+      <textarea name="follow_up_reason" id="follow_up_reason"></textarea></label>
+    </div>
     <div class="form-group"><label>Tests Ordered/Reviewed This Visit <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; feeds the E/M-level suggestion below only; not itself saved to the chart</span></label></div>
     <div class="test-chip-list">
       {% for t in ['OCT', 'Visual Field', 'Fundus Photos', 'Topography'] %}
@@ -686,6 +696,38 @@ var RX_MANAGEMENT_KEYWORDS = ['prescri', 'refill', 'start taking', 'discontinue'
 function mentionsRxManagement(text) {
   var t = (text || '').toLowerCase();
   return RX_MANAGEMENT_KEYWORDS.some(function (k) { return t.indexOf(k) !== -1; });
+}
+
+// Same NCCI PTP check as appointments/form.html's checkNcciWarnings() (kept
+// as two copies, one per form, rather than a shared file -- this app has no
+// shared client-side JS module today and the two forms' surrounding markup
+// differs enough that a shared function would need its own indirection).
+var NCCI_PAIRS = {{ ncci_pairs|tojson }};
+function checkFollowUpNcciWarnings() {
+  var checked = document.querySelectorAll('input[name="return_visit_diagnostic_orders"]:checked');
+  var codes = [];
+  checked.forEach(function (el) {
+    var cpt = el.getAttribute('data-cpt');
+    if (cpt) codes.push(cpt);
+  });
+  var messages = [];
+  for (var i = 0; i < codes.length; i++) {
+    for (var j = i + 1; j < codes.length; j++) {
+      NCCI_PAIRS.forEach(function (pair) {
+        if ((pair.column1 === codes[i] && pair.column2 === codes[j]) ||
+            (pair.column1 === codes[j] && pair.column2 === codes[i])) {
+          messages.push(pair.message);
+        }
+      });
+    }
+  }
+  var banner = document.getElementById('followup-ncci-warning-banner');
+  if (messages.length > 0) {
+    banner.innerHTML = messages.join('<br>');
+    banner.style.display = '';
+  } else {
+    banner.style.display = 'none';
+  }
 }
 
 (function () {
@@ -1096,6 +1138,9 @@ function mentionsRxManagement(text) {
         issues.push('Glaucoma diagnosis requires a 7th-character stage (Mild/Moderate/Severe/Indeterminate) — select Glaucoma Stage.');
       }
     }
+    if ((fieldValue('follow_up_weeks') || checkedValues('return_visit_diagnostic_orders').length) && !fieldValue('follow_up_reason')) {
+      issues.push('A return interval or follow-up test is set without a Reason for Follow-up — the front desk and next visit won\'t know why the patient is coming back.');
+    }
     return issues;
   }
 
@@ -1166,6 +1211,7 @@ function mentionsRxManagement(text) {
     '#focus-binocular input, #focus-binocular select, ' +
     '#focus-surgery input, #focus-surgery select, #focus-surgery textarea, ' +
     '.focus-toggle, [name="follow_up_weeks"], [name="follow_up_unit"], ' +
+    '[name="return_visit_diagnostic_orders"], #follow_up_reason, ' +
     '#chief_complaint, #diagnosis_codes, [name="problems_addressed"], [name="em_tests_reviewed"], ' +
     '#exam_type_confirmed, #em_code_confirmed'
   ).forEach(function (el) {

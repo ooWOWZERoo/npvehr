@@ -10,6 +10,7 @@ from ehr.models.database import (get_db, Patient, Appointment, EyeExam, Prescrip
     PatientInsurancePlan, DiagnosticOrder, DiagnosticTest)
 from ehr.services import diagnostic_orders as diag_orders
 from ehr.services import lookback_alerts
+from ehr.services import followup_recommendations
 from ehr.services import authz
 from ehr.services import scheduling as sched
 from ehr.services import field_audit
@@ -290,6 +291,7 @@ def patient_detail(request: Request, patient_id: int, db: Session = Depends(get_
         # computed fresh on every page load (no background job infra exists
         # in this app beyond the one cron-secret reminder endpoint).
         "lookback_alerts": lookback_alerts.get_alerts_for_patient(db, p.id),
+        "pending_followups": followup_recommendations.get_pending_followups(db, p.id),
     })
     return templates.TemplateResponse(request, "patients/overview.html", ctx)
 
@@ -527,6 +529,22 @@ def cancel_diagnostic_order(request: Request, patient_id: int, order_id: int,
         diag_orders.transition(order, diag_orders.CANCELLED, cancelled_reason=cancelled_reason or None)
     except ValueError as e:
         return HTMLResponse(str(e), status_code=400)
+    db.commit()
+    return RedirectResponse(f"/patients/{patient_id}", status_code=303)
+
+
+@router.post("/{patient_id}/exams/{exam_id}/follow-up/dismiss", dependencies=[Depends(require_role(*PATIENT_EDIT))])
+def dismiss_followup_recommendation(request: Request, patient_id: int, exam_id: int,
+    csrf_token: str = Form(""), db: Session = Depends(get_db)):
+    """Return-visit recommendation carry-forward (user request): staff use
+    this when the recommendation was actually addressed but not through the
+    "Book Follow-Up" button (e.g. booked through the ordinary calendar, or
+    the patient called to reschedule) -- marks it addressed without a fake
+    appointment id, so the Recommended Follow-Up card stops showing it."""
+    csrf.verify_or_403(request.state.csrf_token, csrf_token)
+    exam = db.query(EyeExam).filter(EyeExam.id == exam_id, EyeExam.patient_id == patient_id).first()
+    if not exam: return HTMLResponse("Not found", status_code=404)
+    exam.follow_up_status = "dismissed"
     db.commit()
     return RedirectResponse(f"/patients/{patient_id}", status_code=303)
 

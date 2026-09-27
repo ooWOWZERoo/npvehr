@@ -1,0 +1,24 @@
+{# Return-visit recommendation carry-forward (user request). Expects
+   `pending_followups` (a list of ehr.services.followup_recommendations.
+   PendingFollowup) and `patient_id` in scope. Same "ambient banner, never a
+   blocking modal" posture as _lookback_alerts.html. #}
+{% if pending_followups %}
+{% for f in pending_followups %}
+<div class="alert alert-info" style="display:flex;justify-content:space-between;align-items:center;gap:1rem">
+  <span>
+    <strong>Recommended Follow-Up</strong> ({{ f.provider_name }}, {{ f.exam_date }}) &mdash;
+    return in {{ f.interval_label }} (suggested: {{ f.suggested_date }})
+    {% if f.tests %}for {{ f.tests | map(attribute='abbreviation') | join(', ') }}{% endif %}
+    {% if f.reason %}&mdash; {{ f.reason }}{% endif %}
+  </span>
+  <div style="display:flex;gap:0.4rem;flex-shrink:0">
+    <a href="/appointments/new?patient_id={{ patient_id }}&follow_up_exam_id={{ f.exam_id }}"
+       class="btn btn-sm btn-primary">Book Follow-Up</a>
+    <form method="post" action="/patients/{{ patient_id }}/exams/{{ f.exam_id }}/follow-up/dismiss">
+      <button type="submit" class="btn btn-sm btn-secondary"
+        title="Mark this recommendation as addressed without using Book Follow-Up (e.g. it was booked through the ordinary calendar)">Mark Addressed</button>
+    </form>
+  </div>
+</div>
+{% endfor %}
+{% endif %}

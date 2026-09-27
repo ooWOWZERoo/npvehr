@@ -128,6 +128,7 @@ def test_follow_up_unit_save_and_display(logged_in_page, live_server):
     assert page.locator("#follow_up_unit").input_value() == "Week"
     page.fill("#follow_up_weeks", "3")
     page.locator("#follow_up_unit").select_option("Month")
+    page.fill("#follow_up_reason", "Routine recheck")
     page.locator('button[type="submit"]', has_text="Save Exam").click()
 
     page.wait_for_url(re.compile(r"/exams/\d+"))
@@ -138,6 +139,7 @@ def test_follow_up_unit_save_and_display(logged_in_page, live_server):
     page.goto(live_server + "/exams/new")
     page.locator('select[name="provider_id"]').select_option(index=1)
     page.fill("#follow_up_weeks", "2")
+    page.fill("#follow_up_reason", "Routine recheck")
     page.locator('button[type="submit"]', has_text="Save Exam").click()
     page.wait_for_url(re.compile(r"/exams/\d+"))
     assert "2 weeks" in page.locator("dl.dl-grid").inner_text()
@@ -2766,3 +2768,62 @@ def test_ncci_advisory_warning_on_billing_preview(logged_in_page, live_server):
     billing_text = billing_card.inner_text()
     assert "92134" in billing_text and "92250" in billing_text
     assert "modifier" in billing_text.lower()
+
+
+def test_return_visit_recommendation_carry_forward(logged_in_page, live_server):
+    """Return-visit recommendation carry-forward (user request, spec §87): a
+    provider recommending a return interval + follow-up test on an exam
+    surfaces as a "Recommended Follow-Up" card on the patient overview, its
+    "Book Follow-Up" link pre-fills the booking form (provider, suggested
+    date, the recommended test), and booking through that link both
+    transitions the underlying DiagnosticOrder to 'scheduled' and clears the
+    recommendation card -- closing the loop that previously depended on
+    front-desk staff re-reading the chart correctly."""
+    page = logged_in_page
+    page.goto(live_server + "/patients/new")
+    page.fill('input[name="first_name"]', "Followup")
+    page.fill('input[name="last_name"]', "Testpatient")
+    page.locator('button[type="submit"]', has_text="Create Patient").click()
+    page.wait_for_url(re.compile(r"/patients/\d+$"))
+    patient_id = page.url.rstrip("/").split("/")[-1]
+
+    page.goto(live_server + f"/exams/new?patient_id={patient_id}")
+    page.select_option('select[name="provider_id"]', index=1)
+    page.fill("#follow_up_weeks", "3")
+    page.select_option("#follow_up_unit", "Month")
+    _test_chip_checkbox(page, "VF").check()
+    banner = page.locator("#followup-ncci-warning-banner")
+    assert not banner.is_visible()  # VF alone -- no conflicting pair checked
+    issues = page.locator("#ap_validation_issues")
+    assert issues.is_visible()
+    assert "Reason for Follow-up" in issues.inner_text()
+
+    page.fill("#follow_up_reason", "Recheck visual field in 3 months for glaucoma monitoring")
+    assert not issues.is_visible()
+    page.locator('form[action="/exams/new"] button[type="submit"]', has_text="Save Exam").click()
+    page.wait_for_url(re.compile(r"/exams/\d+"))
+    assert "Recheck visual field" in page.locator(".card", has_text="Follow-up").first.inner_text()
+
+    page.goto(live_server + f"/patients/{patient_id}")
+    followup_card = page.locator(".alert-info", has_text="Recommended Follow-Up")
+    followup_text = followup_card.inner_text()
+    assert "3 Months" in followup_text
+    assert "VF" in followup_text
+    assert "Recheck visual field" in followup_text
+
+    book_href = followup_card.locator("a", has_text="Book Follow-Up").get_attribute("href")
+    assert f"follow_up_exam_id=" in book_href
+    page.goto(live_server + book_href)
+    assert page.locator('select[name="patient_id"]').input_value() == patient_id
+    assert _test_chip_checkbox(page, "VF").is_checked()
+    scheduled_date = page.eval_on_selector("#scheduled_at", "el => el.value")
+    expected_date = (datetime.utcnow().date() + timedelta(days=90)).isoformat()
+    assert scheduled_date.startswith(expected_date)
+
+    page.locator('button[type="submit"]', has_text="Schedule Appointment").click()
+    page.wait_for_url(re.compile(r"/appointments/\d+$"))
+
+    page.goto(live_server + f"/patients/{patient_id}")
+    assert page.locator(".alert-info", has_text="Recommended Follow-Up").count() == 0
+    pending_card = page.locator(".card", has_text="Pending Diagnostic Orders")
+    assert "SCHEDULED" in pending_card.inner_text()
