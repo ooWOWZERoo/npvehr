@@ -4204,3 +4204,34 @@ No broader confirmation-message pass beyond the two named upload paths (spec §1
 | Fix | A disallowed photo or document extension now shows a clear user-facing error and saves nothing, instead of silently proceeding without the file. |
 | Updated | `ehr/services/media.py`, `ehr/routes/patients.py`, `ehr/templates/patients/correspondence_documents_tab.html`. `tests/test_smoke.py` gained one new test. |
 | Explicitly not done | No broader confirmation-message audit beyond the two named upload paths. No client-side pre-validation. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |
+
+## 80. Automated Migration Test Suite (v2.53)
+
+### 80.1 Origin
+
+Long-tracked v1.x gap (spec §18.3 item 7's own note): "migrations are verified manually/via synthetic-database checks each round, not as a standing automated test." Every round of this project has run the same manual ritual (fresh-SQLite boot, idempotent re-run, sometimes an upgrade-in-place check) by hand rather than as a test that fails CI if broken.
+
+### 80.2 What changed
+
+**New `tests/test_migrations.py`**, unit-level (a throwaway file-backed SQLite database via a fresh `sqlalchemy.create_engine`, no Playwright/live server needed -- runs in well under a second):
+
+- `test_fresh_database_migration_boot_is_clean` -- runs `run_column_migrations` → `create_all()` → `run_post_create_all_migrations` against a brand-new database and confirms every registered migration id ends up recorded in `schema_migrations`.
+- `test_migration_rerun_against_already_migrated_database_is_idempotent` -- runs the full sequence twice and asserts every table's column set and row count are byte-for-byte identical before and after the second pass, formalizing the exact manual check this app's build process has always relied on.
+- `test_every_registered_migration_id_is_unique` -- guards against a copy/paste mistake where a duplicate id would silently shadow one migration under `_applied()`'s id-keyed lookup.
+- `test_pk_ddl_and_dialect_detection_for_both_supported_databases` -- exercises `_pk_ddl`/`_is_postgres` (the one place migration DDL genuinely branches between SQLite and Postgres/Neon) against both dialect names via a lightweight fake connection object, since a real Postgres instance isn't available in this environment.
+
+### 80.3 Verified
+
+All four new tests pass in isolation (0.65s) and as part of the full suite (82 tests, up from 78). `python3 -m py_compile` on the new test file.
+
+### 80.4 Explicitly not done
+
+No real Postgres instance exercised (the dialect-branch test uses a fake connection object, not an actual Postgres/Neon connection) -- still a gap, but a smaller one than "zero coverage of the branch at all." No automated *upgrade-in-place from an arbitrary prior schema snapshot* test (each round's manual verification against a real pre-existing database, as done for migrations `044`/`045` earlier in this session, remains a manual step for anything genuinely novel) -- the new suite covers "fresh boot" and "re-run against what it just built," which is what a from-scratch `run_column_migrations`/`run_post_create_all_migrations` pass can exercise generically for every past and future migration without needing a library of historical schema snapshots. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6.
+
+**Version 2.53 change log (relative to v2.52) — Automated Migration Test Suite:**
+
+| Area | Change |
+| --- | --- |
+| New capability | The manual fresh-DB-boot and idempotent-rerun migration checks are now a standing automated test suite. |
+| New files | `tests/test_migrations.py` (4 new tests). |
+| Explicitly not done | No real Postgres instance exercised. No automated arbitrary-prior-schema upgrade-in-place test. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |

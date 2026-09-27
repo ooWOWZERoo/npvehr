@@ -1,6 +1,6 @@
 # New Path Vision EHR — Master Build Backlog
 
-**Status:** Living tracking document. **Baseline as of:** spec v2.52 / research doc v2.24 (2026-09-27).
+**Status:** Living tracking document. **Baseline as of:** spec v2.53 / research doc v2.24 (2026-09-27).
 
 ## Purpose and how to use this document
 
@@ -201,7 +201,7 @@ Tracked here for visibility; the authoritative detail lives in the spec's go-liv
 ## 11. Testing & QA
 
 - [~] **Expand Playwright coverage toward spec §20's baseline regression checklist. Partial, v2.49** — see baseline spec §75 (§36.5 item 5). 5 new tests: ineligible type/relationship rejection, practice-closure booking rejection, 404s on unknown IDs/placeholder sections, MRN conflict rejection, appointment status cycling. Most of §20 remains manual-only (dashboard counts, photo-upload edge cases, automated migration-idempotency suite, etc.) — large checklist, picked independently-valuable items rather than 100% automation in one pass.
-- [ ] No automated migration test suite — migrations are verified manually/via synthetic-database checks each round, not as a standing automated test (§18.3 item 7's note)
+- [x] **Automated migration test suite. Done, v2.53** — see baseline spec §80 (§18.3 item 7). New `tests/test_migrations.py` (unit-level, no browser/live server needed): fresh-database boot, idempotent-rerun (byte-for-byte column/row-count comparison), duplicate-id guard, and `_pk_ddl`/`_is_postgres` dialect-branch coverage via a fake connection. The manual fresh-DB/idempotent checks this app's build process has always done by hand are now also a standing automatic regression test.
 
 ---
 
