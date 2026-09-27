@@ -1413,6 +1413,81 @@ POST_CREATE_ALL_MIGRATIONS = [
     ("037_seed_gonioscopy_pachymetry", migration_037_seed_gonioscopy_pachymetry),
 ]
 
+# ---------------------------------------------------------------------------
+# Down-migrations / rollback (spec §36.5 item 4 / §25.15 follow-up): this
+# runner only ever added, never reversed. A full down-migration for every
+# entry above is NOT provided here, deliberately -- many migrations seed
+# data, or are built on by later migrations, and are not safely reversible
+# in isolation. Reversibility is opt-in per migration (registered in
+# DOWN_MIGRATIONS below), not automatic, so the default for any migration
+# nobody has explicitly reviewed for safe reversal is "cannot be rolled
+# back" rather than a guess that could silently drop real data.
+#
+# IMPORTANT: rolling back a migration is a disaster-recovery action meant to
+# be paired with rolling the *application code* back too (e.g. via git), to
+# a version that predates that migration -- the ORM models and routes in
+# today's checked-out code still expect the column/table a rollback just
+# removed, and will error against it. This is not a way to selectively
+# undo one schema change while continuing to run today's code.
+# ---------------------------------------------------------------------------
+
+def down_038_patient_self_registered_at(conn):
+    if _table_exists(conn, "patients"):
+        conn.execute(text("ALTER TABLE patients DROP COLUMN self_registered_at"))
+
+def down_039_provider_active(conn):
+    if _table_exists(conn, "providers"):
+        conn.execute(text("ALTER TABLE providers DROP COLUMN active"))
+
+def down_043_create_rx_lab_orders(conn):
+    conn.execute(text("DROP TABLE IF EXISTS rx_lab_orders"))
+
+def down_044_appointment_type_updated_by(conn):
+    if _table_exists(conn, "appointment_types"):
+        conn.execute(text("ALTER TABLE appointment_types DROP COLUMN updated_at"))
+        conn.execute(text("ALTER TABLE appointment_types DROP COLUMN updated_by_user_id"))
+
+def down_045_user_provider_link(conn):
+    if _table_exists(conn, "users"):
+        conn.execute(text("ALTER TABLE users DROP COLUMN provider_id"))
+
+# Sparse by design -- see this section's own docstring above. Extend this
+# alongside any new migration that a reviewer has actually confirmed is safe
+# to reverse (a plain ADD COLUMN or CREATE TABLE with no data-seeding and
+# nothing else built on top of it is the easy case; anything else needs a
+# real judgment call, not a default entry here).
+DOWN_MIGRATIONS = {
+    "038_patient_self_registered_at": down_038_patient_self_registered_at,
+    "039_provider_active": down_039_provider_active,
+    "043_create_rx_lab_orders": down_043_create_rx_lab_orders,
+    "044_appointment_type_updated_by": down_044_appointment_type_updated_by,
+    "045_user_provider_link": down_045_user_provider_link,
+}
+
+
+def rollback_migration(engine, migration_id: str):
+    """Reverses a single migration -- see this section's docstring above for
+    the disaster-recovery-paired-with-a-code-rollback caveat. Raises
+    ValueError if `migration_id` isn't a real registered migration, isn't
+    currently applied (nothing to roll back), or has no down-migration
+    registered (most don't; see DOWN_MIGRATIONS above)."""
+    all_ids = {mid for mid, _ in COLUMN_MIGRATIONS} | {mid for mid, _ in POST_CREATE_ALL_MIGRATIONS}
+    if migration_id not in all_ids:
+        raise ValueError(f"Unknown migration id: {migration_id!r}")
+    down_func = DOWN_MIGRATIONS.get(migration_id)
+    if down_func is None:
+        raise ValueError(
+            f"No down-migration registered for {migration_id!r} -- not every migration is safely "
+            f"reversible in isolation (e.g. ones that seed data, or that later migrations build on), "
+            f"so this is opt-in per migration rather than automatic.")
+    with engine.begin() as conn:
+        _ensure_migrations_table(conn)
+        if not _applied(conn, migration_id):
+            raise ValueError(f"Migration {migration_id!r} is not currently applied -- nothing to roll back.")
+        down_func(conn)
+        conn.execute(text("DELETE FROM schema_migrations WHERE id = :id"), {"id": migration_id})
+
+
 def run_column_migrations(engine):
     """Phase 1: ALTER TABLE migrations on pre-existing tables. Must run BEFORE create_all()."""
     with engine.begin() as conn:
