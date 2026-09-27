@@ -324,14 +324,16 @@ def test_diagnostic_order_created_from_exam_and_resolved(logged_in_page, live_se
     card on the patient workspace overview; the composed Plan text and the
     saved GlaucomaTracking.diagnostic_orders field both show the
     human-readable label ("OCT RNFL") even though the checkbox's submitted
-    value is now a terse catalog code ("OCT") needed to create the order.
-    Covers both terminal actions: marking an order complete removes it from
-    the pending list, and cancelling one does too."""
+    value is now a terse catalog code ("OCT_ONH" -- the optic-nerve/RNFL
+    OCT, CPT 92133, distinct from the generic "OCT" retina test, CPT 92134;
+    see spec §86.2/§87) needed to create the order. Covers both terminal
+    actions: marking an order complete removes it from the pending list,
+    and cancelling one does too."""
     page = logged_in_page
     page.goto(live_server + "/exams/new")
     page.select_option('select[name="provider_id"]', index=1)
     page.locator('.focus-toggle[data-target="focus-glaucoma"]').check()
-    page.locator('input[name="gt_diagnostic_orders"][value="OCT"]').check()
+    page.locator('input[name="gt_diagnostic_orders"][value="OCT_ONH"]').check()
     page.locator('input[name="gt_diagnostic_orders"][value="GONIOSCOPY"]').check()
 
     plan_text = page.eval_on_selector("#plan", "el => el.value")
@@ -392,9 +394,9 @@ def test_lookback_alerts_interval_due_and_outstanding_order(logged_in_page, live
 
     page.goto(live_server + f"/patients/{patient_id}")
     info_alerts = page.locator(".alert-info")
-    assert info_alerts.count() == 2  # VF and OCT, both never completed
+    assert info_alerts.count() == 2  # VF and OCT_ONH, both never completed
     assert "Virtual Visual Field" in info_alerts.nth(0).inner_text()
-    assert "Optical Coherence Tomography" in info_alerts.nth(1).inner_text()
+    assert "OCT, Optic Nerve (Glaucoma)" in info_alerts.nth(1).inner_text()
 
     # Same alerts surface on the New Exam form for this patient too.
     page.goto(live_server + f"/exams/new?patient_id={patient_id}")
@@ -409,7 +411,7 @@ def test_lookback_alerts_interval_due_and_outstanding_order(logged_in_page, live
     assert "Virtual Visual Field" in page.locator(".alert-warning").first.inner_text()
     remaining_info = page.locator(".alert-info")
     assert remaining_info.count() == 1
-    assert "Optical Coherence Tomography" in remaining_info.first.inner_text()
+    assert "OCT, Optic Nerve (Glaucoma)" in remaining_info.first.inner_text()
 
     # Completing that order clears its outstanding-order banner and, since
     # it's now compliant, doesn't bring back an interval-due one either.
@@ -418,7 +420,7 @@ def test_lookback_alerts_interval_due_and_outstanding_order(logged_in_page, live
     assert page.locator(".alert-warning").count() == 0
     final_info = page.locator(".alert-info")
     assert final_info.count() == 1
-    assert "Optical Coherence Tomography" in final_info.first.inner_text()
+    assert "OCT, Optic Nerve (Glaucoma)" in final_info.first.inner_text()
 
 
 def test_lookback_alerts_amd_diabetic_retinopathy_and_keratoconus_profiles(logged_in_page, live_server):

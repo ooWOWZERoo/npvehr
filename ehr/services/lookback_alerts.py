@@ -46,6 +46,7 @@ OUTSTANDING_STATUSES = ("ordered", "scheduled", "in_progress")
 # code has an entry.
 TEST_CODE_TO_FOCUS_SECTION = {
     "OCT": "focus-glaucoma",
+    "OCT_ONH": "focus-glaucoma",
     "OPTOS": "focus-glaucoma",
     "VF": "focus-glaucoma",
     "GONIOSCOPY": "focus-glaucoma",
@@ -65,7 +66,16 @@ CONDITION_PROFILES = [
     {
         "icd10_prefixes": ["H40."],
         "label": "Standard Glaucoma Protocol",
-        "required_test_codes": ["VF", "OCT"],
+        # OCT_ONH (optic nerve/RNFL, CPT 92133) as of v2.60 -- previously
+        # "OCT" here meant the retina-OCT catalog test (92134), a conflation
+        # left over from before 92133 had its own catalog entry (see spec
+        # §86.2/§87). This is a required-test-code change, not a data
+        # backfill: glaucoma DiagnosticOrder rows completed before this
+        # change are recorded against the old "OCT" code and will NOT be
+        # recognized as satisfying this interval going forward, so some
+        # patients may see a one-time "overdue" look-back alert reappear
+        # until their next real ONH OCT is recorded under OCT_ONH.
+        "required_test_codes": ["VF", "OCT_ONH"],
         "default_interval_days": 365,
         "severity_interval_days": {"moderate": 182, "severe": 182},
     },
