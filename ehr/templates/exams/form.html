@@ -466,30 +466,7 @@
       <div class="form-group"><label>Assessment <textarea name="assessment" id="assessment"></textarea></label></div>
       <div class="form-group"><label>Plan <textarea name="plan" id="plan"></textarea></label></div>
     </div>
-    <div class="form-row cols-2">
-      <div class="form-group"><label>Diagnosis Codes (ICD-10) <input name="diagnosis_codes" id="diagnosis_codes" placeholder="H52.13, H52.219"></label></div>
-      <div class="form-group"><label>Follow-up</label>
-        <div style="display:flex;gap:0.5rem">
-          <input name="follow_up_weeks" id="follow_up_weeks" type="number" style="flex:1">
-          <select name="follow_up_unit" id="follow_up_unit" style="flex:1">
-            <option value="Day">Days</option>
-            <option value="Week" selected>Weeks</option>
-            <option value="Month">Months</option>
-            <option value="Year">Years</option>
-          </select>
-        </div>
-      </div>
-    </div>
-    <div class="form-group"><label>Recommended Follow-Up Tests <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; creates a real tracked order and carries forward to the booking form and next-visit alerts (distinct from "Tests Ordered/Reviewed This Visit" below, which is E/M scoring only)</span></label></div>
-    <div class="test-chip-list">
-      {% for t in tests %}
-      <label class="test-chip"><input type="checkbox" name="return_visit_diagnostic_orders" value="{{ t.code }}" data-cpt="{{ t.cpt_code or '' }}" onchange="checkFollowUpNcciWarnings()"> {{ t.calendar_abbreviation }}</label>
-      {% endfor %}
-    </div>
-    <div id="followup-ncci-warning-banner" class="alert alert-warning" style="display:none"></div>
-    <div class="form-group"><label>Reason for Follow-up <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; required whenever a return interval or a follow-up test above is set; shown to whoever books the next appointment</span>
-      <textarea name="follow_up_reason" id="follow_up_reason"></textarea></label>
-    </div>
+    <div class="form-group"><label>Diagnosis Codes (ICD-10) <input name="diagnosis_codes" id="diagnosis_codes" placeholder="H52.13, H52.219"></label></div>
     <div class="form-group"><label>Tests Ordered/Reviewed This Visit <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; feeds the E/M-level suggestion below only; not itself saved to the chart</span></label></div>
     <div class="test-chip-list">
       {% for t in ['OCT', 'Visual Field', 'Fundus Photos', 'Topography'] %}
@@ -509,6 +486,30 @@
         <input type="hidden" name="suggested_em_rationale" id="suggested_em_rationale">
       </div>
     </div>
+
+    <div class="section-title">Return Visit Planning <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; what happens at the patient's next visit, not this one</span></div>
+    <div class="form-group" style="max-width:260px"><label>Follow-up Interval</label>
+      <div style="display:flex;gap:0.5rem">
+        <input name="follow_up_weeks" id="follow_up_weeks" type="number" style="flex:1">
+        <select name="follow_up_unit" id="follow_up_unit" style="flex:1">
+          <option value="Day">Days</option>
+          <option value="Week" selected>Weeks</option>
+          <option value="Month">Months</option>
+          <option value="Year">Years</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group"><label>Recommended Follow-Up Tests <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; creates a real tracked order and carries forward to the booking form and next-visit alerts (distinct from "Tests Ordered/Reviewed This Visit" above, which is E/M scoring only)</span></label></div>
+    <div class="test-chip-list">
+      {% for t in tests %}
+      <label class="test-chip"><input type="checkbox" name="return_visit_diagnostic_orders" value="{{ t.code }}" data-cpt="{{ t.cpt_code or '' }}" onchange="checkFollowUpNcciWarnings()"> {{ t.calendar_abbreviation }}</label>
+      {% endfor %}
+    </div>
+    <div id="followup-ncci-warning-banner" class="alert alert-warning" style="display:none"></div>
+    <div class="form-group"><label>Reason for Follow-up <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; required whenever a return interval or a follow-up test above is set; shown to whoever books the next appointment</span>
+      <textarea name="follow_up_reason" id="follow_up_reason"></textarea></label>
+    </div>
+
     <div class="form-actions"><button type="submit" class="btn btn-primary">Save Exam</button></div>
   </form>
 </div>
