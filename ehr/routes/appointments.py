@@ -12,6 +12,7 @@ from ehr.models.database import (get_db, Appointment, Patient, Provider, Appoint
 from ehr.services import scheduling as sched
 from ehr.services import notifications as notify
 from ehr.services import cpt_mapper
+from ehr.services import ncci_edits
 from ehr.services import pagination as pg
 from ehr.env_info import EHR_ENV, CRON_SECRET
 from ehr.utils import patient_context
@@ -340,6 +341,15 @@ def _form_context(db: Session, patient_id=None, prefill_date=None, appt: Appoint
     if appt is not None:
         current_resource_selections = {sel.requirement_id: sel.resource_id for sel in
             db.query(AppointmentResourceSelection).filter(AppointmentResourceSelection.appointment_id == appt.id).all()}
+    # NCCI PTP-edit advisory check (ehr.services.ncci_edits): the booking
+    # form's JS mirrors this tiny curated table client-side so a warning can
+    # appear the moment two conflicting tests are checked together, before
+    # the visit is even saved -- same "duplicate a small, stable lookup into
+    # the form's own JS" pattern already used for eligibility-note checks
+    # (data-allows-new/data-allows-established) on this same form.
+    ncci_pairs = [{"column1": e.column1, "column2": e.column2,
+                   "modifier_indicator": e.modifier_indicator, "message": e.message}
+                  for e in ncci_edits.PTP_EDITS]
     return {
         "patients": db.query(Patient).order_by(Patient.last_name).all(),
         "providers": sched.bookable_providers(db, include_id=appt.provider_id if appt else None),
@@ -355,6 +365,7 @@ def _form_context(db: Session, patient_id=None, prefill_date=None, appt: Appoint
         "resource_picker": resource_picker,
         "resource_options_by_class": resource_options_by_class,
         "current_resource_selections": current_resource_selections,
+        "ncci_pairs": ncci_pairs,
     }
 
 

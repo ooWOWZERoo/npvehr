@@ -20,6 +20,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from ehr.models.database import Appointment, AppointmentTest, DiagnosticTest, CptCode, PatientInsurancePlan
+from ehr.services import ncci_edits
 
 
 @dataclass
@@ -38,6 +39,11 @@ class CptSummary:
     diagnosis_codes: list[str] = field(default_factory=list)
     medical_payer_name: Optional[str] = None
     vision_payer_name: Optional[str] = None
+    # NCCI PTP-edit advisories (ehr.services.ncci_edits) among every CPT code
+    # on this visit -- decision support only, never blocks or alters
+    # billing. Empty when no curated edit applies to this visit's code
+    # combination.
+    ncci_warnings: list = field(default_factory=list)
 
 
 def _cpt_description(db: Session, code: str) -> str:
@@ -85,10 +91,14 @@ def compute_cpt_summary(db: Session, exam) -> Optional[CptSummary]:
                 PatientInsurancePlan.plan_category == "vision", PatientInsurancePlan.is_active == True)
         .order_by(PatientInsurancePlan.id.desc()).first())
 
+    all_codes = [exam_cpt, "92015"] + [t.code for t in testing_codes]
+    ncci_warnings = ncci_edits.check_codes(all_codes)
+
     return CptSummary(visit_flow=appt.visit_flow, exam_code=exam_code, refraction_code=refraction_code,
         testing_codes=testing_codes, em_code=em_code, diagnosis_codes=diagnosis_codes,
         medical_payer_name=medical_plan.payer_name if medical_plan else None,
-        vision_payer_name=vision_plan.payer_name if vision_plan else None)
+        vision_payer_name=vision_plan.payer_name if vision_plan else None,
+        ncci_warnings=ncci_warnings)
 
 
 def suggest_visit_flow(db: Session, patient_id: int) -> str:

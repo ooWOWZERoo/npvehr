@@ -340,7 +340,7 @@
     </div>
     <div class="form-group"><label>Diagnostic Orders</label></div>
     <div class="test-chip-list">
-      {% for code, label in [('OCT', 'OCT RNFL'), ('VF', 'Humphrey VF 24-2'), ('GONIOSCOPY', 'Gonioscopy'), ('PACHYMETRY', 'Pachymetry')] %}
+      {% for code, label in [('OCT_ONH', 'OCT RNFL'), ('VF', 'Humphrey VF 24-2'), ('GONIOSCOPY', 'Gonioscopy'), ('PACHYMETRY', 'Pachymetry')] %}
       <label class="test-chip"><input type="checkbox" name="gt_diagnostic_orders" value="{{ code }}" data-label="{{ label }}"> {{ label }}</label>
       {% endfor %}
     </div>

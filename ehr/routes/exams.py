@@ -40,7 +40,7 @@ def _b(v):
 # the human-readable label for that column (exams/form.html's checkboxes
 # carry the same mapping in their data-label attribute for the live Plan
 # preview -- kept in sync by hand, both are small and rarely change).
-GT_DIAGNOSTIC_ORDER_LABELS = {"OCT": "OCT RNFL", "VF": "Humphrey VF 24-2",
+GT_DIAGNOSTIC_ORDER_LABELS = {"OCT_ONH": "OCT RNFL", "VF": "Humphrey VF 24-2",
     "GONIOSCOPY": "Gonioscopy", "PACHYMETRY": "Pachymetry"}
 
 @router.get("/new", response_class=HTMLResponse, dependencies=[Depends(require_role(*EXAM_EDIT))])

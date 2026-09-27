@@ -47,9 +47,10 @@
     <div class="test-chip-list">
       {% set active_test_ids = appt.tests|selectattr('status','equalto','active')|map(attribute='diagnostic_test_id')|list %}
       {% for t in tests %}
-      <label class="test-chip"><input type="checkbox" name="test_ids" value="{{ t.id }}" {{ 'checked' if t.id in active_test_ids }}> {{ t.calendar_abbreviation }}</label>
+      <label class="test-chip"><input type="checkbox" name="test_ids" value="{{ t.id }}" data-cpt="{{ t.cpt_code or '' }}" onchange="checkNcciWarnings()" {{ 'checked' if t.id in active_test_ids }}> {{ t.calendar_abbreviation }}</label>
       {% endfor %}
     </div>
+    <div id="ncci-warning-banner" class="alert alert-warning" style="display:none"></div>
     <div class="section-title">Overrides</div>
     <div class="form-row cols-2">
       <div class="form-group"><label>Duration Override (minutes) <input name="duration_override" type="number" step="5" min="5" max="480" value="{{ appt.duration_minutes if appt.duration_overridden else '' }}"></label></div>
@@ -71,6 +72,34 @@
 var RESOURCE_PICKER = {{ resource_picker|tojson }};
 var RESOURCE_OPTIONS_BY_CLASS = {{ resource_options_by_class|tojson }};
 var CURRENT_RESOURCE_SELECTIONS = {{ current_resource_selections|tojson }};
+var NCCI_PAIRS = {{ ncci_pairs|tojson }};
+
+function checkNcciWarnings(){
+  var checked = document.querySelectorAll('input[name="test_ids"]:checked');
+  var codes = [];
+  checked.forEach(function(el){
+    var cpt = el.getAttribute('data-cpt');
+    if (cpt) codes.push(cpt);
+  });
+  var messages = [];
+  for (var i = 0; i < codes.length; i++) {
+    for (var j = i + 1; j < codes.length; j++) {
+      NCCI_PAIRS.forEach(function(pair){
+        if ((pair.column1 === codes[i] && pair.column2 === codes[j]) ||
+            (pair.column1 === codes[j] && pair.column2 === codes[i])) {
+          messages.push(pair.message);
+        }
+      });
+    }
+  }
+  var banner = document.getElementById('ncci-warning-banner');
+  if (messages.length > 0) {
+    banner.innerHTML = messages.join('<br>');
+    banner.style.display = '';
+  } else {
+    banner.style.display = 'none';
+  }
+}
 
 function renderResourcePicker(){
   var sel = document.getElementById('appointment_type_version_id');
@@ -111,5 +140,6 @@ function renderResourcePicker(){
   });
 }
 renderResourcePicker();
+checkNcciWarnings();
 </script>
 {% endblock %}
