@@ -2702,8 +2702,15 @@ def test_ncci_advisory_warning_on_booking_form(logged_in_page, live_server):
     warning (indicator 1); checking OCT and OCT-ONH (optic nerve, 92133)
     together should show a cannot-bill-together warning (indicator 0, no
     modifier possible); checking VF (92083) and OCT-ONH together -- a real
-    NCCI pair with NO edit -- should show no warning at all. Purely
-    advisory: the appointment still saves successfully regardless."""
+    NCCI pair with NO edit -- should show no warning at all. The banner
+    itself is purely advisory (never blocks typing/checking anything), but
+    since the billing-rule-enforcement round (user request), an
+    indicator-1 (modifier-eligible) pair now hard-blocks the actual save
+    unless overridden -- see test_billing_rule_blocks_non_override_role_and_
+    logs_override for that. This test's own save at the end uses an
+    override (the logged-in demo account is System Administrator, an
+    override-capable role) to confirm the banner's presence doesn't itself
+    prevent a legitimate, overridden save from succeeding."""
     page = logged_in_page
     page.goto(live_server + "/appointments/new")
     banner = page.locator("#ncci-warning-banner")
@@ -2730,12 +2737,20 @@ def test_ncci_advisory_warning_on_booking_form(logged_in_page, live_server):
     _test_chip_checkbox(page, "VF").check()
     assert not banner.is_visible()  # VF + OCT-ONH: a real NCCI pair with no edit
 
-    # Advisory only -- saving still succeeds with the conflicting pair checked.
+    # OCT-ONH+OCT (indicator 0) can never be overridden by anyone -- leave
+    # it unchecked and use OCT+OPTOS (indicator 1, modifier-eligible)
+    # instead to exercise the override-and-save path.
+    _test_chip_checkbox(page, "OCT-ONH").uncheck()
+    _test_chip_checkbox(page, "VF").uncheck()
     _test_chip_checkbox(page, "OCT").check()
+    _test_chip_checkbox(page, "OPTOS").check()
+    assert banner.is_visible()
     page.select_option('select[name="patient_id"]', index=0)
     page.select_option('select[name="provider_id"]', index=0)
     target_date = (datetime.utcnow() + timedelta(days=28)).strftime("%Y-%m-%d")
     page.fill("#scheduled_at", f"{target_date}T15:00")
+    page.locator("#billing_override").check()
+    page.fill("#billing_override_reason", "Documented clinical justification")
     page.locator('button[type="submit"]', has_text="Schedule Appointment").click()
     page.wait_for_url(re.compile(r"/appointments/\d+$"))
 
@@ -2752,6 +2767,8 @@ def test_ncci_advisory_warning_on_billing_preview(logged_in_page, live_server):
     page.fill("#scheduled_at", f"{target_date}T15:00")
     _test_chip_checkbox(page, "OCT").check()
     _test_chip_checkbox(page, "OPTOS").check()
+    page.locator("#billing_override").check()
+    page.fill("#billing_override_reason", "Documented clinical justification")
     page.locator('button[type="submit"]', has_text="Schedule Appointment").click()
     page.wait_for_url(re.compile(r"/appointments/\d+$"))
     appt_id = page.url.rstrip("/").split("/")[-1]
@@ -2791,7 +2808,7 @@ def test_return_visit_recommendation_carry_forward(logged_in_page, live_server):
     page.select_option('select[name="provider_id"]', index=1)
     page.fill("#follow_up_weeks", "3")
     page.select_option("#follow_up_unit", "Month")
-    _test_chip_checkbox(page, "VF").check()
+    page.locator("#return-visit-block-1 .test-chip", has_text=re.compile(r"^\s*VF\s*$")).locator("input").check()
     banner = page.locator("#followup-ncci-warning-banner")
     assert not banner.is_visible()  # VF alone -- no conflicting pair checked
     issues = page.locator("#followup_validation_issue")
@@ -2812,7 +2829,7 @@ def test_return_visit_recommendation_carry_forward(logged_in_page, live_server):
     assert "Recheck visual field" in followup_text
 
     book_href = followup_card.locator("a", has_text="Book Follow-Up").get_attribute("href")
-    assert f"follow_up_exam_id=" in book_href
+    assert f"follow_up_id=" in book_href
     page.goto(live_server + book_href)
     assert page.locator('select[name="patient_id"]').input_value() == patient_id
     assert _test_chip_checkbox(page, "VF").is_checked()
@@ -2827,3 +2844,140 @@ def test_return_visit_recommendation_carry_forward(logged_in_page, live_server):
     assert page.locator(".alert-info", has_text="Recommended Follow-Up").count() == 0
     pending_card = page.locator(".card", has_text="Pending Diagnostic Orders")
     assert "SCHEDULED" in pending_card.inner_text()
+
+
+def test_second_return_visit_planning_block(logged_in_page, live_server):
+    """Return-visit recommendation carry-forward, round 2 (user request:
+    "allow for up to two return visit planning"): the New Exam form's
+    second Return Visit block stays hidden until "Add another return
+    visit" is clicked, is independently validated (its own required-reason
+    rule, its own NCCI check) from the first, and produces its own
+    EyeExamFollowUp row -- surfacing as its own "Recommended Follow-Up"
+    card on the patient overview, independently bookable."""
+    page = logged_in_page
+    page.goto(live_server + "/patients/new")
+    page.fill('input[name="first_name"]', "Second")
+    page.fill('input[name="last_name"]', "Followup")
+    page.locator('button[type="submit"]', has_text="Create Patient").click()
+    page.wait_for_url(re.compile(r"/patients/\d+$"))
+    patient_id = page.url.rstrip("/").split("/")[-1]
+
+    page.goto(live_server + f"/exams/new?patient_id={patient_id}")
+    page.select_option('select[name="provider_id"]', index=1)
+    assert page.locator("#return-visit-block-2").is_hidden()
+
+    page.fill("#follow_up_weeks", "6")
+    page.locator("#return-visit-block-1 .test-chip", has_text=re.compile(r"^\s*VF\s*$")).locator("input").check()
+    page.fill("#follow_up_reason", "Recheck VF")
+
+    page.click("#add-return-visit-2-btn")
+    assert page.locator("#return-visit-block-2").is_visible()
+    assert page.locator("#add-return-visit-2-btn").is_hidden()
+
+    # Block 2's own validation is independent of block 1's (already satisfied).
+    page.fill("#follow_up_weeks_2", "3")
+    page.select_option("#follow_up_unit_2", "Month")
+    page.locator("#return-visit-block-2 .test-chip", has_text=re.compile(r"^\s*OCT-ONH\s*$")).locator("input").check()
+    assert page.locator("#followup_validation_issue_2").is_visible()
+    page.fill("#follow_up_reason_2", "Recheck optic nerve OCT")
+    assert page.locator("#followup_validation_issue_2").is_hidden()
+
+    page.locator('form[action="/exams/new"] button[type="submit"]', has_text="Save Exam").click()
+    page.wait_for_url(re.compile(r"/exams/\d+"))
+    followup_text = page.locator(".card", has_text="Follow-up").first.inner_text()
+    assert "6 weeks" in followup_text and "Recheck VF" in followup_text
+    assert "3 months" in followup_text and "Recheck optic nerve OCT" in followup_text
+
+    page.goto(live_server + f"/patients/{patient_id}")
+    cards = page.locator(".alert-info", has_text="Recommended Follow-Up")
+    assert cards.count() == 2
+
+    # Removing block 2 before submit clears it and drops its validation note.
+    page.goto(live_server + f"/exams/new?patient_id={patient_id}")
+    page.select_option('select[name="provider_id"]', index=1)
+    page.click("#add-return-visit-2-btn")
+    page.fill("#follow_up_weeks_2", "1")
+    assert page.locator("#followup_validation_issue_2").is_visible()
+    page.locator("#return-visit-block-2 button", has_text="Remove").click()
+    assert page.locator("#return-visit-block-2").is_hidden()
+    assert page.locator("#add-return-visit-2-btn").is_visible()
+    assert page.locator("#follow_up_weeks_2").input_value() == ""
+
+
+def test_billing_rule_blocks_non_override_role_and_logs_override(logged_in_page, live_server):
+    """NCCI billing-rule enforcement + override (user request: "any exam
+    that violates billing but is still requested can be overridden by the
+    OD(s) or General Manager only ... log who overrides, time, date,
+    etc"). A Technician (exam-editing role, not billing-override-capable)
+    is hard-blocked from saving a flagged test pair on the New Exam form's
+    return-visit checklist; a System Administrator (override-capable, same
+    "override everything" role as elsewhere in this app) sees the override
+    controls, is still blocked without checking them, and succeeds once
+    the override checkbox + reason are supplied -- logged to
+    BillingOverrideEvent."""
+    admin_page = logged_in_page
+    admin_page.goto(live_server + "/admin/users/new")
+    admin_page.fill("#first_name", "Tammy")
+    admin_page.fill("#last_name", "Tech")
+    admin_page.fill("#email", "tammy.tech@newpathvision.example")
+    admin_page.select_option("#role", "technician")
+    admin_page.fill("#password", "ChangeMe123!")
+    admin_page.locator('button[type="submit"]', has_text="Create User").click()
+    admin_page.wait_for_load_state("networkidle")
+
+    admin_page.goto(live_server + "/patients/new")
+    admin_page.fill('input[name="first_name"]', "Billing")
+    admin_page.fill('input[name="last_name"]', "Blocked")
+    admin_page.locator('button[type="submit"]', has_text="Create Patient").click()
+    admin_page.wait_for_url(re.compile(r"/patients/\d+$"))
+    patient_id = admin_page.url.rstrip("/").split("/")[-1]
+
+    # A separate browser CONTEXT (not just a new page/tab) -- pages in the
+    # same context share cookies, so logging tech_page in as Tammy would
+    # silently log admin_page out of its own System Administrator session
+    # too, since it's the same cookie jar.
+    tech_ctx = admin_page.context.browser.new_context()
+    tech_page = tech_ctx.new_page()
+    tech_page.goto(live_server + "/login")
+    tech_page.fill("#email", "tammy.tech@newpathvision.example")
+    tech_page.fill("#password", "ChangeMe123!")
+    tech_page.click("button[type=submit]")
+    tech_page.wait_for_url(f"{live_server}/")
+
+    tech_page.goto(live_server + f"/exams/new?patient_id={patient_id}")
+    assert tech_page.locator("#followup_billing_override").count() == 0
+    tech_page.select_option('select[name="provider_id"]', index=1)
+    tech_page.locator("#return-visit-block-1 .test-chip", has_text=re.compile(r"^\s*OCT\s*$")).locator("input").check()
+    tech_page.locator("#return-visit-block-1 .test-chip", has_text=re.compile(r"^\s*OPTOS\s*$")).locator("input").check()
+    tech_page.fill("#follow_up_reason", "Should be blocked")
+    tech_page.locator('form[action="/exams/new"] button[type="submit"]', has_text="Save Exam").click()
+    tech_page.wait_for_load_state("networkidle")
+    assert "/exams/new" in tech_page.url  # rejected, never reached /exams/<id>
+    assert "Only an Optometrist/Provider or Practice Administrator can override" in tech_page.locator("body").inner_text()
+    tech_ctx.close()
+
+    # System Administrator: override controls present, blocked without
+    # checking them, succeeds once checked with a reason.
+    admin_page.goto(live_server + f"/exams/new?patient_id={patient_id}")
+    admin_page.select_option('select[name="provider_id"]', index=1)
+    assert admin_page.locator("#followup_billing_override").is_visible()
+    admin_page.locator("#return-visit-block-1 .test-chip", has_text=re.compile(r"^\s*OCT\s*$")).locator("input").check()
+    admin_page.locator("#return-visit-block-1 .test-chip", has_text=re.compile(r"^\s*OPTOS\s*$")).locator("input").check()
+    admin_page.fill("#follow_up_reason", "Clinically necessary")
+    admin_page.locator('form[action="/exams/new"] button[type="submit"]', has_text="Save Exam").click()
+    admin_page.wait_for_load_state("networkidle")
+    # create_exam's rejection is a bare error response (matching this
+    # route's existing reason-required-validation convention), not a
+    # full form re-render, so the retry starts from a fresh page load
+    # rather than continuing to interact with the error page.
+    assert "Check \"Override Billing Rule\"" in admin_page.locator("body").inner_text()
+
+    admin_page.goto(live_server + f"/exams/new?patient_id={patient_id}")
+    admin_page.select_option('select[name="provider_id"]', index=1)
+    admin_page.locator("#return-visit-block-1 .test-chip", has_text=re.compile(r"^\s*OCT\s*$")).locator("input").check()
+    admin_page.locator("#return-visit-block-1 .test-chip", has_text=re.compile(r"^\s*OPTOS\s*$")).locator("input").check()
+    admin_page.fill("#follow_up_reason", "Clinically necessary")
+    admin_page.locator("#followup_billing_override").check()
+    admin_page.fill("#followup_billing_override_reason", "Documented clinical justification")
+    admin_page.locator('form[action="/exams/new"] button[type="submit"]', has_text="Save Exam").click()
+    admin_page.wait_for_url(re.compile(r"/exams/\d+"))

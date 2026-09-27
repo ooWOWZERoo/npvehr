@@ -51,6 +51,12 @@
       {% endfor %}
     </div>
     <div id="ncci-warning-banner" class="alert alert-warning" style="display:none"></div>
+    {% if can_override_billing %}
+    <div class="form-row cols-2">
+      <div class="form-group checkbox-row"><input type="checkbox" name="billing_override" value="true" id="billing_override"><label for="billing_override" style="margin:0">Override Billing Rule</label></div>
+      <div class="form-group"><label>Billing Override Reason <input name="billing_override_reason" id="billing_override_reason"></label></div>
+    </div>
+    {% endif %}
     <div class="section-title">Overrides</div>
     <div class="form-row cols-2">
       <div class="form-group"><label>Duration Override (minutes) <input name="duration_override" type="number" step="5" min="5" max="480" value="{{ appt.duration_minutes if appt.duration_overridden else '' }}"></label></div>

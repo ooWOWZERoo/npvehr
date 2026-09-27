@@ -1,6 +1,6 @@
 # New Path Vision EHR — Master Build Backlog
 
-**Status:** Living tracking document. **Baseline as of:** spec v2.60 / research doc v2.24 (2026-09-27).
+**Status:** Living tracking document. **Baseline as of:** spec v2.61 / research doc v2.24 (2026-09-27).
 
 ## Purpose and how to use this document
 
@@ -44,6 +44,7 @@ This consolidates every outstanding build item, investigation, and test scattere
 - [x] **Look-back & clinical alert engine (Phase 4 of 4)** — no new schema; ambient `.alert-warning`/`.alert-info` banners (never a blocking modal) for outstanding diagnostic orders and overdue chronic-condition testing (glaucoma, Plaquenil monitoring), each with one-click resolution, on the patient overview tab and New Exam form header. **This closes out the 4-phase chief-complaint/CPT/billing-flow plan.** **Done, v2.38** — see baseline spec §57. Pick up the follow-up refinements logged in §0a below, the Phase 3 real-vendor follow-up (a different "Phase 3", from the Calendar overhaul), patient self-registration, or another item from the sections below.
 - [x] **NCCI Procedure-to-Procedure edit advisory** — curated CMS NCCI PTP-edit lookup (4 code pairs, sourced from the real CMS v32.3 file), surfaced as a non-blocking booking-form/Billing-Preview warning; also fixed a pre-existing OCT/OCT_ONH (92134/92133) conflation in the Glaucoma dashboard's order checkbox and the look-back engine's glaucoma profile, with a scoped historical-data backfill. **Done, v2.59** — see baseline spec §86.
 - [x] **Return-visit recommendation carry-forward** — user request: a provider's return-visit interval/tests/reason on an exam now carries forward as a "Recommended Follow-Up" banner on the patient overview, pre-fills the booking form via a "Book Follow-Up" link, and (once actually booked) transitions the recommendation and its underlying diagnostic orders to "scheduled" -- closing a front-desk-dependent handoff gap. Reuses the existing NCCI advisory and diagnostic-order machinery rather than building new. **Done, v2.60** — see baseline spec §87.
+- [x] **Multi-return-visit planning + NCCI billing-rule enforcement** — user follow-up on §87: up to two independent return-visit recommendations per exam (new `EyeExamFollowUp` table), and the NCCI PTP-edit check becomes an actual save-time block (New Exam return-visit checklist, appointment Scheduled Tests) overridable only by an Optometrist/Provider, Practice Administrator, or System Administrator with a logged reason (`BillingOverrideEvent`); a truly non-overridable (indicator-0) pair blocks everyone. Also fixed the generic "Schedule Appt" button never carrying a patient's pending recommendation. **Done, v2.61** — see baseline spec §88.
 
 ### 0a. Chief-Complaint Triage, E/M Coding, CPT Mapping, Orders & Look-Back Alerts (user request, 2026-09-23) — closed out, v2.38
 

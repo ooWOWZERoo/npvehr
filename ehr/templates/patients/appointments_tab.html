@@ -1,7 +1,7 @@
 {% extends "patients/_workspace.html" %}
 {% block wcontent %}
 <div class="card">
-  <div class="page-header"><h2 style="margin:0">Appointments</h2><a href="/appointments/new?patient_id={{ patient.id }}" class="btn btn-primary btn-sm">+ Schedule</a></div>
+  <div class="page-header"><h2 style="margin:0">Appointments</h2><a href="{{ schedule_href }}" class="btn btn-primary btn-sm">+ Schedule</a></div>
   {% if appointments %}
   <div class="table-responsive">
   <table><thead><tr><th>Date/Time</th><th>Type</th><th>Status</th><th>Relationship</th><th></th></tr></thead><tbody>

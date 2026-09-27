@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from ehr.models.database import (get_db, Appointment, Patient, Provider, AppointmentStatus, AppointmentType,
     AppointmentTypeVersion, DiagnosticTest, AppointmentTest, AppointmentAuditEvent, AppointmentResourceReservation,
     AppointmentResourceSelection, Resource, WaitlistEntry, User, AppointmentReminder, WaitlistNotification,
-    PracticeClosure, DiagnosticOrder, EyeExam)
+    PracticeClosure, DiagnosticOrder, EyeExam, EyeExamFollowUp)
 from ehr.services import scheduling as sched
 from ehr.services import notifications as notify
 from ehr.services import cpt_mapper
@@ -16,9 +16,10 @@ from ehr.services import ncci_edits
 from ehr.services import pagination as pg
 from ehr.services import diagnostic_orders as diag_orders
 from ehr.services import followup_recommendations
+from ehr.services import billing_override as billing_override_mod
 from ehr.env_info import EHR_ENV, CRON_SECRET
 from ehr.utils import patient_context
-from ehr.auth.permissions import require_role, APPOINTMENT_EDIT, ROLE_LABELS
+from ehr.auth.permissions import require_role, APPOINTMENT_EDIT, ROLE_LABELS, BILLING_OVERRIDE
 from ehr.auth.deps import get_current_user
 from ehr.auth import csrf
 
@@ -327,7 +328,7 @@ def _resource_picker_payload(db: Session):
 
 
 def _form_context(db: Session, patient_id=None, prefill_date=None, appt: Appointment = None, error=None,
-                   posted=None, follow_up_exam_id=None):
+                   posted=None, follow_up_id=None, user=None):
     suggested = None
     if patient_id and prefill_date:
         suggested = sched.suggest_relationship(db, patient_id, prefill_date)
@@ -368,7 +369,14 @@ def _form_context(db: Session, patient_id=None, prefill_date=None, appt: Appoint
         "resource_options_by_class": resource_options_by_class,
         "current_resource_selections": current_resource_selections,
         "ncci_pairs": ncci_pairs,
-        "follow_up_exam_id": follow_up_exam_id,
+        "follow_up_id": follow_up_id,
+        # NCCI billing-rule override (user request): only an Optometrist/
+        # Provider, Practice Administrator, or System Administrator can
+        # override a flagged test combination -- the override checkbox +
+        # reason field is only rendered for those roles; everyone else just
+        # sees the existing advisory banner and gets a clear 400 at submit
+        # time if they try to save a flagged pair anyway.
+        "can_override_billing": user is not None and user.role in BILLING_OVERRIDE,
     }
 
 
@@ -638,33 +646,38 @@ def reminders_audit_log(request: Request, db: Session = Depends(get_db)):
 
 @router.get("/new", response_class=HTMLResponse)
 def new_appointment_form(request: Request, patient_id: int = None, date: str = None, provider_id: int = None,
-                          follow_up_exam_id: int = None, db: Session = Depends(get_db)):
+                          follow_up_id: int = None, db: Session = Depends(get_db)):
     # provider_id here is a prefill only (e.g. the Waitlist queue's "Book"
     # link for an entry with a specific provider preference) -- reuses the
     # same `posted.provider_id` template hook the form already checks after
     # a failed submission, so no template change is needed for this to work.
     posted = {"provider_id": provider_id} if provider_id else None
     # Return-visit recommendation carry-forward (user request): the patient
-    # overview's "Book Follow-Up" link lands here with the exam that
-    # recommended this visit, so the provider/date/tests it named are
-    # pre-filled instead of the front desk re-keying (or missing) them.
-    if follow_up_exam_id:
-        exam = db.query(EyeExam).filter(EyeExam.id == follow_up_exam_id).first()
-        if exam:
+    # overview's "Book Follow-Up" link (or, when there's exactly one pending
+    # recommendation, the workspace's generic "Schedule Appt" button too --
+    # see _workspace_ctx in ehr/routes/patients.py) lands here with the
+    # specific EyeExamFollowUp that recommended this visit, so the
+    # provider/date/tests it named are pre-filled instead of the front desk
+    # re-keying (or missing) them. follow_up_id, not an exam id, since an
+    # exam can carry up to two independent recommendations.
+    if follow_up_id:
+        followup = db.query(EyeExamFollowUp).filter(EyeExamFollowUp.id == follow_up_id).first()
+        if followup:
+            exam = followup.exam
             pending_ids = [o.diagnostic_test_id for o in
-                db.query(DiagnosticOrder).filter(DiagnosticOrder.ordered_exam_id == exam.id,
+                db.query(DiagnosticOrder).filter(DiagnosticOrder.follow_up_id == followup.id,
                     DiagnosticOrder.status == diag_orders.ORDERED).all()]
             posted = posted or {}
             posted["provider_id"] = exam.provider_id
             posted["test_ids"] = pending_ids
             if not patient_id:
                 patient_id = exam.patient_id
-            if not date and exam.follow_up_weeks:
+            if not date and followup.follow_up_weeks:
                 date = followup_recommendations.suggest_followup_date(
-                    exam.exam_date, exam.follow_up_weeks, exam.follow_up_unit)
+                    exam.exam_date, followup.follow_up_weeks, followup.follow_up_unit)
     return templates.TemplateResponse(request, "appointments/form.html",
         _form_context(db, patient_id=patient_id, prefill_date=date, posted=posted,
-                      follow_up_exam_id=follow_up_exam_id))
+                      follow_up_id=follow_up_id, user=request.state.user))
 
 
 @router.post("/new", response_class=HTMLResponse, dependencies=[Depends(require_role(*APPOINTMENT_EDIT))])
@@ -676,7 +689,8 @@ def create_appointment(request: Request, patient_id: int = Form(...), provider_i
     conflict_override: bool = Form(False), conflict_override_reason: str = Form(""),
     reason: str = Form(""), notes: str = Form(""), test_ids: list = Form([]),
     override_requirement_id: list = Form([]), override_resource_id: list = Form([]),
-    follow_up_exam_id: str = Form(""),
+    follow_up_id: str = Form(""),
+    billing_override: bool = Form(False), billing_override_reason: str = Form(""),
     csrf_token: str = Form(""), db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     csrf.verify_or_403(request.state.csrf_token, csrf_token)
 
@@ -686,18 +700,18 @@ def create_appointment(request: Request, patient_id: int = Form(...), provider_i
                   scheduled_at=scheduled_at, relationship=relationship, is_follow_up=is_follow_up,
                   reason=reason, notes=notes, test_ids=[int(t) for t in test_ids] if test_ids else [])
 
-    follow_up_exam_id_int = int(follow_up_exam_id) if follow_up_exam_id and follow_up_exam_id.isdigit() else None
+    follow_up_id_int = int(follow_up_id) if follow_up_id and follow_up_id.isdigit() else None
     try:
         when = datetime.fromisoformat(scheduled_at)
     except (ValueError, TypeError):
         ctx = _form_context(db, patient_id=patient_id, prefill_date=None,
                              error="Invalid appointment date/time.", posted=posted,
-                             follow_up_exam_id=follow_up_exam_id_int)
+                             follow_up_id=follow_up_id_int, user=user)
         return templates.TemplateResponse(request, "appointments/form.html", ctx, status_code=400)
 
     def fail(msg):
         ctx = _form_context(db, patient_id=patient_id, prefill_date=when.date().isoformat(), error=msg, posted=posted,
-                             follow_up_exam_id=follow_up_exam_id_int)
+                             follow_up_id=follow_up_id_int, user=user)
         return templates.TemplateResponse(request, "appointments/form.html", ctx, status_code=400)
 
     if not version or not version.active or version.appointment_type.is_system_seeded:
@@ -723,23 +737,42 @@ def create_appointment(request: Request, patient_id: int = Form(...), provider_i
         return fail(str(e))
 
     db.add(appt); db.flush()
+    # NCCI billing-rule enforcement + override (user request): a flagged pair
+    # among the tests actually being scheduled together blocks the booking
+    # unless the current user can override (Optometrist/Provider, Practice
+    # Administrator, System Administrator) and has supplied the override
+    # checkbox + reason -- see ehr.services.billing_override for the full
+    # policy. Checked here (after the appointment has an id to attach the
+    # audit trail to, before anything commits) rather than earlier, so a
+    # block cleanly rolls back the whole booking rather than leaving a
+    # half-created appointment behind.
+    billing_codes = [t.cpt_code for t in
+        db.query(DiagnosticTest).filter(DiagnosticTest.id.in_(posted["test_ids"] or [])).all() if t.cpt_code]
+    try:
+        billing_override_mod.enforce(db, user, billing_codes, override_checked=billing_override,
+            override_reason=billing_override_reason, source="appointment", record_id=appt.id)
+    except billing_override_mod.BillingRuleBlocked as e:
+        db.rollback()
+        return fail(str(e))
     _apply_tests(db, appt, posted["test_ids"])
     _sync_resource_reservations(db, appt, version, resource_overrides=resource_overrides)
     # Return-visit recommendation carry-forward (user request): booking through
-    # the "Book Follow-Up" link closes the loop -- the exam's still-outstanding
+    # the "Book Follow-Up" link (or the workspace's generic "Schedule Appt"
+    # button, when it auto-prefilled) closes the loop -- the still-outstanding
     # orders for the tests actually kept on this booking move to 'scheduled'
     # (rather than sitting 'ordered' forever), and the recommendation itself
-    # stops showing on the patient overview.
-    if follow_up_exam_id_int:
-        exam = db.query(EyeExam).filter(EyeExam.id == follow_up_exam_id_int).first()
-        if exam:
+    # stops showing on the patient overview. follow_up_id targets one specific
+    # EyeExamFollowUp, not the whole exam, since an exam can carry up to two.
+    if follow_up_id_int:
+        followup = db.query(EyeExamFollowUp).filter(EyeExamFollowUp.id == follow_up_id_int).first()
+        if followup:
             matching_orders = (db.query(DiagnosticOrder)
-                .filter(DiagnosticOrder.ordered_exam_id == exam.id, DiagnosticOrder.status == diag_orders.ORDERED,
+                .filter(DiagnosticOrder.follow_up_id == followup.id, DiagnosticOrder.status == diag_orders.ORDERED,
                         DiagnosticOrder.diagnostic_test_id.in_(posted["test_ids"] or [])).all())
             for order in matching_orders:
                 diag_orders.transition(order, diag_orders.SCHEDULED, scheduled_appointment_id=appt.id)
-            exam.follow_up_status = "scheduled"
-            exam.follow_up_fulfilled_appointment_id = appt.id
+            followup.status = "scheduled"
+            followup.fulfilled_appointment_id = appt.id
     db.flush()
     count, color, reason_code = _recolor(appt, version)
     _audit(db, appt.id, "created", reason="Appointment created")
@@ -817,7 +850,7 @@ def edit_appointment_form(request: Request, appt_id: int, db: Session = Depends(
     a = db.query(Appointment).filter(Appointment.id == appt_id).first()
     if not a: return HTMLResponse("Not found", status_code=404)
     return templates.TemplateResponse(request, "appointments/edit.html",
-        _form_context(db, patient_id=a.patient_id, appt=a))
+        _form_context(db, patient_id=a.patient_id, appt=a, user=request.state.user))
 
 
 @router.post("/{appt_id}/edit", response_class=HTMLResponse, dependencies=[Depends(require_role(*APPOINTMENT_EDIT))])
@@ -829,6 +862,7 @@ def update_appointment(request: Request, appt_id: int, provider_id: int = Form(.
     conflict_override: bool = Form(False), conflict_override_reason: str = Form(""),
     reason: str = Form(""), notes: str = Form(""), status: str = Form(None), test_ids: list = Form([]),
     override_requirement_id: list = Form([]), override_resource_id: list = Form([]),
+    billing_override: bool = Form(False), billing_override_reason: str = Form(""),
     csrf_token: str = Form(""), db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     csrf.verify_or_403(request.state.csrf_token, csrf_token)
     a = db.query(Appointment).filter(Appointment.id == appt_id).first()
@@ -838,7 +872,7 @@ def update_appointment(request: Request, appt_id: int, provider_id: int = Form(.
     resource_overrides = _parse_resource_overrides(override_requirement_id, override_resource_id)
 
     def fail(msg):
-        ctx = _form_context(db, patient_id=a.patient_id, appt=a, error=msg)
+        ctx = _form_context(db, patient_id=a.patient_id, appt=a, error=msg, user=user)
         return templates.TemplateResponse(request, "appointments/edit.html", ctx, status_code=400)
 
     try:
@@ -862,7 +896,16 @@ def update_appointment(request: Request, appt_id: int, provider_id: int = Form(.
     except ValueError as e:
         return fail(str(e))
 
-    _apply_tests(db, a, [int(t) for t in test_ids] if test_ids else [])
+    new_test_ids = [int(t) for t in test_ids] if test_ids else []
+    billing_codes = [t.cpt_code for t in
+        db.query(DiagnosticTest).filter(DiagnosticTest.id.in_(new_test_ids)).all() if t.cpt_code]
+    try:
+        billing_override_mod.enforce(db, user, billing_codes, override_checked=billing_override,
+            override_reason=billing_override_reason, source="appointment", record_id=a.id)
+    except billing_override_mod.BillingRuleBlocked as e:
+        db.rollback()
+        return fail(str(e))
+    _apply_tests(db, a, new_test_ids)
     _sync_resource_reservations(db, a, version, resource_overrides=resource_overrides)
     db.flush()
     _recolor(a, version)

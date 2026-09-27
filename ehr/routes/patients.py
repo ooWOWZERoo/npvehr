@@ -7,7 +7,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from ehr.models.database import (get_db, Patient, Appointment, EyeExam, Prescription, AppointmentStatus,
     PatientDocument, Problem, ProblemAddendum, WaitlistEntry, AppointmentTypeVersion, AppointmentType,
-    PatientInsurancePlan, DiagnosticOrder, DiagnosticTest)
+    PatientInsurancePlan, DiagnosticOrder, DiagnosticTest, EyeExamFollowUp)
 from ehr.services import diagnostic_orders as diag_orders
 from ehr.services import lookback_alerts
 from ehr.services import followup_recommendations
@@ -249,6 +249,18 @@ def _workspace_ctx(db: Session, p: Patient, active_tab: str) -> dict:
     provider_label = None
     if last_appt and last_appt.provider:
         provider_label = f"Dr. {last_appt.provider.last_name}"
+    # Return-visit recommendation carry-forward, round 2 (user request): the
+    # workspace header's generic "Schedule Appt" button previously never
+    # carried a patient's pending recommendation at all -- only the
+    # Recommended Follow-Up card's own "Book Follow-Up" link did, which staff
+    # could easily miss in favor of this more prominent button. When there's
+    # exactly one pending recommendation, route this button through the same
+    # prefill; with zero or more than one (ambiguous which to prefill), it
+    # stays generic and staff use the specific card's own link instead.
+    schedule_href = f"/appointments/new?patient_id={p.id}"
+    pending = followup_recommendations.get_pending_followups(db, p.id)
+    if len(pending) == 1:
+        schedule_href += f"&follow_up_id={pending[0].followup_id}"
     return {
         "patient": p,
         "context_patient": patient_context(p, db),
@@ -256,6 +268,7 @@ def _workspace_ctx(db: Session, p: Patient, active_tab: str) -> dict:
         "age": compute_age(p.date_of_birth),
         "provider_label": provider_label,
         "active_tab": active_tab,
+        "schedule_href": schedule_href,
     }
 
 @router.get("/{patient_id}", response_class=HTMLResponse)
@@ -533,18 +546,21 @@ def cancel_diagnostic_order(request: Request, patient_id: int, order_id: int,
     return RedirectResponse(f"/patients/{patient_id}", status_code=303)
 
 
-@router.post("/{patient_id}/exams/{exam_id}/follow-up/dismiss", dependencies=[Depends(require_role(*PATIENT_EDIT))])
-def dismiss_followup_recommendation(request: Request, patient_id: int, exam_id: int,
+@router.post("/{patient_id}/followups/{followup_id}/dismiss", dependencies=[Depends(require_role(*PATIENT_EDIT))])
+def dismiss_followup_recommendation(request: Request, patient_id: int, followup_id: int,
     csrf_token: str = Form(""), db: Session = Depends(get_db)):
     """Return-visit recommendation carry-forward (user request): staff use
     this when the recommendation was actually addressed but not through the
     "Book Follow-Up" button (e.g. booked through the ordinary calendar, or
     the patient called to reschedule) -- marks it addressed without a fake
-    appointment id, so the Recommended Follow-Up card stops showing it."""
+    appointment id, so the Recommended Follow-Up card stops showing it.
+    followup_id-scoped (not exam-scoped) since an exam can now carry up to
+    two independent recommendations, each dismissible on its own."""
     csrf.verify_or_403(request.state.csrf_token, csrf_token)
-    exam = db.query(EyeExam).filter(EyeExam.id == exam_id, EyeExam.patient_id == patient_id).first()
-    if not exam: return HTMLResponse("Not found", status_code=404)
-    exam.follow_up_status = "dismissed"
+    followup = (db.query(EyeExamFollowUp).join(EyeExam, EyeExam.id == EyeExamFollowUp.eye_exam_id)
+        .filter(EyeExamFollowUp.id == followup_id, EyeExam.patient_id == patient_id).first())
+    if not followup: return HTMLResponse("Not found", status_code=404)
+    followup.status = "dismissed"
     db.commit()
     return RedirectResponse(f"/patients/{patient_id}", status_code=303)
 

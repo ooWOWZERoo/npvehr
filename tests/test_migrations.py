@@ -201,3 +201,57 @@ def test_glaucoma_oct_onh_backfill_only_recodes_exam_linked_orders(fresh_engine)
         """)).fetchall()
     assert rows[0] == (oct_onh_id, 1)  # exam-linked -- recoded
     assert rows[1] == (oct_id, None)  # quick-ordered -- left alone
+
+
+def test_followup_per_visit_backfill_migrates_active_recommendation_only(fresh_engine):
+    """migration_052's backfill (return-visit recommendation carry-forward,
+    round 2 -- "allow for up to two return visit planning") must migrate an
+    exam's active (pending/scheduled) legacy follow_up_weeks recommendation
+    into a new EyeExamFollowUp row, re-point that exam's already-created
+    DiagnosticOrder at it via follow_up_id, and leave a dismissed (or
+    weeks-less) exam alone entirely -- a dismissed recommendation predates
+    this feature under the old single-recommendation model and shouldn't
+    resurrect itself as a new pending row."""
+    _run_all_migrations(fresh_engine)
+    with fresh_engine.begin() as conn:
+        conn.execute(text("""
+            INSERT INTO patients (first_name, last_name, sms_opt_in, email_opt_in)
+            VALUES ('Followup', 'Backfill', 0, 0)
+        """))
+        patient_id = conn.execute(text("SELECT id FROM patients WHERE last_name = 'Backfill'")).fetchone()[0]
+        conn.execute(text("INSERT INTO providers (first_name, last_name, active) VALUES ('Dr', 'Test', 1)"))
+        provider_id = conn.execute(text("SELECT id FROM providers WHERE last_name = 'Test'")).fetchone()[0]
+        vf_id = conn.execute(text("SELECT id FROM diagnostic_tests WHERE code = 'VF'")).fetchone()[0]
+
+        # Exam A: an active (pending) legacy recommendation -- should migrate.
+        conn.execute(text("""
+            INSERT INTO eye_exams (patient_id, provider_id, exam_date, follow_up_weeks, follow_up_unit,
+                                    follow_up_reason, follow_up_status)
+            VALUES (:p, :pr, '2026-01-01', 6, 'Week', 'Recheck VF', 'pending')
+        """), {"p": patient_id, "pr": provider_id})
+        exam_a_id = conn.execute(text(
+            "SELECT id FROM eye_exams WHERE follow_up_status = 'pending'")).fetchone()[0]
+        conn.execute(text("""
+            INSERT INTO diagnostic_orders (patient_id, diagnostic_test_id, ordered_exam_id, status)
+            VALUES (:p, :t, :e, 'ordered')
+        """), {"p": patient_id, "t": vf_id, "e": exam_a_id})
+
+        # Exam B: already dismissed -- should NOT migrate (migration 051
+        # already backfilled every pre-existing exam to 'dismissed').
+        conn.execute(text("""
+            INSERT INTO eye_exams (patient_id, provider_id, exam_date, follow_up_weeks, follow_up_unit,
+                                    follow_up_reason, follow_up_status)
+            VALUES (:p, :pr, '2026-01-02', 3, 'Month', 'Old data', 'dismissed')
+        """), {"p": patient_id, "pr": provider_id})
+
+    with fresh_engine.begin() as conn:
+        mig.migration_052_followup_per_visit(conn)
+
+    with fresh_engine.connect() as conn:
+        followup_id, eye_exam_id, weeks, reason, status = conn.execute(text(
+            "SELECT id, eye_exam_id, follow_up_weeks, reason, status FROM eye_exam_followups")).fetchone()
+        followup_count = conn.execute(text("SELECT COUNT(*) FROM eye_exam_followups")).scalar_one()
+        order_followup_id = conn.execute(text("SELECT follow_up_id FROM diagnostic_orders")).fetchone()[0]
+    assert followup_count == 1  # exam B never got a row
+    assert (eye_exam_id, weeks, reason, status) == (exam_a_id, 6, "Recheck VF", "pending")
+    assert order_followup_id == followup_id
