@@ -40,7 +40,7 @@
     <dt>Duration</dt><dd>{{ appt.duration_minutes }} min{% if appt.duration_overridden %} (overridden: {{ appt.duration_override_reason }}){% endif %}</dd>
     <dt>Color</dt><dd><span class="color-swatch" style="background:{{ appt.resolved_color }}"></span> {{ appt.resolved_color_reason }}</dd>
     <dt>Tests</dt><dd>{% for t in appt.tests if t.status == 'active' %}<span class="test-chip">{{ t.diagnostic_test.calendar_abbreviation }}</span> {% else %}&mdash;{% endfor %}</dd>
-    <dt>Resources</dt><dd>{% for r in appt.resource_reservations if r.active %}<span class="test-chip">{{ r.resource.display_name }}</span> {% else %}&mdash;{% endfor %}</dd>
+    <dt>Resources</dt><dd>{% for r in appt.resource_reservations if r.active %}<span class="test-chip">{{ r.resource.display_name }}{% if r.resource_id in manually_selected_resource_ids %} (manual){% endif %}</span> {% else %}&mdash;{% endfor %}</dd>
     <dt>Reason</dt><dd>{{ appt.reason or '—' }}</dd>
     <dt>Notes</dt><dd>{{ appt.notes or '—' }}</dd>
     <dt>Status</dt><dd><span class="badge badge-{{ appt.status.value }}">{{ appt.status.value.replace('_',' ') }}</span></dd>

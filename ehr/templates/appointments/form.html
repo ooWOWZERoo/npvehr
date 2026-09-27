@@ -66,6 +66,9 @@
       {% endfor %}
     </div>
 
+    <div class="section-title">Resource Assignment (spec 31.3)</div>
+    <div id="resource-picker-container"></div>
+
     <div class="section-title">Overrides (require a reason; spec 11.4, 12.4)</div>
     <div class="form-row cols-2">
       <div class="form-group"><label>Duration Override (minutes, multiple of 5) <input name="duration_override" type="number" step="5" min="5" max="480" placeholder="Leave blank to use type default"></label></div>
@@ -80,10 +83,54 @@
   </form>
 </div>
 <script>
+var RESOURCE_PICKER = {{ resource_picker|tojson }};
+var RESOURCE_OPTIONS_BY_CLASS = {{ resource_options_by_class|tojson }};
+var CURRENT_RESOURCE_SELECTIONS = {{ current_resource_selections|tojson }};
+
 function onRelationshipChange(){
   document.getElementById('relationship_source').value = 'manual_override';
 }
 function updateSuggestion(){ /* suggestion is computed server-side on load; changing patient/date requires reload for a fresh suggestion */ }
+
+function renderResourcePicker(){
+  var sel = document.getElementById('appointment_type_version_id');
+  var container = document.getElementById('resource-picker-container');
+  container.innerHTML = '';
+  var requirements = RESOURCE_PICKER[sel.value] || [];
+  if (requirements.length === 0) {
+    container.innerHTML = '<p style="font-size:0.85rem;color:#64748b">No manually-assignable resources for this appointment type -- assignment is automatic.</p>';
+    return;
+  }
+  requirements.forEach(function(req){
+    var options = RESOURCE_OPTIONS_BY_CLASS[req.resource_class] || [];
+    var currentId = CURRENT_RESOURCE_SELECTIONS[req.requirement_id];
+    var row = document.createElement('div');
+    row.className = 'form-row cols-2';
+    var group = document.createElement('div');
+    group.className = 'form-group';
+    var label = document.createElement('label');
+    label.textContent = req.resource_class.replace('_', ' ') + ' (default: ' + req.default_resource_name + ')';
+    group.appendChild(label);
+    var hidden = document.createElement('input');
+    hidden.type = 'hidden'; hidden.name = 'override_requirement_id'; hidden.value = req.requirement_id;
+    group.appendChild(hidden);
+    var picker = document.createElement('select');
+    picker.name = 'override_resource_id';
+    var autoOpt = document.createElement('option');
+    autoOpt.value = ''; autoOpt.textContent = 'Automatic (' + req.default_resource_name + ')';
+    picker.appendChild(autoOpt);
+    options.forEach(function(o){
+      var opt = document.createElement('option');
+      opt.value = o.id; opt.textContent = o.display_name;
+      if (currentId && String(currentId) === String(o.id)) opt.selected = true;
+      picker.appendChild(opt);
+    });
+    group.appendChild(picker);
+    row.appendChild(group);
+    container.appendChild(row);
+  });
+}
+
 function onTypeChange(){
   var sel = document.getElementById('appointment_type_version_id');
   var opt = sel.options[sel.selectedIndex];
@@ -96,6 +143,7 @@ function onTypeChange(){
   } else {
     note.textContent = '';
   }
+  renderResourcePicker();
 }
 document.getElementById('relationship').addEventListener('change', onTypeChange);
 onTypeChange();

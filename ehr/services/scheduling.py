@@ -140,30 +140,49 @@ def compute_resource_interval(scheduled_at: datetime, duration_minutes: int, buf
     return occ_start, occ_end
 
 
-def resolve_resource_for_requirement(db, requirement):
+def resolve_resource_for_requirement(db, requirement, override_resource_id: int = None):
     """Resolve a resource requirement to a concrete Resource. A specific
     resource_id is used directly; a resource_pool_code (no specific resource_id)
     is resolved -- kept intentionally simple per spec -- to the first active
-    Resource whose resource_class matches the pool code. Returns None if the
-    requirement cannot be resolved to any resource (e.g. an empty pool)."""
+    Resource whose resource_class matches the pool code (the "automatic"
+    assignment). Returns None if the requirement cannot be resolved to any
+    resource (e.g. an empty pool).
+
+    `override_resource_id` is the room/lane/device manual-override picker
+    (spec 31.3): staff can substitute any other active Resource in the SAME
+    resource_class as the automatic pick (e.g. Lane 2 instead of the
+    default Lane 1) -- never a resource of a different class, which would
+    silently satisfy a "needs a room" requirement with a device. An invalid
+    override (wrong class, inactive, deleted) is ignored and the automatic
+    resource is used instead, same as leaving it on "Automatic"."""
     from ehr.models.database import Resource  # local import avoids a cycle
+    default_resource = None
     if requirement.resource_id:
-        return db.query(Resource).filter(Resource.id == requirement.resource_id, Resource.active == True).first()
-    if requirement.resource_pool_code:
-        return (db.query(Resource)
+        default_resource = db.query(Resource).filter(Resource.id == requirement.resource_id, Resource.active == True).first()
+    elif requirement.resource_pool_code:
+        default_resource = (db.query(Resource)
                 .filter(Resource.resource_class == requirement.resource_pool_code, Resource.active == True)
                 .order_by(Resource.id).first())
-    return None
+    if override_resource_id:
+        target_class = requirement.resource_pool_code or (default_resource.resource_class if default_resource else None)
+        override = db.query(Resource).filter(Resource.id == override_resource_id, Resource.active == True).first()
+        if override and target_class and override.resource_class == target_class:
+            return override
+    return default_resource
 
 
 def plan_resource_requirements(db, version, scheduled_at: datetime, duration_minutes: int,
-                                buffer_before_minutes: int, buffer_after_minutes: int):
+                                buffer_before_minutes: int, buffer_after_minutes: int, overrides: dict = None):
     """Resolve every resource requirement on `version` to (requirement, resource,
     start, end) tuples. Requirements that cannot be resolved to any resource are
-    silently skipped (no resource to reserve or conflict-check against)."""
+    silently skipped (no resource to reserve or conflict-check against).
+    `overrides` is an optional {requirement_id: resource_id} map from the
+    booking form's manual resource picker (spec 31.3) -- see
+    resolve_resource_for_requirement for how an override is validated."""
     plan = []
     for requirement in version.resource_requirements:
-        resource = resolve_resource_for_requirement(db, requirement)
+        override_resource_id = (overrides or {}).get(requirement.id)
+        resource = resolve_resource_for_requirement(db, requirement, override_resource_id)
         if not resource:
             continue
         start, end = compute_resource_interval(

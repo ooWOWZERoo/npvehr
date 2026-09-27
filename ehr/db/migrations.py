@@ -1328,6 +1328,23 @@ def migration_045_user_provider_link(conn):
         return  # brand-new database; create_all() will create the full table with this column.
     _add_column_if_missing(conn, "users", "provider_id", "INTEGER")
 
+def migration_046_create_appointment_resource_selections(conn):
+    """Room/lane/device manual-override picker (spec 31.3): stores which
+    specific Resource staff picked for a given appointment's resource
+    requirement, when they chose something other than what auto-assignment
+    would have picked. See AppointmentResourceSelection's docstring in
+    ehr/models/database.py."""
+    conn.execute(text(f"""
+        CREATE TABLE IF NOT EXISTS appointment_resource_selections (
+            id {_pk_ddl(conn)},
+            appointment_id INTEGER NOT NULL,
+            requirement_id INTEGER NOT NULL,
+            resource_id INTEGER NOT NULL
+        )
+    """))
+    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_resource_selections_appointment "
+        "ON appointment_resource_selections (appointment_id)"))
+
 def migration_043_create_rx_lab_orders(conn):
     """Real Order Management (BUILD_BACKLOG.md's "/orders/" placeholder):
     a real, patient-and-Rx-scoped optical lab order lifecycle table --
@@ -1402,6 +1419,7 @@ COLUMN_MIGRATIONS = [
     ("043_create_rx_lab_orders", migration_043_create_rx_lab_orders),
     ("044_appointment_type_updated_by", migration_044_appointment_type_updated_by),
     ("045_user_provider_link", migration_045_user_provider_link),
+    ("046_create_appointment_resource_selections", migration_046_create_appointment_resource_selections),
 ]
 POST_CREATE_ALL_MIGRATIONS = [
     ("002_seed_appointment_types", migration_002_seed_appointment_types),
@@ -1451,6 +1469,9 @@ def down_045_user_provider_link(conn):
     if _table_exists(conn, "users"):
         conn.execute(text("ALTER TABLE users DROP COLUMN provider_id"))
 
+def down_046_create_appointment_resource_selections(conn):
+    conn.execute(text("DROP TABLE IF EXISTS appointment_resource_selections"))
+
 # Sparse by design -- see this section's own docstring above. Extend this
 # alongside any new migration that a reviewer has actually confirmed is safe
 # to reverse (a plain ADD COLUMN or CREATE TABLE with no data-seeding and
@@ -1462,6 +1483,7 @@ DOWN_MIGRATIONS = {
     "043_create_rx_lab_orders": down_043_create_rx_lab_orders,
     "044_appointment_type_updated_by": down_044_appointment_type_updated_by,
     "045_user_provider_link": down_045_user_provider_link,
+    "046_create_appointment_resource_selections": down_046_create_appointment_resource_selections,
 }
 
 

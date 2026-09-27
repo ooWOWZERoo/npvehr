@@ -7,7 +7,8 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from ehr.models.database import (get_db, Appointment, Patient, Provider, AppointmentStatus, AppointmentType,
     AppointmentTypeVersion, DiagnosticTest, AppointmentTest, AppointmentAuditEvent, AppointmentResourceReservation,
-    Resource, WaitlistEntry, User, AppointmentReminder, WaitlistNotification, PracticeClosure)
+    AppointmentResourceSelection, Resource, WaitlistEntry, User, AppointmentReminder, WaitlistNotification,
+    PracticeClosure)
 from ehr.services import scheduling as sched
 from ehr.services import notifications as notify
 from ehr.services import cpt_mapper
@@ -125,7 +126,7 @@ def _apply_scheduling_rules(db: Session, appt: Appointment, version: Appointment
                              is_follow_up: bool, scheduled_at: datetime, provider_id: int,
                              duration_override: int = None, override_reason: str = None,
                              conflict_override: bool = False, conflict_reason: str = None,
-                             exclude_appointment_id: int = None):
+                             exclude_appointment_id: int = None, resource_overrides: dict = None):
     """Shared create/edit logic implementing spec sections 11-12. Raises ValueError
     with a user-facing message on any validation failure (caller turns this into a 4xx)."""
     closure = sched.find_closure(db, scheduled_at)
@@ -171,7 +172,8 @@ def _apply_scheduling_rules(db: Session, appt: Appointment, version: Appointment
     # provider check above. `resource_plan` is always computed (even if a provider
     # conflict already exists) so it is available for reservation creation once any
     # conflict is either absent or overridden.
-    resource_plan = sched.plan_resource_requirements(db, version, scheduled_at, duration, buffer_before, buffer_after)
+    resource_plan = sched.plan_resource_requirements(db, version, scheduled_at, duration, buffer_before, buffer_after,
+                                                      overrides=resource_overrides)
     for requirement, resource, r_start, r_end in resource_plan:
         resource_conflict = sched.find_resource_conflict(db, resource.id, r_start, r_end, exclude_appointment_id)
         if resource_conflict:
@@ -225,22 +227,33 @@ def _recolor(appt: Appointment, version: AppointmentTypeVersion):
     return count, color, reason
 
 
-def _sync_resource_reservations(db: Session, appt: Appointment, version: AppointmentTypeVersion):
+def _sync_resource_reservations(db: Session, appt: Appointment, version: AppointmentTypeVersion,
+                                 resource_overrides: dict = None):
     """Deactivate any previous active resource reservations for this appointment
     (never hard-deleted -- history is preserved) and create fresh ones matching its
     current time/type, mirroring how the appointment's own booking snapshot fields
     are updated on edit/reschedule. Must be called AFTER _apply_scheduling_rules has
-    already validated there is no unresolved conflict, and after `appt.id` exists."""
+    already validated there is no unresolved conflict, and after `appt.id` exists.
+
+    Also rebuilds this appointment's AppointmentResourceSelection rows from
+    `resource_overrides` (the room/lane/device manual-override picker, spec
+    31.3) -- current-state prefill data for the edit form, not an audit
+    trail, so it is fully replaced rather than appended to each time."""
     for old in (db.query(AppointmentResourceReservation)
                 .filter(AppointmentResourceReservation.appointment_id == appt.id,
                         AppointmentResourceReservation.active == True).all()):
         old.active = False
+    (db.query(AppointmentResourceSelection)
+        .filter(AppointmentResourceSelection.appointment_id == appt.id).delete())
     plan = sched.plan_resource_requirements(db, version, appt.scheduled_at, appt.duration_minutes,
-        appt.buffer_before_minutes, appt.buffer_after_minutes)
+        appt.buffer_before_minutes, appt.buffer_after_minutes, overrides=resource_overrides)
     for requirement, resource, start, end in plan:
         db.add(AppointmentResourceReservation(appointment_id=appt.id, resource_id=resource.id,
             reserved_start_at=start, reserved_end_at=end, active=True,
             override_reason=appt.conflict_override_reason if appt.conflict_overridden else None))
+        if resource_overrides and resource_overrides.get(requirement.id) == resource.id:
+            db.add(AppointmentResourceSelection(appointment_id=appt.id, requirement_id=requirement.id,
+                resource_id=resource.id))
 
 
 def _apply_tests(db: Session, appt: Appointment, test_ids):
@@ -260,6 +273,56 @@ def _apply_tests(db: Session, appt: Appointment, test_ids):
                                 counts_toward_color_snapshot=dt.counts_toward_color))
 
 
+def _parse_resource_overrides(requirement_ids: list, resource_ids: list) -> dict:
+    """Zips the booking form's parallel override_requirement_id[]/
+    override_resource_id[] arrays (spec 31.3's resource picker) into a
+    {requirement_id: resource_id} map. An empty resource_id (the "Automatic"
+    option) is skipped entirely, not stored as a 0/None override."""
+    overrides = {}
+    for rid, resid in zip(requirement_ids or [], resource_ids or []):
+        if not rid or not resid:
+            continue
+        try:
+            overrides[int(rid)] = int(resid)
+        except ValueError:
+            continue
+    return overrides
+
+
+def _resource_picker_payload(db: Session):
+    """Room/lane/device manual-override picker data (spec 31.3), keyed by
+    appointment_type_version_id, for the booking form's JS to render a
+    picker under whichever type is currently selected. A requirement is
+    only included when its resource_class has 2+ active resources -- with
+    only one candidate (or none), there is nothing to actually choose
+    between, so no picker is shown (avoids dead, confusing UI)."""
+    from ehr.models.database import AppointmentTypeResourceRequirement
+    resources = db.query(Resource).filter(Resource.active == True).order_by(Resource.id).all()
+    options_by_class = {}
+    for r in resources:
+        options_by_class.setdefault(r.resource_class, []).append({"id": r.id, "display_name": r.display_name})
+    resources_by_id = {r.id: r for r in resources}
+    payload = {}
+    for req in db.query(AppointmentTypeResourceRequirement).all():
+        default_resource = None
+        resource_class = req.resource_pool_code
+        if req.resource_id:
+            default_resource = resources_by_id.get(req.resource_id)
+            resource_class = default_resource.resource_class if default_resource else resource_class
+        elif req.resource_pool_code:
+            pool = options_by_class.get(req.resource_pool_code, [])
+            default_resource = resources_by_id.get(pool[0]["id"]) if pool else None
+        if not resource_class or len(options_by_class.get(resource_class, [])) < 2:
+            continue
+        payload.setdefault(str(req.appointment_type_version_id), []).append({
+            "requirement_id": req.id,
+            "resource_class": resource_class,
+            "default_resource_id": default_resource.id if default_resource else None,
+            "default_resource_name": default_resource.display_name if default_resource else "(none available)",
+        })
+    return payload, options_by_class
+
+
 def _form_context(db: Session, patient_id=None, prefill_date=None, appt: Appointment = None, error=None,
                    posted=None):
     suggested = None
@@ -272,6 +335,11 @@ def _form_context(db: Session, patient_id=None, prefill_date=None, appt: Appoint
         ctx_patient = patient_context(appt.patient, db)
     elif patient_id:
         ctx_patient = patient_context(db.query(Patient).filter(Patient.id == patient_id).first(), db)
+    resource_picker, resource_options_by_class = _resource_picker_payload(db)
+    current_resource_selections = {}
+    if appt is not None:
+        current_resource_selections = {sel.requirement_id: sel.resource_id for sel in
+            db.query(AppointmentResourceSelection).filter(AppointmentResourceSelection.appointment_id == appt.id).all()}
     return {
         "patients": db.query(Patient).order_by(Patient.last_name).all(),
         "providers": sched.bookable_providers(db, include_id=appt.provider_id if appt else None),
@@ -284,6 +352,9 @@ def _form_context(db: Session, patient_id=None, prefill_date=None, appt: Appoint
         "error": error,
         "posted": posted or {},
         "context_patient": ctx_patient,
+        "resource_picker": resource_picker,
+        "resource_options_by_class": resource_options_by_class,
+        "current_resource_selections": current_resource_selections,
     }
 
 
@@ -571,10 +642,12 @@ def create_appointment(request: Request, patient_id: int = Form(...), provider_i
     duration_override: str = Form(""), duration_override_reason: str = Form(""),
     conflict_override: bool = Form(False), conflict_override_reason: str = Form(""),
     reason: str = Form(""), notes: str = Form(""), test_ids: list = Form([]),
+    override_requirement_id: list = Form([]), override_resource_id: list = Form([]),
     csrf_token: str = Form(""), db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     csrf.verify_or_403(request.state.csrf_token, csrf_token)
 
     version = db.query(AppointmentTypeVersion).filter(AppointmentTypeVersion.id == appointment_type_version_id).first()
+    resource_overrides = _parse_resource_overrides(override_requirement_id, override_resource_id)
     posted = dict(patient_id=patient_id, provider_id=provider_id, appointment_type_version_id=appointment_type_version_id,
                   scheduled_at=scheduled_at, relationship=relationship, is_follow_up=is_follow_up,
                   reason=reason, notes=notes, test_ids=[int(t) for t in test_ids] if test_ids else [])
@@ -607,13 +680,14 @@ def create_appointment(request: Request, patient_id: int = Form(...), provider_i
     try:
         _apply_scheduling_rules(db, appt, version, relationship, is_follow_up, when, provider_id,
             duration_override=duration_override_val, override_reason=duration_override_reason or None,
-            conflict_override=conflict_override, conflict_reason=conflict_override_reason or None)
+            conflict_override=conflict_override, conflict_reason=conflict_override_reason or None,
+            resource_overrides=resource_overrides)
     except ValueError as e:
         return fail(str(e))
 
     db.add(appt); db.flush()
     _apply_tests(db, appt, posted["test_ids"])
-    _sync_resource_reservations(db, appt, version)
+    _sync_resource_reservations(db, appt, version, resource_overrides=resource_overrides)
     db.flush()
     count, color, reason_code = _recolor(appt, version)
     _audit(db, appt.id, "created", reason="Appointment created")
@@ -655,10 +729,14 @@ def appointment_detail(request: Request, appt_id: int, db: Session = Depends(get
     # automatically or by a staff override) -- once set, the stored value is
     # what the check-in card and the billing preview both use.
     suggested_visit_flow = a.visit_flow or cpt_mapper.suggest_visit_flow(db, a.patient_id)
+    # Room/lane/device manual-override picker (spec 31.3): which reserved
+    # resources were a staff pick rather than the automatic assignment.
+    manually_selected_resource_ids = {sel.resource_id for sel in a.resource_selections}
     return templates.TemplateResponse(request, "appointments/detail.html",
         {"appt": a, "statuses": list(AppointmentStatus), "audit_events": audit,
          "waitlist_matches": waitlist_matches, "notified_entry_ids": notified_entry_ids,
          "suggested_visit_flow": suggested_visit_flow,
+         "manually_selected_resource_ids": manually_selected_resource_ids,
          "context_patient": patient_context(a.patient, db)})
 
 
@@ -698,12 +776,14 @@ def update_appointment(request: Request, appt_id: int, provider_id: int = Form(.
     duration_override: str = Form(""), duration_override_reason: str = Form(""),
     conflict_override: bool = Form(False), conflict_override_reason: str = Form(""),
     reason: str = Form(""), notes: str = Form(""), status: str = Form(None), test_ids: list = Form([]),
+    override_requirement_id: list = Form([]), override_resource_id: list = Form([]),
     csrf_token: str = Form(""), db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     csrf.verify_or_403(request.state.csrf_token, csrf_token)
     a = db.query(Appointment).filter(Appointment.id == appt_id).first()
     if not a: return HTMLResponse("Not found", status_code=404)
 
     version = db.query(AppointmentTypeVersion).filter(AppointmentTypeVersion.id == appointment_type_version_id).first()
+    resource_overrides = _parse_resource_overrides(override_requirement_id, override_resource_id)
 
     def fail(msg):
         ctx = _form_context(db, patient_id=a.patient_id, appt=a, error=msg)
@@ -726,12 +806,12 @@ def update_appointment(request: Request, appt_id: int, provider_id: int = Form(.
         _apply_scheduling_rules(db, a, version, relationship, is_follow_up, when, provider_id,
             duration_override=duration_override_val, override_reason=duration_override_reason or None,
             conflict_override=conflict_override, conflict_reason=conflict_override_reason or None,
-            exclude_appointment_id=a.id)
+            exclude_appointment_id=a.id, resource_overrides=resource_overrides)
     except ValueError as e:
         return fail(str(e))
 
     _apply_tests(db, a, [int(t) for t in test_ids] if test_ids else [])
-    _sync_resource_reservations(db, a, version)
+    _sync_resource_reservations(db, a, version, resource_overrides=resource_overrides)
     db.flush()
     _recolor(a, version)
     old_status = a.status
