@@ -22,5 +22,10 @@
     <dt>Ocular Hx</dt><dd>{{ patient.ocular_history or '—' }}</dd>
     <dt>Family Ocular Hx</dt><dd>{{ patient.family_ocular_history or '—' }}</dd>
   </dl></div>
+  <div class="card"><h3>Social History</h3><dl class="dl-grid">
+    <dt>Tobacco Use</dt><dd>{{ patient.tobacco_use_status or 'Not asked' }}</dd>
+    <dt>Alcohol Use</dt><dd>{{ patient.alcohol_use_status or 'Not asked' }}</dd>
+    <dt>Notes</dt><dd>{{ patient.social_history_notes or '—' }}</dd>
+  </dl></div>
 </div>
 {% endblock %}

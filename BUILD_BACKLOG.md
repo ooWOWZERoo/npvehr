@@ -1,6 +1,6 @@
 # New Path Vision EHR — Master Build Backlog
 
-**Status:** Living tracking document. **Baseline as of:** spec v2.57 / research doc v2.24 (2026-09-27).
+**Status:** Living tracking document. **Baseline as of:** spec v2.58 / research doc v2.24 (2026-09-27).
 
 ## Purpose and how to use this document
 
@@ -213,8 +213,8 @@ A real visit-summary document export prompted a full component-by-component gap 
 - [x] **Motility and confrontation visual fields as structured OD/OS data. Done, v2.22** — see baseline spec §41, research doc §8.2. Four new nullable columns on `EyeExam` (flat columns, same treatment as pupil exam fields), distinct from the pre-existing `cover_test` field (ocular alignment, a different clinical concept).
 - [x] **Conjunctiva / anterior chamber / iris as discrete slit-lamp structures. Done, v2.23** — see baseline spec §42, research doc §8.3. Built as part of a full structural Anterior Segment dashboard (also covering cornea pathology and lens/cataract grading), split out from the old "Anterior Segment / Dry Eye" dashboard which was entirely dry-eye content.
 - [x] **Vitreous as a discrete fundus structure, and a numeric CD ratio on the general exam. Done, v2.57** — see baseline spec §84. New `EyeExam.vitreous_od/os` and `cd_ratio_od/os` columns on the general exam's own Fundus section (migration 047, with a registered down-migration), distinct from `GlaucomaTracking.cup_disc_ratio_od/os`'s dashboard-specific value.
-- [ ] Structured review of systems (the source document's large systemic-symptom checklist)
-- [ ] Structured social history (alcohol/tobacco screening) — no fields exist on `Patient` at all
+- [x] **Structured review of systems. Done, v2.58** — see baseline spec §85. Eight nullable tri-state `EyeExam.ros_*` columns (constitutional/cardiovascular/respiratory/gastrointestinal/neurological/musculoskeletal/endocrine/skin) plus `ros_notes`, a representative subset of the source document's full systemic-symptom checklist rather than a full head-to-toe medical ROS.
+- [x] **Structured social history (alcohol/tobacco screening). Done, v2.58** — see baseline spec §85. New `Patient.tobacco_use_status`/`alcohol_use_status` (fixed-category dropdowns) plus `social_history_notes`.
 - [ ] Diagnostic-imaging order + structured result tracking (fundus photos, OCT) — this is `DiagnosticOrder`/Phase 3-4 look-back territory, a separate model from the optical-goods `RxLabOrder` lifecycle now built (§3 above, spec §69)
 - [x] E-signature / sign-lock-amend workflow -- `EyeExam.signed_at`/`signed_by_user_id` plus a new `EyeExamAddendum` table: a provider (or system administrator) signs a visit as an electronic attestation, after which the only way to add anything further is a dated, authored addendum (this app never had an exam edit route to begin with, so "lock" makes Sign meaningful by gating the addendum path on it). **Done, v2.44** — see baseline spec §63. Extended to `Prescription` (same shape: `signed_at`/`signed_by_user_id` + `PrescriptionAddendum`, new `RX_SIGN` permission group). **Done, v2.46** — see baseline spec §67. "Staff present at this visit" attribution beyond the single `Provider` on an exam remains open (§6 above, spec §18.2 item 4/§37.6).
 - [ ] Actual PDF rendering — this app has zero PDF-generation library; `prescriptions/print.html` relies entirely on the browser's native print dialog

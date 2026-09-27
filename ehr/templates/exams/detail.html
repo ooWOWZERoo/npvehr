@@ -146,6 +146,23 @@
   <dt>Secondary Findings</dt><dd>{{ exam.refractive_secondary_findings or '—' }}</dd>
 </dl></div>
 {% endif %}
+{% set ros_fields = [exam.ros_constitutional, exam.ros_cardiovascular, exam.ros_respiratory,
+                      exam.ros_gastrointestinal, exam.ros_neurological, exam.ros_musculoskeletal,
+                      exam.ros_endocrine, exam.ros_skin] %}
+{% if ros_fields | select('!=', none) | list | length > 0 or exam.ros_notes %}
+<div class="card" style="margin-top:1rem"><h3>Review of Systems</h3>
+  <dl class="dl-grid">
+    {% for code, label in [('constitutional','Constitutional'), ('cardiovascular','Cardiovascular'),
+                            ('respiratory','Respiratory'), ('gastrointestinal','Gastrointestinal'),
+                            ('neurological','Neurological'), ('musculoskeletal','Musculoskeletal'),
+                            ('endocrine','Endocrine'), ('skin','Skin')] %}
+    {% set val = exam['ros_' + code] %}
+    <dt>{{ label }}</dt><dd>{{ 'Positive' if val == true else ('Negative' if val == false else 'Not reviewed') }}</dd>
+    {% endfor %}
+    {% if exam.ros_notes %}<dt>Notes</dt><dd>{{ exam.ros_notes }}</dd>{% endif %}
+  </dl>
+</div>
+{% endif %}
 {% if exam.anterior_segment_assessments %}
 {% set ant = exam.anterior_segment_assessments[0] %}
 <div class="card" style="margin-top:1rem"><h3>Anterior Segment Assessment</h3>

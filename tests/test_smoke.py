@@ -2614,3 +2614,71 @@ def test_vitreous_and_cd_ratio_save_and_display(logged_in_page, live_server):
     page.wait_for_url(re.compile(r"/exams/\d+"))
     blank_fundus_text = page.locator(".card", has_text="Fundus").inner_text()
     assert "0.35" not in blank_fundus_text
+
+
+def test_structured_social_history_save_and_display(logged_in_page, live_server):
+    """Structured social history (VISION_EHR_DATA_STANDARDS_RESEARCH.md §12's
+    long-tracked "no fields exist on Patient at all" gap): Tobacco Use and
+    Alcohol Use are now fixed-category dropdowns rather than buried in
+    medical_history's free text. Verifies both save and display on the
+    Demographics tab, and that a patient created without answering either
+    (left on "Not asked") shows that default rather than a blank/None error."""
+    page = logged_in_page
+    page.goto(live_server + "/patients/new")
+    page.fill('input[name="first_name"]', "Social")
+    page.fill('input[name="last_name"]', "HistoryTest")
+    page.select_option('select[name="tobacco_use_status"]', "Former")
+    page.select_option('select[name="alcohol_use_status"]', "Occasional")
+    page.fill('textarea[name="social_history_notes"]', "Quit smoking 5 years ago")
+    page.locator('button[type="submit"]', has_text="Create Patient").click()
+    page.wait_for_url(re.compile(r"/patients/\d+$"))
+    patient_id = page.url.rstrip("/").split("/")[-1]
+
+    page.goto(live_server + f"/patients/{patient_id}/demographics")
+    social_card = page.locator(".card", has_text="Social History")
+    social_text = social_card.inner_text()
+    assert "Former" in social_text
+    assert "Occasional" in social_text
+    assert "Quit smoking 5 years ago" in social_text
+
+    # A patient with neither question answered shows "Not asked" for both,
+    # not a blank dash or a crash on the None value.
+    page.goto(live_server + "/patients/new")
+    page.fill('input[name="first_name"]', "Unasked")
+    page.fill('input[name="last_name"]', "HistoryTest")
+    page.locator('button[type="submit"]', has_text="Create Patient").click()
+    page.wait_for_url(re.compile(r"/patients/\d+$"))
+    unasked_id = page.url.rstrip("/").split("/")[-1]
+    page.goto(live_server + f"/patients/{unasked_id}/demographics")
+    unasked_text = page.locator(".card", has_text="Social History").inner_text()
+    assert unasked_text.count("Not asked") == 2
+
+
+def test_structured_review_of_systems_save_and_display(logged_in_page, live_server):
+    """Structured Review of Systems (VISION_EHR_DATA_STANDARDS_RESEARCH.md
+    §12's long-tracked gap): the general exam previously had no ROS fields
+    at all. Verifies a mix of positive/negative/not-reviewed answers save
+    and display correctly, and that an exam with every system left on
+    "not reviewed" (and no notes) shows no ROS card at all -- nothing to
+    show, matching the sibling Motility/Refractive cards' convention."""
+    page = logged_in_page
+    page.goto(live_server + "/exams/new")
+    page.select_option('select[name="ros_constitutional"]', "No")
+    page.select_option('select[name="ros_cardiovascular"]', "Yes")
+    page.fill('textarea[name="ros_notes"]', "Occasional palpitations reported")
+    page.locator('button[type="submit"]', has_text="Save Exam").click()
+
+    page.wait_for_url(re.compile(r"/exams/\d+"))
+    ros_card = page.locator(".card", has_text="Review of Systems")
+    ros_text = ros_card.inner_text()
+    assert "Constitutional" in ros_text and "Negative" in ros_text
+    assert "Cardiovascular" in ros_text and "Positive" in ros_text
+    assert "Respiratory" in ros_text and "Not reviewed" in ros_text
+    assert "Occasional palpitations reported" in ros_text
+
+    # No system answered and no notes -- no ROS card at all.
+    page.goto(live_server + "/exams/new")
+    page.select_option('select[name="provider_id"]', index=1)
+    page.locator('button[type="submit"]', has_text="Save Exam").click()
+    page.wait_for_url(re.compile(r"/exams/\d+"))
+    assert page.locator(".card", has_text="Review of Systems").count() == 0

@@ -62,6 +62,20 @@ class Patient(Base):
     medical_history = Column(Text)
     ocular_history = Column(Text)
     family_ocular_history = Column(Text)
+    # Structured social history (VISION_EHR_DATA_STANDARDS_RESEARCH.md §12's
+    # long-tracked "no fields exist on Patient at all" gap): a small, fixed
+    # set of screening categories rather than free text, so a chart-wide
+    # "smoking status" question can actually be answered without parsing
+    # medical_history's prose. tobacco_use_status: 'Never' | 'Former' |
+    # 'Current' | None (not asked). alcohol_use_status: 'None' | 'Occasional'
+    # | 'Moderate' | 'Heavy' | None (not asked). social_history_notes is
+    # free text for anything beyond these two screened categories (e.g.
+    # occupation, recreational drug use) -- kept separate rather than
+    # overloading medical_history, which predates this and is a different,
+    # broader field.
+    tobacco_use_status = Column(String)
+    alcohol_use_status = Column(String)
+    social_history_notes = Column(Text)
     photo_path = Column(String)
     # Manually-entered balance snapshot: no billing/ledger module exists yet, so this is a
     # real but hand-maintained number (positive = patient owes money, negative = credit/
@@ -881,6 +895,24 @@ class EyeExam(Base):
     # a posterior-segment/fundus finding, e.g. "Clear", "PVD present",
     # "Vitreous syneresis", "Vitreous hemorrhage").
     vitreous_od = Column(String); vitreous_os = Column(String)
+    # Structured Review of Systems (VISION_EHR_DATA_STANDARDS_RESEARCH.md §12's
+    # long-tracked "structured review of systems" gap -- the source visit-note
+    # document's large systemic-symptom checklist). One nullable Boolean per
+    # system, same tri-state convention already used for
+    # strabismus_present/corneal_edema_present: None = not reviewed this
+    # visit, True = positive finding reported, False = denies/negative.
+    # A representative, fixed set of systems most clinically relevant to an
+    # eye visit (constitutional/vascular/neuro symptoms bear directly on
+    # many ocular findings) rather than the full head-to-toe medical ROS.
+    ros_constitutional = Column(Boolean)
+    ros_cardiovascular = Column(Boolean)
+    ros_respiratory = Column(Boolean)
+    ros_gastrointestinal = Column(Boolean)
+    ros_neurological = Column(Boolean)
+    ros_musculoskeletal = Column(Boolean)
+    ros_endocrine = Column(Boolean)
+    ros_skin = Column(Boolean)
+    ros_notes = Column(Text)
     assessment = Column(Text); plan = Column(Text)
     diagnosis_codes = Column(String); follow_up_weeks = Column(Integer)
     # The unit follow_up_weeks is expressed in -- Day/Week/Month/Year -- so a

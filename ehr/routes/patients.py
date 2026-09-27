@@ -39,6 +39,7 @@ PATIENT_AUDITED_FIELDS = [
     "phone", "email", "address", "city", "state", "zip_code",
     "insurance_provider", "insurance_id", "emergency_contact_name", "emergency_contact_phone",
     "allergies", "medical_history", "ocular_history", "family_ocular_history",
+    "tobacco_use_status", "alcohol_use_status", "social_history_notes",
     "balance_due", "sms_opt_in", "email_opt_in",
 ]
 
@@ -166,6 +167,8 @@ def create_patient(request: Request,
     emergency_contact_name: str = Form(""), emergency_contact_phone: str = Form(""),
     allergies: str = Form(""), medical_history: str = Form(""),
     ocular_history: str = Form(""), family_ocular_history: str = Form(""),
+    tobacco_use_status: str = Form(""), alcohol_use_status: str = Form(""),
+    social_history_notes: str = Form(""),
     balance_due: str = Form(""),
     sms_opt_in: bool = Form(False), email_opt_in: bool = Form(False),
     photo: UploadFile = File(None),
@@ -180,7 +183,9 @@ def create_patient(request: Request,
             insurance_provider=insurance_provider, insurance_id=insurance_id,
             emergency_contact_name=emergency_contact_name, emergency_contact_phone=emergency_contact_phone,
             allergies=allergies, medical_history=medical_history, ocular_history=ocular_history,
-            family_ocular_history=family_ocular_history, balance_due=_parse_balance(balance_due),
+            family_ocular_history=family_ocular_history,
+            tobacco_use_status=tobacco_use_status or None, alcohol_use_status=alcohol_use_status or None,
+            social_history_notes=social_history_notes, balance_due=_parse_balance(balance_due),
             sms_opt_in=sms_opt_in, email_opt_in=email_opt_in)
         return templates.TemplateResponse(request, "patients/form.html",
             {"patient": pending, "error": photo_error}, status_code=400)
@@ -192,7 +197,9 @@ def create_patient(request: Request,
             insurance_provider=insurance_provider, insurance_id=insurance_id,
             emergency_contact_name=emergency_contact_name, emergency_contact_phone=emergency_contact_phone,
             allergies=allergies, medical_history=medical_history, ocular_history=ocular_history,
-            family_ocular_history=family_ocular_history, balance_due=_parse_balance(balance_due),
+            family_ocular_history=family_ocular_history,
+            tobacco_use_status=tobacco_use_status or None, alcohol_use_status=alcohol_use_status or None,
+            social_history_notes=social_history_notes, balance_due=_parse_balance(balance_due),
             sms_opt_in=sms_opt_in, email_opt_in=email_opt_in)
         return templates.TemplateResponse(request, "patients/form.html", {
             "patient": pending,
@@ -207,7 +214,8 @@ def create_patient(request: Request,
         emergency_contact_phone=emergency_contact_phone, allergies=allergies,
         medical_history=medical_history, ocular_history=ocular_history,
         family_ocular_history=family_ocular_history, photo_path=photo_path,
-        balance_due=_parse_balance(balance_due),
+        tobacco_use_status=tobacco_use_status or None, alcohol_use_status=alcohol_use_status or None,
+        social_history_notes=social_history_notes, balance_due=_parse_balance(balance_due),
         sms_opt_in=sms_opt_in, email_opt_in=email_opt_in)
     db.add(p); db.commit(); db.refresh(p)
     return RedirectResponse(f"/patients/{p.id}", status_code=303)
@@ -322,6 +330,8 @@ def update_patient(request: Request, patient_id: int,
     emergency_contact_name: str = Form(""), emergency_contact_phone: str = Form(""),
     allergies: str = Form(""), medical_history: str = Form(""),
     ocular_history: str = Form(""), family_ocular_history: str = Form(""),
+    tobacco_use_status: str = Form(""), alcohol_use_status: str = Form(""),
+    social_history_notes: str = Form(""),
     balance_due: str = Form(""),
     sms_opt_in: bool = Form(False), email_opt_in: bool = Form(False),
     photo: UploadFile = File(None),
@@ -338,7 +348,9 @@ def update_patient(request: Request, patient_id: int,
             zip_code=zip_code, insurance_provider=insurance_provider, insurance_id=insurance_id,
             emergency_contact_name=emergency_contact_name, emergency_contact_phone=emergency_contact_phone,
             allergies=allergies, medical_history=medical_history, ocular_history=ocular_history,
-            family_ocular_history=family_ocular_history, balance_due=_parse_balance(balance_due),
+            family_ocular_history=family_ocular_history,
+            tobacco_use_status=tobacco_use_status or None, alcohol_use_status=alcohol_use_status or None,
+            social_history_notes=social_history_notes, balance_due=_parse_balance(balance_due),
             sms_opt_in=sms_opt_in, email_opt_in=email_opt_in, photo_path=p.photo_path)
         return templates.TemplateResponse(request, "patients/form.html",
             {"patient": pending, "error": photo_error}, status_code=400)
@@ -350,7 +362,9 @@ def update_patient(request: Request, patient_id: int,
             zip_code=zip_code, insurance_provider=insurance_provider, insurance_id=insurance_id,
             emergency_contact_name=emergency_contact_name, emergency_contact_phone=emergency_contact_phone,
             allergies=allergies, medical_history=medical_history, ocular_history=ocular_history,
-            family_ocular_history=family_ocular_history, balance_due=_parse_balance(balance_due),
+            family_ocular_history=family_ocular_history,
+            tobacco_use_status=tobacco_use_status or None, alcohol_use_status=alcohol_use_status or None,
+            social_history_notes=social_history_notes, balance_due=_parse_balance(balance_due),
             sms_opt_in=sms_opt_in, email_opt_in=email_opt_in,
             photo_path=p.photo_path)
         return templates.TemplateResponse(request, "patients/form.html", {
@@ -366,6 +380,9 @@ def update_patient(request: Request, patient_id: int,
     p.emergency_contact_name=emergency_contact_name; p.emergency_contact_phone=emergency_contact_phone
     p.allergies=allergies; p.medical_history=medical_history
     p.ocular_history=ocular_history; p.family_ocular_history=family_ocular_history
+    p.tobacco_use_status = tobacco_use_status or None
+    p.alcohol_use_status = alcohol_use_status or None
+    p.social_history_notes = social_history_notes
     p.balance_due = _parse_balance(balance_due)
     p.sms_opt_in = sms_opt_in; p.email_opt_in = email_opt_in
     after = {f: getattr(p, f) for f in PATIENT_AUDITED_FIELDS}

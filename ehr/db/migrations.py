@@ -1340,6 +1340,22 @@ def migration_047_vitreous_and_cd_ratio(conn):
     _add_column_if_missing(conn, "eye_exams", "vitreous_od", "VARCHAR")
     _add_column_if_missing(conn, "eye_exams", "vitreous_os", "VARCHAR")
 
+def migration_048_ros_and_social_history(conn):
+    """Structured Review of Systems (EyeExam) + structured social history
+    (Patient) -- VISION_EHR_DATA_STANDARDS_RESEARCH.md §12's two remaining
+    long-tracked gaps. See the new columns' own comments in
+    ehr/models/database.py."""
+    if _table_exists(conn, "eye_exams"):
+        for col in ("ros_constitutional", "ros_cardiovascular", "ros_respiratory",
+                    "ros_gastrointestinal", "ros_neurological", "ros_musculoskeletal",
+                    "ros_endocrine", "ros_skin"):
+            _add_column_if_missing(conn, "eye_exams", col, "BOOLEAN")
+        _add_column_if_missing(conn, "eye_exams", "ros_notes", "TEXT")
+    if _table_exists(conn, "patients"):
+        _add_column_if_missing(conn, "patients", "tobacco_use_status", "VARCHAR")
+        _add_column_if_missing(conn, "patients", "alcohol_use_status", "VARCHAR")
+        _add_column_if_missing(conn, "patients", "social_history_notes", "TEXT")
+
 def migration_046_create_appointment_resource_selections(conn):
     """Room/lane/device manual-override picker (spec 31.3): stores which
     specific Resource staff picked for a given appointment's resource
@@ -1433,6 +1449,7 @@ COLUMN_MIGRATIONS = [
     ("045_user_provider_link", migration_045_user_provider_link),
     ("046_create_appointment_resource_selections", migration_046_create_appointment_resource_selections),
     ("047_vitreous_and_cd_ratio", migration_047_vitreous_and_cd_ratio),
+    ("048_ros_and_social_history", migration_048_ros_and_social_history),
 ]
 POST_CREATE_ALL_MIGRATIONS = [
     ("002_seed_appointment_types", migration_002_seed_appointment_types),
@@ -1490,6 +1507,16 @@ def down_047_vitreous_and_cd_ratio(conn):
         for col in ("cd_ratio_od", "cd_ratio_os", "vitreous_od", "vitreous_os"):
             conn.execute(text(f"ALTER TABLE eye_exams DROP COLUMN {col}"))
 
+def down_048_ros_and_social_history(conn):
+    if _table_exists(conn, "eye_exams"):
+        for col in ("ros_constitutional", "ros_cardiovascular", "ros_respiratory",
+                    "ros_gastrointestinal", "ros_neurological", "ros_musculoskeletal",
+                    "ros_endocrine", "ros_skin", "ros_notes"):
+            conn.execute(text(f"ALTER TABLE eye_exams DROP COLUMN {col}"))
+    if _table_exists(conn, "patients"):
+        for col in ("tobacco_use_status", "alcohol_use_status", "social_history_notes"):
+            conn.execute(text(f"ALTER TABLE patients DROP COLUMN {col}"))
+
 # Sparse by design -- see this section's own docstring above. Extend this
 # alongside any new migration that a reviewer has actually confirmed is safe
 # to reverse (a plain ADD COLUMN or CREATE TABLE with no data-seeding and
@@ -1503,6 +1530,7 @@ DOWN_MIGRATIONS = {
     "045_user_provider_link": down_045_user_provider_link,
     "046_create_appointment_resource_selections": down_046_create_appointment_resource_selections,
     "047_vitreous_and_cd_ratio": down_047_vitreous_and_cd_ratio,
+    "048_ros_and_social_history": down_048_ros_and_social_history,
 }
 
 

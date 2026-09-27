@@ -91,6 +91,26 @@
       <div class="form-group"><label>Ocular History <textarea name="ocular_history">{{ patient.ocular_history or '' }}</textarea></label></div>
       <div class="form-group"><label>Family Ocular History <textarea name="family_ocular_history">{{ patient.family_ocular_history or '' }}</textarea></label></div>
     </div>
+    <div class="section-title">Social History</div>
+    <div class="form-row cols-2">
+      <div class="form-group"><label>Tobacco Use
+        <select name="tobacco_use_status">
+          <option value="">Not asked</option>
+          {% for opt in ["Never", "Former", "Current"] %}
+          <option value="{{ opt }}" {{ 'selected' if patient and patient.tobacco_use_status == opt }}>{{ opt }}</option>
+          {% endfor %}
+        </select>
+      </label></div>
+      <div class="form-group"><label>Alcohol Use
+        <select name="alcohol_use_status">
+          <option value="">Not asked</option>
+          {% for opt in ["None", "Occasional", "Moderate", "Heavy"] %}
+          <option value="{{ opt }}" {{ 'selected' if patient and patient.alcohol_use_status == opt }}>{{ opt }}</option>
+          {% endfor %}
+        </select>
+      </label></div>
+    </div>
+    <div class="form-group"><label>Social History Notes <textarea name="social_history_notes">{{ patient.social_history_notes or '' }}</textarea></label></div>
     <div class="form-actions"><button type="submit" class="btn btn-primary">{{ 'Save Changes' if patient else 'Create Patient' }}</button></div>
   </form>
 </div>
