@@ -371,12 +371,16 @@ def test_lookback_alerts_interval_due_and_outstanding_order(logged_in_page, live
     (H40.*) with no completed VF/OCT order shows an 'interval due' banner
     (.alert-info) for each required test on both the patient overview and
     the New Exam form; ordering one via its own "Order Now" button creates
-    a real DiagnosticOrder and swaps that specific banner for an
-    'outstanding order' one (.alert-warning) -- never both at once for the
-    same test, which would just be redundant noise; completing that order
-    clears both banners for it entirely, leaving only the test that's still
-    genuinely due. Creates its own brand-new patient rather than reusing any
-    seeded one -- "Brown" (alphabetically first by last name) is the default,
+    a real DiagnosticOrder. On the New Exam form (which has no orders table
+    of its own) that swaps the interval-due banner for an 'outstanding
+    order' one (.alert-warning). On the patient overview, 'outstanding
+    order' banners are deliberately suppressed (user feedback: they named
+    the exact same rows the Pending Diagnostic Orders table below already
+    lists, with fewer actions -- pure duplicate noise) -- the interval-due
+    banner simply disappears once ordered, and the order shows up in the
+    Pending Diagnostic Orders table instead, whose own Mark Complete clears
+    it. Creates its own brand-new patient rather than reusing any seeded
+    one -- "Brown" (alphabetically first by last name) is the default,
     unselected patient on every other test's unqualified /exams/new visit
     and so is the most cross-test-contaminated patient in this whole suite,
     not a safe choice."""
@@ -404,22 +408,38 @@ def test_lookback_alerts_interval_due_and_outstanding_order(logged_in_page, live
     page.goto(live_server + f"/exams/new?patient_id={patient_id}")
     assert page.locator(".alert-info").count() == 2
 
-    # Ordering the VF via its own alert button swaps that one alert for an
-    # outstanding-order warning -- never both for the same test at once.
+    # Ordering the VF via its own alert button clears its interval-due
+    # banner on the overview page (no outstanding-order banner replaces it
+    # there -- that's suppressed as redundant with the table below) and adds
+    # it to the Pending Diagnostic Orders table instead.
     page.goto(live_server + f"/patients/{patient_id}")
     page.locator(".alert-info").first.locator("button", has_text="Order Now").click()
     page.wait_for_load_state("networkidle")
-    assert page.locator(".alert-warning").count() == 1
-    assert "Virtual Visual Field" in page.locator(".alert-warning").first.inner_text()
+    assert page.locator(".alert-warning").count() == 0
     remaining_info = page.locator(".alert-info")
     assert remaining_info.count() == 1
     assert "OCT, Optic Nerve (Glaucoma)" in remaining_info.first.inner_text()
+    pending_row = page.locator("tr", has_text="Virtual Visual Field")
+    assert pending_row.count() == 1
+    assert "ORDERED" in pending_row.inner_text()
 
-    # Completing that order clears its outstanding-order banner and, since
-    # it's now compliant, doesn't bring back an interval-due one either.
-    page.locator(".alert-warning").first.locator("button", has_text="Mark Complete").click()
+    # The New Exam form has no orders table, so it still shows the full
+    # outstanding-order banner (never both alert types for the same test).
+    # ":visible" excludes this form's own hidden NCCI-advisory banners,
+    # which share the .alert-warning class while empty/display:none.
+    page.goto(live_server + f"/exams/new?patient_id={patient_id}")
+    assert page.locator(".alert-warning:visible").count() == 1
+    assert "Virtual Visual Field" in page.locator(".alert-warning:visible").first.inner_text()
+    assert page.locator(".alert-info").count() == 1
+    assert "OCT, Optic Nerve (Glaucoma)" in page.locator(".alert-info").first.inner_text()
+
+    # Completing that order via the overview table clears it there, and
+    # since it's now compliant, doesn't bring back an interval-due alert
+    # either.
+    page.goto(live_server + f"/patients/{patient_id}")
+    page.locator("tr", has_text="Virtual Visual Field").locator("button", has_text="Mark Complete").click()
     page.wait_for_load_state("networkidle")
-    assert page.locator(".alert-warning").count() == 0
+    assert page.locator("tr", has_text="Virtual Visual Field").count() == 0
     final_info = page.locator(".alert-info")
     assert final_info.count() == 1
     assert "OCT, Optic Nerve (Glaucoma)" in final_info.first.inner_text()
@@ -1351,7 +1371,16 @@ def test_portal_phase4_followups(logged_in_page, live_server):
 
     # Reschedule with a provider change: book, then reschedule onto the
     # other provider and confirm the appointments list reflects it.
-    weekday_offset = 1
+    # Root-caused pre-existing failure: seeded provider hours start at 09:00
+    # UTC and this test sets a 12-hour self-service cutoff above, so
+    # "tomorrow's first slot" (weekday_offset starting at 1) can land LESS
+    # than 12 hours from "now" whenever the suite happens to run between
+    # ~21:00 and ~09:00 UTC -- the app's cutoff logic is working correctly
+    # (see portal/appointments.html), the Reschedule link is correctly
+    # absent, and the test's own date choice was the fragile part. Starting
+    # at 3 days out guarantees at least ~48 hours of margin regardless of
+    # what time of day CI runs.
+    weekday_offset = 3
     while (datetime.utcnow() + timedelta(days=weekday_offset)).weekday() >= 5:
         weekday_offset += 1
     target_date = (datetime.utcnow() + timedelta(days=weekday_offset)).strftime("%Y-%m-%d")
@@ -2100,10 +2129,12 @@ def test_diagnostic_order_deep_links_to_visit_focus_section(logged_in_page, live
     the originating Visit Focus dashboard section (BUILD_BACKLOG.md follow-
     ups named in both the Phase 3 and Phase 4 rounds) -- VF/OCT both map to
     the Posterior Segment/Glaucoma section (ehr.services.lookback_alerts.
-    TEST_CODE_TO_FOCUS_SECTION), so both an interval-due alert and an
-    outstanding-order alert (and the Pending Diagnostic Orders card) offer a
-    "Document in Exam" link that lands on the New Exam form with that
-    section already expanded, not just a status-only action."""
+    TEST_CODE_TO_FOCUS_SECTION), so an interval-due alert, an outstanding-
+    order alert on the New Exam form (the overview page suppresses that
+    alert type as redundant with the Pending Diagnostic Orders table below
+    it), and that table itself all offer a "Document in Exam" link that
+    lands on the New Exam form with that section already expanded, not just
+    a status-only action."""
     page = logged_in_page
     page.goto(live_server + "/patients/new")
     page.fill('input[name="first_name"]', "Deeplink")
@@ -2128,16 +2159,21 @@ def test_diagnostic_order_deep_links_to_visit_focus_section(logged_in_page, live
     assert page.locator('[data-vf-card="focus-glaucoma"].vf-on').count() == 1
     assert page.locator('.focus-toggle[data-target="focus-glaucoma"]').is_checked()
 
-    # Ordering the test swaps the interval-due alert for an outstanding-order
-    # one, which carries the same deep-link.
+    # Ordering the test clears the interval-due alert on the overview page
+    # (no outstanding-order banner replaces it there -- suppressed as
+    # redundant with the table below), but the New Exam form's own
+    # outstanding-order banner still carries the same deep-link.
     page.goto(live_server + f"/patients/{patient_id}")
     page.locator(".alert-info").first.locator("button", has_text="Order Now").click()
     page.wait_for_load_state("networkidle")
-    warning_link = page.locator(".alert-warning").first.locator("a", has_text="Document in Exam")
+    assert page.locator(".alert-warning").count() == 0
+    page.goto(live_server + f"/exams/new?patient_id={patient_id}")
+    warning_link = page.locator(".alert-warning:visible").first.locator("a", has_text="Document in Exam")
     assert warning_link.count() == 1
     assert "focus=focus-glaucoma" in warning_link.get_attribute("href")
 
     # The Pending Diagnostic Orders card on the overview tab carries it too.
+    page.goto(live_server + f"/patients/{patient_id}")
     pending_row = page.locator("tr", has_text="Virtual Visual Field")
     assert pending_row.locator("a", has_text="Document in Exam").count() == 1
 
