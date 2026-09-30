@@ -16,13 +16,36 @@
 
   var MODEL_ID = "Xenova/whisper-small.en";
   var TRANSFORMERS_URL = "/static/js/vendor/transformers/transformers.web.min.js";
+  // The vendored onnxruntime-web webgpu bundle
+  // (vendor/onnxruntime-web/ort.webgpu.bundle.min.1.30.0.mjs) resolves its
+  // own .wasm binary relative to its own module URL by default, which
+  // would mean serving a ~14-28MB binary from this app's own static files.
+  // That binary is the same kind of large, generic (non-patient) one-time
+  // download as the Whisper model weights themselves, so point it at the
+  // matching published onnxruntime-web version on jsdelivr instead --
+  // must match ONNXRUNTIME_WEB_VERSION exactly, since the .wasm binary's
+  // shape is version-specific. Keep in sync with the README in that
+  // vendored directory when upgrading.
+  var ONNXRUNTIME_WEB_VERSION = "1.30.0";
+  var ONNXRUNTIME_WEB_WASM_BASE_URL =
+    "https://cdn.jsdelivr.net/npm/onnxruntime-web@" + ONNXRUNTIME_WEB_VERSION + "/dist/";
 
   var transformersModulePromise = null;
   var pipelinePromise = null;
 
+  function configureWasmPaths(mod) {
+    var onnx = mod && mod.env && mod.env.backends && mod.env.backends.onnx;
+    if (onnx && onnx.wasm) {
+      onnx.wasm.wasmPaths = ONNXRUNTIME_WEB_WASM_BASE_URL;
+    }
+  }
+
   function loadTransformers() {
     if (!transformersModulePromise) {
-      transformersModulePromise = import(TRANSFORMERS_URL);
+      transformersModulePromise = import(TRANSFORMERS_URL).then(function (mod) {
+        configureWasmPaths(mod);
+        return mod;
+      });
     }
     return transformersModulePromise;
   }

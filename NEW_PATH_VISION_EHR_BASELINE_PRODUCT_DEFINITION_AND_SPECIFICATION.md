@@ -4649,7 +4649,7 @@ User report right after §92 shipped: the mic button visibly recorded (browser-l
 Confirmed with a real Playwright browser session (mocking only the microphone/recorder/audio-decode APIs, letting the real vendored library load) rather than guessed: `transformers.web.min.js` contains two **static, bare** ES module imports --
 `import * as CS from "onnxruntime-web/webgpu"` and `import {Tensor} from "onnxruntime-common"`. Bare specifiers (no `/`, `./`, `../`, or full URL) only resolve inside a bundler's module graph (webpack/vite rewrite them at build time); loaded directly via the browser's native ES module loader -- which is exactly how this app loads it, since it has no build step -- both imports failed immediately with `TypeError: Failed to resolve module specifier`, rejecting the whole dynamic `import()` of the library before the pipeline, and therefore the model, was ever reached. `voice_scribe.js`'s own `.catch` swallowed this into the button's transient error state (reverts to idle after 3 seconds), which is why nothing appeared to go wrong -- the failure was real but easy to miss.
 
-The first import (`onnxruntime-web/webgpu`) is genuinely dead code in this build (confirmed: its namespace, `CS`, is never referenced anywhere in the bundle). The second (`onnxruntime-common`'s `Tensor` class) is load-bearing -- actively constructed at runtime (`new Zb(...)` in the minified bundle) -- so it could not simply be stubbed out.
+The first import (`onnxruntime-web/webgpu`) was believed to be dead code in this build (its namespace, `CS`, is never referenced anywhere in the bundle *by property access*). **This conclusion was wrong** -- see §94, which found and fixed the deeper bug it caused. The second (`onnxruntime-common`'s `Tensor` class) is load-bearing -- actively constructed at runtime (`new Zb(...)` in the minified bundle) -- so it could not simply be stubbed out, and that part of this fix was correct and unchanged by §94.
 
 ### 93.3 Fix
 
@@ -4674,3 +4674,40 @@ No change to which model is used, the field wiring, or the UI -- this is purely 
 | New file | `ehr/static/js/vendor/transformers/onnxruntime-web-webgpu-stub.js` (an intentionally empty stub for a confirmed-unused import). |
 | Updated | `ehr/templates/exams/form.html`, `ehr/templates/exams/detail.html`, `ehr/templates/prescriptions/detail.html` (import map added to each `extra_js` block). One new Playwright regression test. |
 | Explicitly not done | No functional/UI changes -- module-loading fix only. Real transcription accuracy remains doctor QA. |
+
+## 94. Voice Scribe Fix #2: The "Dead Code" Import Wasn't Dead (v2.67)
+
+### 94.1 Origin
+
+User re-tested dictation on a real browser/network (this sandbox's own network policy blocks huggingface.co, so it can't reach the point where this bug appears) after §93 shipped and reported it still didn't work. Their browser console showed a **different** error than the one §93 fixed: `TypeError: Cannot read properties of undefined (reading 'create')`, thrown deep inside the vendored library at the point where it tries to create an ONNX inference session for the (by then successfully downloaded) Whisper model.
+
+### 94.2 Root cause
+
+§93's stub for the `onnxruntime-web/webgpu` bare specifier (an empty `export {}`) was based on an incomplete check -- grepping for direct property access on that import's namespace (`CS.something`) found none, so it was declared dead code. That check missed a **bare assignment**: in every non-Node environment (i.e. every real browser -- this app has no Node-side rendering), the vendored bundle unconditionally runs `Ks = CS`, making `Ks` -- and everything downstream of it (`Ks.InferenceSession`, aliased `LS`, and `Ks.Tensor`) -- entirely dependent on that one import, for the **WASM backend this app actually uses**, not just WebGPU. An empty stub left `Ks` with no exports at all, so `LS` was `undefined`, so `LS.create(...)` threw exactly the reported error -- but only once a real model had actually finished downloading, which is why this sandbox's blocked network access to huggingface.co prevented catching it here; it took the user's own real-browser test, with real network access, to reach that codepath and surface it.
+
+### 94.3 Fix
+
+Replaced the empty stub with the real thing: fetched `onnxruntime-web@1.30.0` (MIT, matching the model family's real published dependency) from the npm registry, and vendored its official prebuilt browser bundle for exactly this entry point -- `dist/ort.webgpu.bundle.min.mjs`, the file the package's own `package.json` `"exports"` maps `"./webgpu"` to for ESM `import`. This bundle is fully self-contained (no further bare imports of its own, confirmed by inspection) and exports the real `InferenceSession`, `Tensor`, `env`, and `registerBackend`, so `Ks`/`LS` now resolve to working implementations in every browser.
+
+Committed as `ehr/static/js/vendor/onnxruntime-web/ort.webgpu.bundle.min.1.30.0.mjs`, with the import map in all three templates updated to point `onnxruntime-web/webgpu` at it instead of the deleted stub.
+
+One additional wrinkle: this bundle resolves its own `.wasm` binary relative to its own module URL by default. That binary is 14-28MB depending on variant -- committing it would bloat the repo with a large generic (non-patient) binary asset, the same category `voice_scribe.js`'s own comments already reason about for the model weights, which are deliberately fetched from a CDN rather than vendored. `voice_scribe.js` now explicitly sets `env.backends.onnx.wasm.wasmPaths` to the matching `onnxruntime-web@1.30.0` build on jsdelivr right after the library loads, before any model/pipeline is created, so the (large, generic, cacheable) WASM binary is fetched from there instead.
+
+### 94.4 Verified
+
+Confirmed via a real (non-mocked) Playwright browser session that: (1) `transformers.web.min.js`'s own internal `env.backends.onnx` object -- previously an empty `{}`, since `Ks`/`CS` had nothing to populate it with -- now resolves to a real, populated ONNX Runtime environment object (`wasm`, `webgl`, `webgpu`, `versions`, `logLevel`, `setLogLevel`); (2) the newly-vendored bundle's `InferenceSession`, `InferenceSession.create`, and `Tensor` are all real functions, not `undefined`; (3) driving the mic button through the same real (non-network-mocked) click flow used for §93's verification no longer throws `Cannot read properties of undefined (reading 'create')` -- it now progresses all the way to the real `fetch()` against huggingface.co for the model config, the same point §93's fix reached, confirming the new failure surface is purely this sandbox's own network policy again, not a code defect.
+
+New Playwright regression test `test_voice_scribe_onnxruntime_web_backend_is_actually_functional`: loads the real vendored library (no mocking) and directly asserts `InferenceSession`/`InferenceSession.create`/`Tensor` are functions and `env.backends.onnx` is populated -- the gap the original `test_voice_scribe_vendored_library_resolves_bare_module_specifiers` test left, since an empty-but-resolvable stub module doesn't fail module *resolution*, only actual *use*. Full suite run to confirm no regressions.
+
+### 94.5 Explicitly not done
+
+No change to which model is used, the field wiring, or the UI -- this remains a pure module/backend-wiring fix. Real end-to-end transcription accuracy still isn't (and can't be) verified by an automated test; that remains doctor QA once this is deployed and reachable on a real network -- the user has been asked to re-confirm dictation works end-to-end on their own browser after this ships.
+
+**Version 2.67 change log (relative to v2.66) — Voice Scribe Fix #2: onnxruntime-web backend:**
+
+| Area | Change |
+| --- | --- |
+| Bug fix | §93's empty stub for the `onnxruntime-web/webgpu` bare specifier was itself wrong -- that import is load-bearing (via a bare `Ks = CS` assignment) for the WASM backend in every browser, not dead code. Left `InferenceSession`/`Tensor` undefined, breaking every transcription once a model actually finished downloading, with `Cannot read properties of undefined (reading 'create')`. |
+| New vendored dependency | `onnxruntime-web` v1.30.0 (MIT) webgpu browser bundle, vendored locally at `ehr/static/js/vendor/onnxruntime-web/ort.webgpu.bundle.min.1.30.0.mjs`, replacing the deleted empty stub. Its `.wasm` binary is fetched from jsdelivr at runtime rather than vendored (same treatment as the Whisper model weights). |
+| Updated | `ehr/static/js/voice_scribe.js` (explicit `wasmPaths` CDN configuration), the same three templates' import maps (repointed to the new vendored file). One new Playwright regression test; `test_voice_scribe_vendored_library_resolves_bare_module_specifiers`'s docstring corrected to no longer call this import dead code. |
+| Explicitly not done | No functional/UI changes -- backend-wiring fix only. Real transcription accuracy remains doctor QA, pending the user's own re-test. |
