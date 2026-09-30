@@ -89,6 +89,13 @@ STORE_OPS_EDIT = {SYSTEM_ADMINISTRATOR, PRACTICE_ADMINISTRATOR, BILLING_AND_CLAI
 # constant since it's a distinct capability from store-ops workflows.
 SERVICE_CATALOG_EDIT = {SYSTEM_ADMINISTRATOR, PRACTICE_ADMINISTRATOR, BILLING_AND_CLAIMS}
 
+# Voice Scribe vocabulary correction table admin -- practice-wide dictionary
+# configuration, not a clinical or billing responsibility, so this is
+# System/Practice Administrator only (matches ADMIN_SCHEDULING_EDIT's
+# membership rather than SERVICE_CATALOG_EDIT's, which adds Billing and
+# Claims for a reason that doesn't apply here).
+VOICE_SCRIBE_VOCAB_EDIT = {SYSTEM_ADMINISTRATOR, PRACTICE_ADMINISTRATOR}
+
 # All 5 Claim Management sections are currently GET-only placeholders/views in
 # this codebase (no create/edit routes exist yet), so only a VIEW group is needed.
 CLAIMS_VIEW = set(STORE_OPS_VIEW)

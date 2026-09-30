@@ -4711,3 +4711,40 @@ No change to which model is used, the field wiring, or the UI -- this remains a 
 | New vendored dependency | `onnxruntime-web` v1.30.0 (MIT) webgpu browser bundle, vendored locally at `ehr/static/js/vendor/onnxruntime-web/ort.webgpu.bundle.min.1.30.0.mjs`, replacing the deleted empty stub. Its `.wasm` binary is fetched from jsdelivr at runtime rather than vendored (same treatment as the Whisper model weights). |
 | Updated | `ehr/static/js/voice_scribe.js` (explicit `wasmPaths` CDN configuration), the same three templates' import maps (repointed to the new vendored file). One new Playwright regression test; `test_voice_scribe_vendored_library_resolves_bare_module_specifiers`'s docstring corrected to no longer call this import dead code. |
 | Explicitly not done | No functional/UI changes -- backend-wiring fix only. Real transcription accuracy remains doctor QA, pending the user's own re-test. |
+
+## 95. Voice Scribe: Admin-Editable Vocabulary Corrections + Faster First Load (v2.68)
+
+### 95.1 Origin
+
+User confirmed dictation works end-to-end after §94 shipped, but with two follow-up asks: (1) "some of the vision text is not correct; how do we train the scribe to learn how to spell ocular/vision/optometric words," and (2) once that was scoped, "also see if you can start transcription faster as some of the weight times are taking too long."
+
+### 95.2 Vocabulary corrections
+
+The client-side WASM Whisper model can't be trained or fine-tuned at runtime at all -- there's no training step available in-browser. The real fix is a find/replace correction pass: common Whisper mis-hearings of ocular/optometric terms (e.g. "terigium" -> "pterygium", "bluff eritis" -> "blepharitis", "hyper opia" -> "hyperopia") are looked up and substituted in the transcript before it lands in a field, matched case-insensitively as a whole word/phrase (longest phrase first, so a multi-word entry isn't shadowed by a shorter one inside it), with the substitution's capitalization matched to the original (so a sentence-leading mis-hearing still comes out capitalized).
+
+The user then asked, separately, whether the admin could manage this list directly -- since there's no way to enumerate every possible mis-transcription up front without a corpus of real dictation audio (which this feature deliberately never collects), an admin-editable table is the only way this improves over time in practice, not a one-time hardcoded seed. Built as a new `VoiceScribeCorrection` table (phrase/correction/active), seeded with an initial ~80-entry curated list spanning anatomy, refractive error, anterior/posterior segment conditions, exam instruments, procedures, and common medication names (migration_054_seed_voice_scribe_corrections) -- same "narrow curated lookup table, not a live rules engine" posture as ICD-10 (`ap_composer.py`), CPT (`cpt_mapper.py`), and NCCI edits (`ncci_edits.py`). Full CRUD (add/edit/toggle-active/delete -- a real delete, unlike a Service, since a text correction has no downstream records to orphan) at `/admin/voice-scribe/corrections`, gated to System/Practice Administrator only (`VOICE_SCRIBE_VOCAB_EDIT`, a practice-wide dictionary configuration rather than a clinical or billing responsibility), with edits logged to the existing Field Change Audit Log (same mechanism as Service fee edits). `voice_scribe.js` fetches the active correction set from a new `/admin/voice-scribe/corrections.json` endpoint (open to any logged-in role, since every doctor's browser needs it during dictation, not just admins) once per page load, applying it to every transcription that page session.
+
+### 95.3 Faster first transcription
+
+Two independent changes, both purely client-side:
+- **Idle-time preload**: `voice_scribe.js` now kicks off loading the model/WASM backend during browser idle time after page load (`requestIdleCallback`, falling back to a 1.5s `setTimeout` where unsupported), rather than waiting for the doctor's first click. This masks most of the first-load latency behind normal page-viewing time instead of making the first dictation of a session wait for the full download. Note this is a deliberate change from §92's original design (which explicitly deferred all loading to first click, to avoid slowing page loads for doctors not using the feature that session) -- the tradeoff now favors first-use latency, at the cost of every page with mic buttons starting a background download whether or not it's used.
+- **Decoder quantization**: `pipeline()` is now called with `dtype: { encoder_model: "fp32", decoder_model_merged: "q8" }` -- Whisper's encoder (audio understanding) is far more accuracy-sensitive to quantization than its decoder (text generation), so only the decoder is int8-quantized, the same split used in transformers.js's own official Whisper examples. This roughly quarters the decoder weights' download/load time with little practical accuracy loss.
+
+### 95.4 Verified
+
+Full Playwright suite green (105 passed). New tests: `test_voice_scribe_vocabulary_admin_crud` (seeded corrections render; create/edit logged to Field Change Audit Log/edit/toggle-active/delete; toggling active is proven to actually change `corrections.json`'s output, not just the admin display); `test_voice_scribe_vocabulary_admin_requires_admin_role` (a Front Desk login gets 403 on the admin pages but 200 on `corrections.json`); `test_voice_scribe_corrects_common_optometric_mis_transcriptions` updated to exercise the real (unmocked) `corrections.json` endpoint against the real seeded data, rather than a hardcoded JS table. Real speech-to-text accuracy/latency, as before, can't be meaningfully verified by an automated test -- that remains doctor QA on the user's own network.
+
+### 95.5 Explicitly not done
+
+No change to the model itself (still `whisper-small.en`), no prompt-conditioning/decoder-priming (transformers.js's API for this is awkward and its effect inconsistent; the curated correction table is the more reliable, more maintainable fix). No admin UI for bulk-importing corrections (add-one-at-a-time only, matching this round's scale).
+
+**Version 2.68 change log (relative to v2.67) — Voice Scribe: Admin-Editable Vocabulary + Faster First Load:**
+
+| Area | Change |
+| --- | --- |
+| New feature | Ocular/optometric vocabulary correction table applied to every Voice Scribe transcript before it lands in a field, admin-editable (add/edit/toggle-active/delete) at `/admin/voice-scribe/corrections`, System/Practice Administrator only. |
+| New model/migration | `VoiceScribeCorrection` (phrase/correction/active); `migration_054_seed_voice_scribe_corrections` seeds ~80 curated entries. |
+| New permission | `VOICE_SCRIBE_VOCAB_EDIT = {SYSTEM_ADMINISTRATOR, PRACTICE_ADMINISTRATOR}` in `ehr/auth/permissions.py`. |
+| New route file | `ehr/routes/admin_voice_scribe.py` (CRUD + a role-open `corrections.json` feed for `voice_scribe.js` to fetch). |
+| Performance | Idle-time preload of the model/WASM backend after page load (was: first-click-only); decoder-only int8 quantization (`dtype: {encoder_model: "fp32", decoder_model_merged: "q8"}`) for a smaller, faster first download. |
+| Explicitly not done | Model unchanged; no decoder-prompt-conditioning; no bulk-import UI for corrections. |

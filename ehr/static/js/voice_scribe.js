@@ -30,6 +30,14 @@
   var ONNXRUNTIME_WEB_WASM_BASE_URL =
     "https://cdn.jsdelivr.net/npm/onnxruntime-web@" + ONNXRUNTIME_WEB_VERSION + "/dist/";
 
+  // Whisper's encoder (audio understanding) is far more accuracy-sensitive
+  // to quantization than its decoder (text generation), so only the
+  // decoder is quantized -- the same split used by transformers.js's own
+  // official Whisper examples. This roughly quarters the decoder weights'
+  // download/load time with little practical accuracy loss, directly
+  // addressing "first transcription takes too long."
+  var MODEL_DTYPE = { encoder_model: "fp32", decoder_model_merged: "q8" };
+
   var transformersModulePromise = null;
   var pipelinePromise = null;
 
@@ -54,11 +62,29 @@
     if (!pipelinePromise) {
       pipelinePromise = loadTransformers().then(function (mod) {
         return mod.pipeline("automatic-speech-recognition", MODEL_ID, {
+          dtype: MODEL_DTYPE,
           progress_callback: onProgress,
         });
       });
     }
     return pipelinePromise;
+  }
+
+  // Warm the model/WASM backend during browser idle time after page load,
+  // so it's likely already loaded (or at least well underway) by the time
+  // a doctor actually clicks a mic button, instead of making every first
+  // dictation on a page wait for the full download + session-creation
+  // cost. Silently swallowed on failure (e.g. no real network reachable)
+  // since this is purely a latency optimization -- initButton's own
+  // click-triggered getPipeline() call remains the source of truth and
+  // will retry/surface any real error when the doctor actually dictates.
+  function idlePreloadPipeline() {
+    getPipeline(null).catch(function () {});
+  }
+
+  if (document.querySelector(".voice-scribe-btn[data-target]")) {
+    var scheduleIdle = window.requestIdleCallback || function (fn) { window.setTimeout(fn, 1500); };
+    scheduleIdle(idlePreloadPipeline);
   }
 
   function findField(targetId) {
@@ -82,8 +108,58 @@
     field.dispatchEvent(new Event("change", { bubbles: true }));
   }
 
+  // Whisper isn't trained (or fine-tunable, running purely client-side) on
+  // ocular/optometric vocabulary, so it reliably mis-hears certain domain
+  // terms as similar-sounding, more common English words/phrases. Fixed
+  // with a find/replace correction table -- not a live rules engine or a
+  // second model -- same posture this app already takes for ICD-10
+  // (ap_composer.py), CPT (cpt_mapper.py), and NCCI edits (ncci_edits.py).
+  // The table itself lives server-side (VoiceScribeCorrection,
+  // /admin/voice-scribe/corrections) so staff can add/edit/remove entries
+  // as real mis-transcriptions are observed in practice, without a code
+  // change -- there's no way to enumerate every one up front without a
+  // corpus of real dictation audio, which this feature deliberately never
+  // collects. Fetched once per page load; a fresh page load (or the next
+  // dictation on a long-open tab) picks up any admin edit made meanwhile.
+  var CORRECTIONS_URL = "/admin/voice-scribe/corrections.json";
+  var opticalVocabKeys = [];
+  var opticalVocabMap = {};
+
+  var correctionsReady = fetch(CORRECTIONS_URL)
+    .then(function (r) { return r.ok ? r.json() : {}; })
+    .catch(function () { return {}; })
+    .then(function (map) {
+      opticalVocabMap = map || {};
+      // Longest phrase first, so e.g. a multi-word entry is matched before
+      // a shorter entry that might also appear inside it.
+      opticalVocabKeys = Object.keys(opticalVocabMap).sort(function (a, b) { return b.length - a.length; });
+    });
+
+  function escapeRegExp(s) {
+    return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+
+  function matchCase(sample, replacement) {
+    if (sample === sample.toUpperCase()) return replacement.toUpperCase();
+    if (sample[0] === sample[0].toUpperCase()) {
+      return replacement[0].toUpperCase() + replacement.slice(1);
+    }
+    return replacement;
+  }
+
+  function applyOpticalVocabCorrections(text) {
+    if (!text) return text;
+    for (var i = 0; i < opticalVocabKeys.length; i++) {
+      var phrase = opticalVocabKeys[i];
+      var replacement = opticalVocabMap[phrase];
+      var re = new RegExp("\\b" + escapeRegExp(phrase) + "\\b", "gi");
+      text = text.replace(re, function (match) { return matchCase(match, replacement); });
+    }
+    return text;
+  }
+
   function insertText(field, text) {
-    text = (text || "").trim();
+    text = applyOpticalVocabCorrections((text || "").trim());
     if (!text) return;
     var existing = field.value || "";
     if (existing && !/\s$/.test(existing)) {
@@ -189,9 +265,14 @@
         });
       }).then(function (result) {
         var text = Array.isArray(result) ? (result[0] && result[0].text) : (result && result.text);
-        insertText(field, text);
-        setState(btn, "idle");
-        btn.title = "Voice dictation";
+        // Corrections almost always finish loading (a small JSON fetch)
+        // long before a real recording/transcription cycle does, but wait
+        // on it explicitly rather than racing it.
+        return correctionsReady.then(function () {
+          insertText(field, text);
+          setState(btn, "idle");
+          btn.title = "Voice dictation";
+        });
       }).catch(function (err) {
         console.error("Voice scribe transcription failed:", err);
         setState(btn, "error");

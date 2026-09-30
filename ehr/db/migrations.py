@@ -1409,6 +1409,88 @@ def migration_053_seed_services(conn):
         """), {"code": code, "name": name, "category": category, "cpt_code": cpt_code,
                 "dt_id": test_ids.get(test_code), "fee": fee, "order": i * 10})
 
+def migration_054_seed_voice_scribe_corrections(conn):
+    """Voice Scribe vocabulary correction table (user request: "how do we
+    train the scribe to learn how to spell ocular/vision/optometric
+    words"). `voice_scribe_corrections` itself needs no CREATE TABLE here --
+    an ordinary new SQLAlchemy model, created for free by
+    Base.metadata.create_all() (see VoiceScribeCorrection in
+    ehr/models/database.py). This migration only seeds an initial curated
+    list of common Whisper mis-transcriptions of ocular/optometric terms
+    (moved here from what was originally a hardcoded table in
+    voice_scribe.js, so it's admin-editable via
+    /admin/voice-scribe/corrections instead of requiring a code change).
+    Idempotent via a phrase-existence check per row, same shape as
+    migration_053."""
+    if not _table_exists(conn, "voice_scribe_corrections"):
+        return
+    existing = {r[0] for r in conn.execute(text("SELECT phrase FROM voice_scribe_corrections")).fetchall()}
+    corrections = [
+        ("fun dust", "fundus"), ("fun does", "fundus"), ("fundas", "fundus"),
+        ("back yula", "macula"), ("mac euler", "macula"), ("mac yula", "macula"),
+        ("vitrious", "vitreous"), ("vitreus", "vitreous"), ("vitrous", "vitreous"),
+        ("skelera", "sclera"), ("sklera", "sclera"),
+        ("cornia", "cornea"), ("kornea", "cornea"),
+        ("irus", "iris"),
+        ("conjunctiva's", "conjunctiva"),
+        ("lims bus", "limbus"), ("lymbus", "limbus"),
+        ("trabecular mesh work", "trabecular meshwork"),
+        ("canal of schlem", "canal of Schlemm"), ("canal of shlem", "canal of Schlemm"),
+        ("hyper opia", "hyperopia"), ("hyperopia's", "hyperopia"),
+        ("my opia", "myopia"),
+        ("presby opia", "presbyopia"), ("presbi opia", "presbyopia"),
+        ("a stigmatism", "astigmatism"), ("astigmatisms", "astigmatism"),
+        ("ambly opia", "amblyopia"), ("am blee opia", "amblyopia"),
+        ("strabismus's", "strabismus"),
+        ("eso tropia", "esotropia"), ("es o tropia", "esotropia"),
+        ("exo tropia", "exotropia"), ("ex o tropia", "exotropia"),
+        ("hyper tropia", "hypertropia"),
+        ("diplo pia", "diplopia"), ("dip lopia", "diplopia"),
+        ("nystag mus", "nystagmus"), ("nista gmus", "nystagmus"),
+        ("blepharitis's", "blepharitis"), ("bluff eritis", "blepharitis"),
+        ("conjunctivitis's", "conjunctivitis"),
+        ("kerato conus", "keratoconus"), ("kera toe conus", "keratoconus"),
+        ("terigium", "pterygium"), ("ptery gium", "pterygium"), ("ta rigium", "pterygium"),
+        ("ping weckula", "pinguecula"), ("pin gwek yula", "pinguecula"),
+        ("kuh lay zeon", "chalazion"), ("chala zion", "chalazion"),
+        ("hor de olum", "hordeolum"),
+        ("en tropion", "entropion"),
+        ("ek tropion", "ectropion"),
+        ("toe sis", "ptosis"), ("p tosis", "ptosis"),
+        ("dacryo cystitis", "dacryocystitis"),
+        ("epi fora", "epiphora"),
+        ("papil edema", "papilledema"), ("papila dema", "papilledema"),
+        ("you veitis", "uveitis"), ("u veitis", "uveitis"),
+        ("sklair itis", "scleritis"),
+        ("end off thalmitis", "endophthalmitis"),
+        ("gonio scopy", "gonioscopy"), ("gone eoscopy", "gonioscopy"),
+        ("tono metry", "tonometry"), ("tona metry", "tonometry"),
+        ("pachy metry", "pachymetry"), ("pack e metry", "pachymetry"),
+        ("kera to metry", "keratometry"),
+        ("for opter", "phoropter"), ("for optar", "phoropter"), ("fore optometer", "phoropter"),
+        ("snell in", "Snellen"), ("snelling", "Snellen"),
+        ("hum free", "Humphrey"), ("hum phrey", "Humphrey"),
+        ("sike low plejic", "cycloplegic"), ("psycho plegic", "cycloplegic"),
+        ("midriatic", "mydriatic"), ("my driatic", "mydriatic"),
+        ("dye opter", "diopter"), ("dy opter", "diopter"),
+        ("faco emulsification", "phacoemulsification"), ("facoe mulsification", "phacoemulsification"),
+        ("vi trectomy", "vitrectomy"),
+        ("trabekulectomy", "trabeculectomy"), ("trab eculectomy", "trabeculectomy"),
+        ("eye rid otomy", "iridotomy"), ("irido tomy", "iridotomy"),
+        ("lantanoprost", "latanoprost"), ("lata noprost", "latanoprost"),
+        ("bry monidine", "brimonidine"), ("bri monidine", "brimonidine"),
+        ("door zolamide", "dorzolamide"), ("dor zolamide", "dorzolamide"),
+        ("tropic a mide", "tropicamide"),
+        ("sike low sporine", "cyclosporine"), ("psycho sporine", "cyclosporine"),
+    ]
+    for phrase, correction in corrections:
+        if phrase in existing:
+            continue
+        conn.execute(text("""
+            INSERT INTO voice_scribe_corrections (phrase, correction, active, created_at, updated_at)
+            VALUES (:phrase, :correction, TRUE, :now, :now)
+        """), {"phrase": phrase, "correction": correction, "now": datetime.utcnow()})
+
 def migration_038_patient_self_registered_at(conn):
     """Patient Self-Registration (BUILD_BACKLOG.md 5a follow-up): flags a
     chart created by the patient themselves via /portal/register, so staff
@@ -1659,6 +1741,7 @@ POST_CREATE_ALL_MIGRATIONS = [
     ("051_followup_recommendation_tracking", migration_051_followup_recommendation_tracking),
     ("052_followup_per_visit", migration_052_followup_per_visit),
     ("053_seed_services", migration_053_seed_services),
+    ("054_seed_voice_scribe_corrections", migration_054_seed_voice_scribe_corrections),
 ]
 
 # ---------------------------------------------------------------------------
