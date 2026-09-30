@@ -3140,3 +3140,118 @@ def test_todays_services_and_materials_ledger_manual_and_auto_charges(logged_in_
     ledger_card = page.locator(".card", has_text="Balances & Credits")
     assert "$200.00" in ledger_card.inner_text()  # 125 + 75
     assert "diagnostic order completed" in ledger_card.inner_text().lower()
+
+
+def _mock_voice_scribe_apis(page):
+    """Stubs the browser APIs ehr/static/js/voice_scribe.js depends on
+    (microphone capture, MediaRecorder, audio decoding) so a test can drive
+    the full record -> stop -> transcribe flow without a real microphone or
+    downloading the real ~250MB Whisper model. Must run via add_init_script
+    (before any page script executes), not page.evaluate after load."""
+    page.add_init_script("""
+        navigator.mediaDevices = navigator.mediaDevices || {};
+        navigator.mediaDevices.getUserMedia = function () {
+            return Promise.resolve({ getTracks: function () { return [{ stop: function () {} }]; } });
+        };
+        window.MediaRecorder = function () {
+            this.state = 'inactive';
+            this.ondataavailable = null;
+            this.onstop = null;
+        };
+        window.MediaRecorder.prototype.start = function () { this.state = 'recording'; };
+        window.MediaRecorder.prototype.stop = function () {
+            if (this.ondataavailable) this.ondataavailable({ data: new Blob(['x'], { type: 'audio/webm' }) });
+            this.state = 'inactive';
+            if (this.onstop) this.onstop();
+        };
+        function FakeAudioContext() {
+            return {
+                decodeAudioData: function () {
+                    return Promise.resolve({ numberOfChannels: 1, getChannelData: function () { return new Float32Array(1600); } });
+                },
+                close: function () {},
+            };
+        }
+        window.AudioContext = FakeAudioContext;
+        window.webkitAudioContext = FakeAudioContext;
+    """)
+
+
+def test_voice_scribe_buttons_render_and_transcribe_into_target_field(logged_in_page, live_server):
+    """Voice Scribe (user request): a click-to-toggle mic button next to
+    every free-text exam field and both post-signing addenda, dictating
+    entirely in-browser (ehr/static/js/voice_scribe.js + the vendored
+    @huggingface/transformers WASM Whisper pipeline) -- no audio is ever
+    sent to a server. Real speech-to-text accuracy can't be meaningfully
+    verified by an automated test (that's doctor QA); this instead verifies
+    the parts that are this test suite's job: every field gets a button
+    wired to the right target, a denied microphone shows a clear error
+    state, and a successful transcription both lands in the target field
+    AND fires real input/change events -- proven by the chief-complaint
+    triage composer (ehr.templates.exams.form.html's refresh()) reacting to
+    dictated text exactly as it would to typed text, since setting
+    .value directly (without dispatching events) would silently fail to
+    trigger it, a bug class this codebase has hit twice before for
+    unrelated fields (see follow_up_unit's docstring)."""
+    page = logged_in_page
+    page.goto(live_server + "/exams/new")
+
+    for field_id in ("chief_complaint", "ros_notes", "assessment", "plan",
+                      "sx_steroid_taper_schedule", "ant_clinical_notes", "follow_up_reason"):
+        assert page.locator(f'.voice-scribe-btn[data-target="{field_id}"]').count() == 1, field_id
+
+    # Microphone permission denied -- clear error state, no crash.
+    page.add_init_script("""
+        navigator.mediaDevices = navigator.mediaDevices || {};
+        navigator.mediaDevices.getUserMedia = function () { return Promise.reject(new Error('denied')); };
+    """)
+    page.goto(live_server + "/exams/new")
+    mic_btn = page.locator('.voice-scribe-btn[data-target="chief_complaint"]')
+    mic_btn.click()
+    page.wait_for_timeout(200)
+    assert "vs-error" in (mic_btn.get_attribute("class") or "")
+
+    # Full happy path: mock the mic/recorder/audio-decode browser APIs, and
+    # intercept the vendored transformers.js module so the pipeline it
+    # exports returns a canned transcript instead of running a real model.
+    _mock_voice_scribe_apis(page)
+    page.route("**/static/js/vendor/transformers/transformers.web.min.js", lambda route: route.fulfill(
+        content_type="application/javascript",
+        body="""
+            export function pipeline(task, model, opts) {
+                if (opts && opts.progress_callback) opts.progress_callback({status: 'progress', progress: 100});
+                return Promise.resolve(function () {
+                    return Promise.resolve({ text: 'sudden vision loss, severe pain, red eye' });
+                });
+            }
+            export const env = {};
+        """))
+    page.goto(live_server + "/exams/new")
+    exam_type = page.locator("#exam_type_confirmed")
+    assert exam_type.input_value() == ""
+
+    chief_complaint_mic = page.locator('.voice-scribe-btn[data-target="chief_complaint"]')
+    chief_complaint_mic.click()
+    page.wait_for_timeout(200)
+    assert "vs-recording" in (chief_complaint_mic.get_attribute("class") or "")
+    chief_complaint_mic.click()  # stop -> triggers the mocked transcription
+    page.wait_for_function(
+        "document.querySelector('.voice-scribe-btn[data-target=\"chief_complaint\"]').classList.contains('vs-idle')",
+        timeout=10000)
+
+    assert page.locator("#chief_complaint").input_value() == "sudden vision loss, severe pain, red eye"
+    # Proves real input/change events fired (not just .value = ...): the
+    # existing chief-complaint triage composer reacted to the dictated text.
+    assert exam_type.input_value() == "Emergent/Urgent Medical"
+
+    # Post-signing addendum on a signed exam also gets a working mic button.
+    page.unroute("**/static/js/vendor/transformers/transformers.web.min.js")
+    page.select_option('select[name="patient_id"]', index=0)
+    page.select_option('select[name="provider_id"]', index=0)
+    page.locator('form[action="/exams/new"] button[type="submit"]', has_text="Save Exam").click()
+    page.wait_for_url(re.compile(r"/exams/\d+$"))
+    exam_url = page.url
+    page.on("dialog", lambda d: d.accept())
+    page.locator("form[action$='/sign'] button[type=\"submit\"]").click()
+    page.wait_for_load_state("networkidle")
+    assert page.locator('.voice-scribe-btn[data-target="note"]').count() == 1

@@ -135,9 +135,13 @@
   {% if rx.signed_at %}
   <form method="post" action="/prescriptions/{{ rx.id }}/addenda" style="display:flex;gap:0.5rem">
     <input type="text" name="note" placeholder="Add a dated addendum..." style="flex:1" required>
+    <button type="button" class="voice-scribe-btn" data-target="note" title="Voice dictation" aria-label="Voice dictation" style="margin-top:0">&#127908;</button>
     <button type="submit" class="btn btn-sm btn-secondary">Add Addendum</button>
   </form>
   {% endif %}
 </div>
 {% endif %}
+{% endblock %}
+{% block extra_js %}
+<script src="/static/js/voice_scribe.js"></script>
 {% endblock %}
