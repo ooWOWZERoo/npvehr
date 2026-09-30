@@ -102,7 +102,7 @@
         </div>
 
         <div class="sidebar-section-heading">Administration</div>
-        <div class="sidebar-group{% if request.url.path.startswith('/admin/scheduling') %} open{% endif %}">
+        <div class="sidebar-group{% if request.url.path.startswith('/admin/scheduling') or request.url.path.startswith('/admin/billing') %} open{% endif %}">
           <button type="button" class="sidebar-expand-toggle" data-group>
             <span class="sidebar-icon">&#9881;&#65039;</span><span class="sidebar-label">Administration</span><span class="sidebar-caret">&#9656;</span>
           </button>
@@ -114,6 +114,8 @@
             <a href="/admin/scheduling/availability">Availability</a>
             <a href="/admin/scheduling/holidays">Holidays / Closures</a>
             <a href="/admin/scheduling/audit">Audit Log</a>
+            <div class="sidebar-subnav-heading">Billing</div>
+            <a href="/admin/billing/services">Service &amp; Fee Catalog</a>
             {% set current_user = request.state.user %}
             {% if current_user and current_user.role in ('system_administrator', 'read_only_auditor') %}
             <div class="sidebar-subnav-heading">Authentication</div>

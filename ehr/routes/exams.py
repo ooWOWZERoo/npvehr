@@ -17,6 +17,7 @@ from ehr.services import ncci_edits
 from ehr.services import scheduling as sched
 from ehr.services import authz
 from ehr.services import billing_override
+from ehr.services import billing_ledger
 
 router = APIRouter(prefix="/exams", tags=["exams"])
 templates = Jinja2Templates(directory="ehr/templates")
@@ -319,6 +320,7 @@ async def create_exam(request: Request, db: Session = Depends(get_db)):
         if problem:
             db.add(ProblemAddendum(problem_id=problem.id, exam_id=exam.id,
                 author_user_id=request.state.user.id, note=note))
+    billing_ledger.add_exam_charges(db, exam, request.state.user.id)
     db.commit()
     return RedirectResponse(f"/exams/{exam.id}", status_code=303)
 

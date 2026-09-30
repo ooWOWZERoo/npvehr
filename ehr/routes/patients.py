@@ -7,10 +7,11 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from ehr.models.database import (get_db, Patient, Appointment, EyeExam, Prescription, AppointmentStatus,
     PatientDocument, Problem, ProblemAddendum, WaitlistEntry, AppointmentTypeVersion, AppointmentType,
-    PatientInsurancePlan, DiagnosticOrder, DiagnosticTest, EyeExamFollowUp)
+    PatientInsurancePlan, DiagnosticOrder, DiagnosticTest, EyeExamFollowUp, Service, VisitCharge)
 from ehr.services import diagnostic_orders as diag_orders
 from ehr.services import lookback_alerts
 from ehr.services import followup_recommendations
+from ehr.services import billing_ledger
 from ehr.services import authz
 from ehr.services import scheduling as sched
 from ehr.services import field_audit
@@ -327,6 +328,19 @@ def patient_detail(request: Request, patient_id: int, db: Session = Depends(get_
                              if a["type"] != "outstanding_order"],
         "pending_followups": followup_recommendations.get_pending_followups(db, p.id),
     })
+    # Service & Fee Catalog, Phase 2 (user request): a live running total of
+    # today's services/materials, replacing the old "Pending Exam: N/A"
+    # placeholder. today_appointment is None (and the manual-add form hidden)
+    # when the patient has no non-cancelled appointment scheduled today --
+    # there's nothing to attach a charge to yet.
+    todays_total, todays_line_items = billing_ledger.get_todays_charges(db, p.id)
+    ctx.update({
+        "todays_charges_total": todays_total,
+        "todays_line_items": todays_line_items,
+        "today_appointment": billing_ledger.todays_appointment_for_manual_add(db, p.id),
+        "active_services": db.query(Service).filter(Service.active == True)  # noqa: E712
+            .order_by(Service.category, Service.display_order).all(),
+    })
     return templates.TemplateResponse(request, "patients/overview.html", ctx)
 
 @router.get("/{patient_id}/photo")
@@ -548,6 +562,7 @@ def complete_diagnostic_order(request: Request, patient_id: int, order_id: int,
             completed_by_user_id=request.state.user.id, result_summary=result_summary or None)
     except ValueError as e:
         return HTMLResponse(str(e), status_code=400)
+    billing_ledger.add_diagnostic_order_completion_charge(db, order, patient_id, request.state.user.id)
     db.commit()
     return RedirectResponse(f"/patients/{patient_id}", status_code=303)
 
@@ -601,6 +616,44 @@ def quick_order_diagnostic_test(request: Request, patient_id: int, diagnostic_te
     if not test: return HTMLResponse("Unknown diagnostic test.", status_code=400)
     db.add(DiagnosticOrder(patient_id=patient_id, diagnostic_test_id=test.id,
         ordered_by_user_id=request.state.user.id))
+    db.commit()
+    return RedirectResponse(f"/patients/{patient_id}", status_code=303)
+
+
+@router.post("/{patient_id}/charges/add", dependencies=[Depends(require_role(*PATIENT_EDIT))])
+def add_visit_charge(request: Request, patient_id: int, service_id: int = Form(...),
+    quantity: int = Form(1), csrf_token: str = Form(""), db: Session = Depends(get_db)):
+    """Service & Fee Catalog, Phase 2 (user request): a manual "+ Add
+    Service" line for anything not auto-detected (materials, walk-in
+    add-ons) -- attaches to the patient's today's appointment
+    (ehr.services.billing_ledger.todays_appointment_for_manual_add), the
+    only one this app can attribute a same-day charge to. unit_fee is a
+    snapshot of the service's current fee, not a live reference, so a
+    later catalog price change never rewrites this visit's total."""
+    csrf.verify_or_403(request.state.csrf_token, csrf_token)
+    p = _get_patient_or_404(db, patient_id, request.state.user)
+    if not p: return HTMLResponse("Not found", status_code=404)
+    appt = billing_ledger.todays_appointment_for_manual_add(db, patient_id)
+    if not appt:
+        return HTMLResponse("No appointment scheduled today for this patient -- nothing to attach a charge to.",
+            status_code=400)
+    service = db.query(Service).filter(Service.id == service_id, Service.active == True).first()  # noqa: E712
+    if not service:
+        return HTMLResponse("Unknown or inactive service.", status_code=400)
+    db.add(VisitCharge(appointment_id=appt.id, service_id=service.id, quantity=max(1, quantity),
+        unit_fee=service.fee, source="manual", added_by_user_id=request.state.user.id))
+    db.commit()
+    return RedirectResponse(f"/patients/{patient_id}", status_code=303)
+
+
+@router.post("/{patient_id}/charges/{charge_id}/void", dependencies=[Depends(require_role(*PATIENT_EDIT))])
+def void_visit_charge(request: Request, patient_id: int, charge_id: int,
+    csrf_token: str = Form(""), db: Session = Depends(get_db)):
+    csrf.verify_or_403(request.state.csrf_token, csrf_token)
+    charge = (db.query(VisitCharge).join(Appointment, Appointment.id == VisitCharge.appointment_id)
+        .filter(VisitCharge.id == charge_id, Appointment.patient_id == patient_id).first())
+    if not charge: return HTMLResponse("Not found", status_code=404)
+    charge.voided = True
     db.commit()
     return RedirectResponse(f"/patients/{patient_id}", status_code=303)
 

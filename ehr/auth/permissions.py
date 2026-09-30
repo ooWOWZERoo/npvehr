@@ -83,6 +83,12 @@ ADMIN_SCHEDULING_EDIT = {SYSTEM_ADMINISTRATOR, PRACTICE_ADMINISTRATOR}
 STORE_OPS_VIEW = {SYSTEM_ADMINISTRATOR, PRACTICE_ADMINISTRATOR, BILLING_AND_CLAIMS, READ_ONLY_AUDITOR}
 STORE_OPS_EDIT = {SYSTEM_ADMINISTRATOR, PRACTICE_ADMINISTRATOR, BILLING_AND_CLAIMS}
 
+# Service/fee-catalog management (staff-facing pricing, not a real billing
+# system) -- same membership as STORE_OPS_EDIT, since setting the practice's
+# own prices is naturally a Billing & Claims responsibility, kept as its own
+# constant since it's a distinct capability from store-ops workflows.
+SERVICE_CATALOG_EDIT = {SYSTEM_ADMINISTRATOR, PRACTICE_ADMINISTRATOR, BILLING_AND_CLAIMS}
+
 # All 5 Claim Management sections are currently GET-only placeholders/views in
 # this codebase (no create/edit routes exist yet), so only a VIEW group is needed.
 CLAIMS_VIEW = set(STORE_OPS_VIEW)

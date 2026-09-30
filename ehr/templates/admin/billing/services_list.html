@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Service &amp; Fee Catalog &mdash; Admin{% endblock %}
+{% block content %}
+<div class="page-header"><h1>Billing Administration</h1></div>
+<div class="card form-card"><h3>Add Service</h3>
+  <form method="post" action="/admin/billing/services/new">
+    <div class="form-row cols-4">
+      <div class="form-group"><label>Code* <input name="code" required></label></div>
+      <div class="form-group"><label>Name* <input name="name" required></label></div>
+      <div class="form-group"><label>Category* <input name="category" required placeholder="e.g. Medical Testing"></label></div>
+      <div class="form-group"><label>CPT Code <input name="cpt_code" placeholder="optional"></label></div>
+    </div>
+    <div class="form-row cols-4">
+      <div class="form-group"><label>Fee ($)* <input name="fee" type="number" step="0.01" min="0" required></label></div>
+    </div>
+    <button type="submit" class="btn btn-primary">Add Service</button>
+  </form>
+</div>
+<div class="card" style="margin-top:1rem">
+  <table><thead><tr><th>Category</th><th>Code</th><th>CPT</th><th>Name</th><th>Fee</th><th>Status</th><th></th></tr></thead><tbody>
+  {% set ns = namespace(last_category=None) %}
+  {% for s in services %}
+    {% if s.category != ns.last_category %}
+    <tr><td colspan="7" style="background:#f1f5f9;font-weight:600;padding-top:0.6rem">{{ s.category }}</td></tr>
+    {% set ns.last_category = s.category %}
+    {% endif %}
+    <tr>
+      <td></td>
+      <td>{{ s.code }}</td>
+      <td>{{ s.cpt_code or '—' }}</td>
+      <td>{{ s.name }}</td>
+      <td>${{ '%.2f'|format(s.fee) }}</td>
+      <td><span class="badge {{ 'badge-completed' if s.active else 'badge-cancelled' }}">{{ 'Active' if s.active else 'Inactive' }}</span></td>
+      <td style="display:flex;gap:0.5rem">
+        <a href="/admin/billing/services/{{ s.id }}/edit" class="btn btn-sm btn-secondary">Edit</a>
+        <form method="post" action="/admin/billing/services/{{ s.id }}/toggle-active" onsubmit="return confirm('{{ 'Deactivate' if s.active else 'Reactivate' }} {{ s.name }}?');">
+          <button type="submit" class="btn btn-sm btn-secondary">{{ 'Deactivate' if s.active else 'Reactivate' }}</button>
+        </form>
+      </td>
+    </tr>
+  {% else %}<tr><td colspan="7" style="text-align:center;color:#64748b">No services found.</td></tr>
+  {% endfor %}
+  </tbody></table>
+  <p style="font-size:0.8rem;color:#64748b;margin-top:0.75rem">
+    This is the practice's own fee schedule for staff reference -- this app has no billing/claims infrastructure,
+    and nothing here is ever transmitted, submitted, or billed to a payer. Deactivating a service does not remove
+    it from any past record; it only hides it from being added to a new visit.
+  </p>
+</div>
+{% endblock %}

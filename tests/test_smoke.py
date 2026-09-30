@@ -3017,3 +3017,126 @@ def test_billing_rule_blocks_non_override_role_and_logs_override(logged_in_page,
     admin_page.fill("#followup_billing_override_reason", "Documented clinical justification")
     admin_page.locator('form[action="/exams/new"] button[type="submit"]', has_text="Save Exam").click()
     admin_page.wait_for_url(re.compile(r"/exams/\d+"))
+
+
+def test_service_fee_catalog_create_edit_and_toggle_active(logged_in_page, live_server):
+    """Service & Fee Catalog (user request: "the ability to create a service
+    with associated cpt code"), Phase 1 of a larger pricing/live-charge plan.
+    Covers: the seeded practice fee schedule renders grouped by category;
+    creating a new service; editing its fee (confirmed logged to the
+    existing Field Change Audit Log, same mechanism as Provider edits); and
+    toggling it inactive/active. Staff-facing pricing only -- this app has
+    no billing/claims infrastructure and nothing here is ever billed or
+    transmitted."""
+    page = logged_in_page
+    page.goto(live_server + "/admin/billing/services")
+    assert "Medical Testing" in page.content()
+    assert "92004" in page.content()
+
+    page.fill('input[name="code"]', "REGTEST_SVC")
+    page.fill('input[name="name"]', "Regression Test Service")
+    page.fill('input[name="category"]', "Regression Testing")
+    page.fill('input[name="cpt_code"]', "99999")
+    page.fill('input[name="fee"]', "42.50")
+    page.locator('button[type="submit"]', has_text="Add Service").click()
+    page.wait_for_load_state("networkidle")
+    row = page.locator("tr", has_text="Regression Test Service")
+    assert row.count() == 1
+    assert "$42.50" in row.inner_text()
+
+    row.locator("a", has_text="Edit").click()
+    page.wait_for_load_state("networkidle")
+    assert page.locator('input[name="fee"]').input_value() == "42.50"
+    page.fill('input[name="fee"]', "55.00")
+    page.locator('button[type="submit"]', has_text="Save Changes").click()
+    page.wait_for_url(re.compile(r"/admin/billing/services$"))
+    row = page.locator("tr", has_text="Regression Test Service")
+    assert "$55.00" in row.inner_text()
+
+    page.goto(live_server + "/admin/field-audit")
+    audit_row = page.locator("tr", has_text="services").filter(has_text="fee")
+    assert audit_row.count() >= 1
+    assert "42.5" in audit_row.first.inner_text() and "55.0" in audit_row.first.inner_text()
+
+    page.goto(live_server + "/admin/billing/services")
+    row = page.locator("tr", has_text="Regression Test Service")
+    page.on("dialog", lambda d: d.accept())
+    row.locator("button", has_text="Deactivate").click()
+    page.wait_for_load_state("networkidle")
+    row = page.locator("tr", has_text="Regression Test Service")
+    assert "INACTIVE" in row.inner_text().upper()
+    row.locator("button", has_text="Reactivate").click()
+    page.wait_for_load_state("networkidle")
+    row = page.locator("tr", has_text="Regression Test Service")
+    assert "ACTIVE" in row.inner_text().upper() and "INACTIVE" not in row.inner_text().upper()
+
+
+def test_todays_services_and_materials_ledger_manual_and_auto_charges(logged_in_page, live_server):
+    """Service & Fee Catalog, Phases 2-3 (user request): the Patient
+    Overview's old "Pending Exam: N/A" placeholder is now a real live
+    running total (ehr.services.billing_ledger). Covers: no ledger card at
+    all before the patient has a visit today; a Scheduled Test added at
+    booking auto-charges its linked Service (Phase 3 trigger #1); a manual
+    "+ Add Service" line and its removal (Phase 2); and completing a
+    DiagnosticOrder auto-charges its linked Service, attaching to today's
+    appointment via the fallback path since the order itself isn't tied to
+    a specific scheduled visit (Phase 3 trigger #2). Uses a same-day
+    appointment -- confirmed in code that booking has no business-hours
+    gate (only conflict/closure checks), so any free time today works
+    regardless of weekday."""
+    page = logged_in_page
+    page.goto(live_server + "/patients/new")
+    page.fill('input[name="first_name"]', "Ledger")
+    page.fill('input[name="last_name"]', "Testpatient")
+    page.locator('button[type="submit"]', has_text="Create Patient").click()
+    page.wait_for_url(re.compile(r"/patients/\d+$"))
+    patient_id = page.url.rstrip("/").split("/")[-1]
+    assert "No visit scheduled today" in page.content()
+
+    # Book today's appointment with a Scheduled Test that has a linked
+    # Service (VF -> CPT 92083, seeded at $125) -- auto-charges on booking.
+    page.goto(live_server + f"/appointments/new?patient_id={patient_id}")
+    page.select_option('select[name="provider_id"]', index=1)
+    today_time = datetime.utcnow().strftime("%Y-%m-%dT%H:%M")
+    page.fill("#scheduled_at", today_time)
+    _test_chip_checkbox(page, "VF").check()
+    page.locator('button[type="submit"]', has_text="Schedule Appointment").click()
+    page.wait_for_url(re.compile(r"/appointments/\d+$"))
+
+    page.goto(live_server + f"/patients/{patient_id}")
+    ledger_card = page.locator(".card", has_text="Balances & Credits")
+    assert "$125.00" in ledger_card.inner_text()
+    assert "scheduled test" in ledger_card.inner_text().lower()
+
+    # Manual add: Optos Retinal Imaging Screening (Materials, $42).
+    option = page.locator('select[name="service_id"] option', has_text="Retinal Imaging Screening")
+    service_id = option.get_attribute("value")
+    page.select_option('select[name="service_id"]', service_id)
+    page.locator('button[type="submit"]', has_text="+ Add Service").click()
+    page.wait_for_load_state("networkidle")
+    ledger_card = page.locator(".card", has_text="Balances & Credits")
+    assert "$167.00" in ledger_card.inner_text()  # 125 + 42
+
+    # Remove the manual charge -- back down to just the scheduled-test charge.
+    page.locator("tr", has_text="Retinal Imaging Screening").locator("button", has_text="Remove").click()
+    page.wait_for_load_state("networkidle")
+    ledger_card = page.locator(".card", has_text="Balances & Credits")
+    assert "$125.00" in ledger_card.inner_text()
+    assert ledger_card.locator("tr", has_text="Retinal Imaging Screening").count() == 0
+
+    # Completing a DiagnosticOrder (OCT, Optic Nerve -> CPT 92133, $75)
+    # auto-charges too, attaching to today's appointment via the fallback
+    # path (the order has no scheduled_appointment_id of its own).
+    page.goto(live_server + f"/exams/new?patient_id={patient_id}")
+    page.select_option('select[name="provider_id"]', index=1)
+    page.locator('.focus-toggle[data-target="focus-glaucoma"]').check()
+    page.locator('input[name="gt_diagnostic_orders"][value="OCT_ONH"]').check()
+    page.locator('form[action="/exams/new"] button[type="submit"]', has_text="Save Exam").click()
+    page.wait_for_url(re.compile(r"/exams/\d+"))
+
+    page.goto(live_server + f"/patients/{patient_id}")
+    page.locator("tr", has_text="OCT, Optic Nerve").locator("button", has_text="Mark Complete").click()
+    page.wait_for_load_state("networkidle")
+    ledger_card = page.locator(".card", has_text="Balances & Credits")
+    assert "$200.00" in ledger_card.inner_text()  # 125 + 75
+    assert "diagnostic order completed" in ledger_card.inner_text().lower()

@@ -19,13 +19,55 @@
       </div>
     </div>
     <div class="card" style="box-shadow:none;border:1px solid #e2e8f0">
-      <div class="card-title">Pending Exam</div>
-      <div class="card-value" style="font-size:1rem;color:#64748b;font-style:italic">N/A &mdash; pricing not implemented</div>
+      <div class="card-title">Today's Services &amp; Materials</div>
+      {% if today_appointment %}
+      <div class="card-value">${{ '%.2f'|format(todays_charges_total) }}</div>
+      {% else %}
+      <div class="card-value" style="font-size:1rem;color:#64748b;font-style:italic">No visit scheduled today</div>
+      {% endif %}
     </div>
   </div>
   <p class="placeholder-note">Patient Balance/Credit come from the manually-entered balance snapshot (see Balance Due
-    on the Edit Patient form) -- there is no billing/ledger module yet. Pending Exam has no backing data at all: no
-    exam-pricing/estimate system exists in this app.</p>
+    on the Edit Patient form) -- there is no billing/ledger module yet. Today's Services &amp; Materials is a staff
+    reference estimate only (ehr.services.billing_ledger) -- never a submitted claim or an actual bill.</p>
+
+  {% if today_appointment %}
+  <div style="margin-top:1rem;border-top:1px solid #e2e8f0;padding-top:1rem">
+    {% if todays_line_items %}
+    <table class="exam-table">
+      <tr><th>Service</th><th>Fee</th><th>Source</th><th></th></tr>
+      {% for c in todays_line_items %}
+      <tr>
+        <td>{{ c.service.name }}{% if c.quantity and c.quantity != 1 %} &times;{{ c.quantity }}{% endif %}</td>
+        <td>${{ '%.2f'|format(c.unit_fee * c.quantity) }}</td>
+        <td>{{ c.source.replace('_', ' ') }}</td>
+        <td>
+          <form method="post" action="/patients/{{ patient.id }}/charges/{{ c.id }}/void" style="display:inline">
+            <button type="submit" class="btn btn-sm btn-secondary">Remove</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+    {% endif %}
+    <form method="post" action="/patients/{{ patient.id }}/charges/add"
+      style="display:flex;gap:0.5rem;align-items:flex-end;margin-top:0.75rem">
+      <div class="form-group" style="margin-bottom:0;flex:1">
+        <label>Add Service
+          <select name="service_id" required>
+            {% for s in active_services %}
+            <option value="{{ s.id }}">{{ s.category }} &mdash; {{ s.name }} (${{ '%.2f'|format(s.fee) }})</option>
+            {% endfor %}
+          </select>
+        </label>
+      </div>
+      <div class="form-group" style="margin-bottom:0;width:5rem">
+        <label>Qty <input type="number" name="quantity" value="1" min="1"></label>
+      </div>
+      <button type="submit" class="btn btn-secondary">+ Add Service</button>
+    </form>
+  </div>
+  {% endif %}
 </div>
 
 {% if pending_orders %}
