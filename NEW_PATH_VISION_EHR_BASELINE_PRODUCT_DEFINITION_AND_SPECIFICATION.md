@@ -4563,3 +4563,41 @@ No live running charge total anywhere yet -- the Overview's "Pending Exam" place
 | New UI | `/admin/billing/services` (list/create/edit/toggle-active), new "Billing" sidebar nav group. |
 | Updated | `ehr/models/database.py` (`Service`), `ehr/db/migrations.py` (migration 053 + down-migration), `ehr/auth/permissions.py` (`SERVICE_CATALOG_EDIT`), `ehr/routes/admin_billing.py` (new), `ehr/templates/admin/billing/*.html` (new), `ehr/templates/base.html` (nav), `ehr/app.py` (router registration). One new Playwright test. |
 | Explicitly not done | No live running-charge total yet (Phase 2). No automatic charge creation (Phase 3). No external fee-benchmark data or "recommended fee" automation. No real inventory tracking for materials. None of this bears on the four go-live prerequisites (§38.6). |
+
+## 91. Live "Today's Services & Materials" Charge Estimate (v2.64, Phases 2-3 of 3)
+
+### 91.1 Origin
+
+Direct continuation of §90 (user request: "continue with phase 2 and phase 3 before doing a final commit, PR and merge"). Phase 2 replaces the Patient Overview's long-standing "Pending Exam: N/A" placeholder with a real, live running total as services are added to a visit; Phase 3 wires that ledger into the three points in the existing codebase that already represent "a test/service was performed" -- Scheduled Tests, diagnostic-order completion, and exam save -- so the total accumulates automatically, not just from manual entry.
+
+### 91.2 What changed
+
+**New `VisitCharge` model** (`ehr/models/database.py`) -- one row per service added to a specific appointment. `unit_fee` snapshots `Service.fee` at add-time so a later catalog price change never rewrites a historical visit's total; `voided` (not a delete) removes a charge, matching `AppointmentTest.status`'s cancel-not-delete convention; `source` records how it was created (`manual`, `scheduled_test`, `diagnostic_order_completed`, `em_code`). No migration entry needed -- an ordinary new SQLAlchemy model, created by `Base.metadata.create_all()`, same as `EyeExamFollowUp`.
+
+**New `ehr/services/billing_ledger.py`**: `get_todays_charges` (sums non-voided charges on the patient's today's non-cancelled appointment(s)), `todays_appointment_for_manual_add` ("today" is scoped to the patient's own appointment(s), matching this app's naive/UTC-implicit `datetime.utcnow()` convention throughout -- picks the earliest if more than one), and the three Phase 3 auto-charge helpers below.
+
+**Patient Overview** (`ehr/templates/patients/overview.html`, `ehr/routes/patients.py`'s `patient_detail`): the "Pending Exam" tile is now "Today's Services & Materials," showing the real running total (or "No visit scheduled today" when the patient has none) -- explicitly labeled a staff reference estimate, never a submitted claim or an actual bill. When a visit exists today, a line-item table (service, fee, source, a per-line Remove/void action) and a manual "+ Add Service" form (any active `Service`, with quantity) render below it. Two new routes: `POST /{patient_id}/charges/add` and `POST /{patient_id}/charges/{charge_id}/void`, same `PATIENT_EDIT` permission as every other patient-workspace mutation on this page.
+
+**Phase 3 auto-charge wiring**, each a no-op when the relevant test/CPT has no linked, active `Service` (this catalog's narrow, curated-lookup posture -- not every test has a priced service yet) or there's no visit to attach to:
+1. `_apply_tests` (`ehr/routes/appointments.py`) -- adding a Scheduled Test at booking/edit auto-adds a charge (`source='scheduled_test'`) for its linked `Service` (via `Service.diagnostic_test_id`); removing one voids the matching charge.
+2. `ehr.services.diagnostic_orders.transition()`'s caller (`complete_diagnostic_order` in `ehr/routes/patients.py`) -- completing an order auto-adds a charge (`source='diagnostic_order_completed'`), attaching to `order.scheduled_appointment_id` if set, else falling back to the patient's today's appointment (an order completed from the overview's "Mark Complete" button isn't tied to a specific scheduled visit). Kept out of `diagnostic_orders.transition()` itself, a deliberately dependency-light module with no session lookups.
+3. `create_exam` (`ehr/routes/exams.py`) -- saving an exam linked to an appointment (`exam.appointment_id`) auto-adds a charge for its exam-level CPT (92004/92014, the same relationship-driven code `ehr.services.cpt_mapper`'s billing preview already computes) and, separately, its confirmed E/M code (`em_code_confirmed`), each via `Service.cpt_code`. No-ops entirely for a walk-in exam with no linked appointment, same gate `cpt_mapper.compute_cpt_summary` already uses.
+
+### 91.3 Verified
+
+`python -m py_compile` on every touched file. New Playwright test `test_todays_services_and_materials_ledger_manual_and_auto_charges`: no ledger card before a visit exists today; booking with a Scheduled Test (VF, $125) auto-charges correctly; a manual add (Optos screening, $42) and its removal both work; completing a DiagnosticOrder (OCT_ONH, $75) auto-charges via the today's-appointment fallback -- running total confirmed at each step ($125 -> $167 -> $125 -> $200). Full suite run to confirm no regressions.
+
+### 91.4 Explicitly not done
+
+No charge creation from the return-visit/follow-up planning blocks or the appointment booking form's own exam-level CPT (only the exam-save path computes that, matching where `cpt_mapper` already does). No UI to edit a charge's quantity/fee after it's added (void + re-add covers correction for now). No external fee-benchmark data or "recommended fee" automation (unchanged from Phase 1). No real inventory/stock tracking for materials. None of this bears on the four go-live prerequisites (§38.6), and nothing here is ever transmitted, submitted, or billed to a payer -- staff-facing pricing estimate only, closing out the 3-phase Service & Fee Catalog plan (§0b).
+
+**Version 2.64 change log (relative to v2.63) — Live "Today's Services & Materials" Charge Estimate (Phases 2-3 of 3):**
+
+| Area | Change |
+| --- | --- |
+| New feature | The Patient Overview's "Pending Exam: N/A" placeholder is now a real, live running total of the day's services/materials, with manual add/remove and automatic charges from Scheduled Tests, diagnostic-order completion, and exam save. |
+| New schema | `visit_charges` table (`VisitCharge` model, no migration entry needed -- created by `create_all()`). |
+| New UI | Patient Overview's renamed "Today's Services & Materials" card: running total, line items, manual "+ Add Service" form, per-line Remove. |
+| New routes | `POST /patients/{id}/charges/add`, `POST /patients/{id}/charges/{charge_id}/void`. |
+| Updated | `ehr/models/database.py` (`VisitCharge`), `ehr/services/billing_ledger.py` (new), `ehr/routes/patients.py` (ledger context, add/void routes, order-completion wiring), `ehr/routes/appointments.py` (`_apply_tests` scheduled-test wiring), `ehr/routes/exams.py` (exam-save wiring), `ehr/templates/patients/overview.html`. One new Playwright test. |
+| Explicitly not done | No charge-quantity/fee editing after add. No external fee-benchmark data or "recommended fee" automation. No real inventory tracking for materials. None of this bears on the four go-live prerequisites (§38.6). This closes out the 3-phase Service & Fee Catalog plan. |

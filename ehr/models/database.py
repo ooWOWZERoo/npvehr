@@ -434,6 +434,39 @@ class Service(Base):
     diagnostic_test = relationship("DiagnosticTest")
 
 
+class VisitCharge(Base):
+    """Service & Fee Catalog, Phase 2 (user request: a live running total of
+    "today's services and materials" replacing the patient overview's old
+    "Pending Exam: N/A" placeholder). One row per service added to a
+    specific appointment/visit -- `unit_fee` is a snapshot of `Service.fee`
+    at add-time, so a later catalog price change never rewrites a
+    historical visit's total. Non-destructive removal (`voided`, not a
+    delete) matches `AppointmentTest.status`'s cancel-not-delete
+    convention. `source` records how the charge was created: 'manual'
+    (Phase 2, a staff-added line) today; 'scheduled_test'/
+    'diagnostic_order_completed'/'em_code' are reserved for Phase 3's
+    automatic wiring. Staff-facing estimate only -- this app has no
+    billing/claims infrastructure, and nothing here is ever transmitted,
+    submitted, or billed to a payer."""
+    __tablename__ = "visit_charges"
+    id = Column(Integer, primary_key=True, index=True)
+    appointment_id = Column(Integer, ForeignKey("appointments.id"), nullable=False)
+    service_id = Column(Integer, ForeignKey("services.id"), nullable=False)
+    quantity = Column(Integer, default=1)
+    unit_fee = Column(Float, nullable=False)
+    source = Column(String, default="manual")  # 'manual' | 'scheduled_test' | 'diagnostic_order_completed' | 'em_code'
+    added_at = Column(DateTime, default=datetime.utcnow)
+    added_by_user_id = Column(Integer)
+    voided = Column(Boolean, default=False)
+
+    appointment = relationship("Appointment")
+    service = relationship("Service")
+
+    __table_args__ = (
+        Index("ix_visit_charges_appointment", "appointment_id"),
+    )
+
+
 class AppointmentTest(Base):
     __tablename__ = "appointment_tests"
     id = Column(Integer, primary_key=True, index=True)

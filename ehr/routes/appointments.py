@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from ehr.models.database import (get_db, Appointment, Patient, Provider, AppointmentStatus, AppointmentType,
     AppointmentTypeVersion, DiagnosticTest, AppointmentTest, AppointmentAuditEvent, AppointmentResourceReservation,
     AppointmentResourceSelection, Resource, WaitlistEntry, User, AppointmentReminder, WaitlistNotification,
-    PracticeClosure, DiagnosticOrder, EyeExam, EyeExamFollowUp)
+    PracticeClosure, DiagnosticOrder, EyeExam, EyeExamFollowUp, Service, VisitCharge)
 from ehr.services import scheduling as sched
 from ehr.services import notifications as notify
 from ehr.services import cpt_mapper
@@ -260,12 +260,13 @@ def _sync_resource_reservations(db: Session, appt: Appointment, version: Appoint
                 resource_id=resource.id))
 
 
-def _apply_tests(db: Session, appt: Appointment, test_ids):
+def _apply_tests(db: Session, appt: Appointment, test_ids, user_id=None):
     existing_by_test = {t.diagnostic_test_id: t for t in appt.tests}
     wanted = set(test_ids or [])
     for test_id, row in list(existing_by_test.items()):
         if test_id not in wanted and row.status == "active":
             row.status = "cancelled"
+            _void_scheduled_test_charge(db, appt.id, test_id)
     for test_id in wanted:
         if test_id in existing_by_test:
             existing_by_test[test_id].status = "active"
@@ -275,6 +276,40 @@ def _apply_tests(db: Session, appt: Appointment, test_ids):
             continue
         db.add(AppointmentTest(appointment=appt, diagnostic_test_id=test_id,
                                 counts_toward_color_snapshot=dt.counts_toward_color))
+        _add_scheduled_test_charge(db, appt.id, test_id, user_id)
+
+
+def _add_scheduled_test_charge(db: Session, appointment_id: int, diagnostic_test_id: int, user_id):
+    """Service & Fee Catalog, Phase 3 (user request: the day's bill
+    accumulates automatically as tests/services are performed) -- a test
+    added to the Scheduled Tests checklist auto-adds its linked Service's
+    fee to that appointment's charge ledger, if one exists (several tests,
+    e.g. TearLab, have no linked Service yet, per this catalog's narrow,
+    curated-lookup posture -- silently no-ops for those rather than
+    guessing a price). unit_fee is a snapshot of the service's fee at
+    add-time (ehr.services.billing_ledger's own convention)."""
+    service = db.query(Service).filter(Service.diagnostic_test_id == diagnostic_test_id,
+        Service.active == True).first()  # noqa: E712
+    if not service:
+        return
+    already = (db.query(VisitCharge).filter(VisitCharge.appointment_id == appointment_id,
+        VisitCharge.service_id == service.id, VisitCharge.source == "scheduled_test",
+        VisitCharge.voided == False).first())  # noqa: E712
+    if already:
+        return
+    db.add(VisitCharge(appointment_id=appointment_id, service_id=service.id, unit_fee=service.fee,
+        source="scheduled_test", added_by_user_id=user_id))
+
+
+def _void_scheduled_test_charge(db: Session, appointment_id: int, diagnostic_test_id: int):
+    service = db.query(Service).filter(Service.diagnostic_test_id == diagnostic_test_id).first()
+    if not service:
+        return
+    charges = (db.query(VisitCharge).filter(VisitCharge.appointment_id == appointment_id,
+        VisitCharge.service_id == service.id, VisitCharge.source == "scheduled_test",
+        VisitCharge.voided == False).all())  # noqa: E712
+    for c in charges:
+        c.voided = True
 
 
 def _parse_resource_overrides(requirement_ids: list, resource_ids: list) -> dict:
@@ -754,7 +789,7 @@ def create_appointment(request: Request, patient_id: int = Form(...), provider_i
     except billing_override_mod.BillingRuleBlocked as e:
         db.rollback()
         return fail(str(e))
-    _apply_tests(db, appt, posted["test_ids"])
+    _apply_tests(db, appt, posted["test_ids"], user_id=user.id)
     _sync_resource_reservations(db, appt, version, resource_overrides=resource_overrides)
     # Return-visit recommendation carry-forward (user request): booking through
     # the "Book Follow-Up" link (or the workspace's generic "Schedule Appt"
@@ -905,7 +940,7 @@ def update_appointment(request: Request, appt_id: int, provider_id: int = Form(.
     except billing_override_mod.BillingRuleBlocked as e:
         db.rollback()
         return fail(str(e))
-    _apply_tests(db, a, new_test_ids)
+    _apply_tests(db, a, new_test_ids, user_id=user.id)
     _sync_resource_reservations(db, a, version, resource_overrides=resource_overrides)
     db.flush()
     _recolor(a, version)
