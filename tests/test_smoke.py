@@ -3190,9 +3190,13 @@ def test_voice_scribe_vendored_library_resolves_bare_module_specifiers(logged_in
     model, and the resulting error was swallowed into the button's own
     transient error state. Fixed with a `<script type="importmap">` in each
     template's `extra_js` block pointing both bare specifiers at locally
-    vendored stand-ins (an empty stub for the genuinely-unused WebGPU import;
-    the real vendored `onnxruntime-common` package for the load-bearing
-    `Tensor` class). This test dynamically imports the REAL vendored library
+    vendored stand-ins: the real vendored `onnxruntime-web` webgpu bundle
+    (see ehr/static/js/vendor/onnxruntime-web/README.md -- an earlier fix
+    wrongly stubbed this one out as empty, believing it dead code, which
+    left a second, deeper bug -- see
+    test_voice_scribe_onnxruntime_web_backend_is_actually_functional below)
+    and the real vendored `onnxruntime-common` package for the load-bearing
+    `Tensor` class. This test dynamically imports the REAL vendored library
     with no mocking/interception of it -- proving the fix without needing
     real network access to huggingface.co, since it only needs to get past
     module resolution, not actually load a model."""
@@ -3210,6 +3214,56 @@ def test_voice_scribe_vendored_library_resolves_bare_module_specifiers(logged_in
     """)
     assert result["ok"], f"Vendored library failed to load: {result.get('error')}"
     assert result["hasPipeline"] is True
+
+
+def test_voice_scribe_onnxruntime_web_backend_is_actually_functional(logged_in_page, live_server):
+    """Regression test for a second, deeper bug found only via a real
+    end-user browser test after the fix above shipped: resolving the
+    `onnxruntime-web/webgpu` bare specifier isn't enough on its own -- the
+    vendored transformers.js bundle unconditionally does `Ks = CS` (`CS`
+    being that import's namespace) in every non-Node environment, i.e.
+    every real browser, and uses `Ks.InferenceSession`/`Ks.Tensor` as its
+    *sole* source for both backends, WASM included, not just WebGPU. An
+    earlier fix mapped that specifier to an empty stub (`export {}`),
+    reasoning it was dead code because nothing in the bundle referenced its
+    namespace by property access -- true, but it IS referenced by a bare
+    `Ks=CS` assignment, which that reasoning missed. That left
+    `InferenceSession` (and `Tensor`) undefined, so real transcription
+    always failed once it got as far as creating an ONNX session, with
+    `TypeError: Cannot read properties of undefined (reading 'create')` --
+    a failure `test_voice_scribe_vendored_library_resolves_bare_module_specifiers`
+    above does not catch, since an empty stub doesn't fail module
+    resolution, only actual use. This test loads the real vendored
+    transformers.js bundle (as above) AND directly inspects the object it
+    resolves `onnxruntime-web/webgpu` to via the same import map this app's
+    templates use, asserting `InferenceSession`/`Tensor`/`env` are real,
+    usable exports -- not just that the import resolved."""
+    page = logged_in_page
+    page.goto(live_server + "/exams/new")
+    result = page.evaluate("""
+        async () => {
+            const transformers = await import('/static/js/vendor/transformers/transformers.web.min.js');
+            const onnx = transformers.env && transformers.env.backends && transformers.env.backends.onnx;
+            const ort = await import('/static/js/vendor/onnxruntime-web/ort.webgpu.bundle.min.1.30.0.mjs');
+            return {
+                onnxBackendKeys: onnx ? Object.keys(onnx) : [],
+                hasInferenceSession: typeof ort.InferenceSession,
+                hasInferenceSessionCreate: typeof (ort.InferenceSession && ort.InferenceSession.create),
+                hasTensor: typeof ort.Tensor,
+            };
+        }
+    """)
+    # Before the fix, transformers.js's own onnx backend env was an empty
+    # object ({}) at this point -- Ks (aliased CS, this vendored file) was
+    # completely undefined, so it had nothing to populate it with.
+    assert "wasm" in result["onnxBackendKeys"], (
+        f"onnxruntime-web backend not wired up -- transformers.js's internal "
+        f"env.backends.onnx has keys {result['onnxBackendKeys']}, expected 'wasm' "
+        f"among them"
+    )
+    assert result["hasInferenceSession"] == "function"
+    assert result["hasInferenceSessionCreate"] == "function"
+    assert result["hasTensor"] == "function"
 
 
 def test_voice_scribe_buttons_render_and_transcribe_into_target_field(logged_in_page, live_server):
