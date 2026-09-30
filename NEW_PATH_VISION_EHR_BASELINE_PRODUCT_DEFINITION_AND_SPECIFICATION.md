@@ -4637,3 +4637,40 @@ No keyboard shortcut (confirmed deferred to a future round once the button UX is
 | New file | `ehr/static/js/voice_scribe.js`. |
 | Updated | `ehr/templates/exams/form.html` (12 fields), `ehr/templates/exams/detail.html` / `ehr/templates/prescriptions/detail.html` (addendum field each), `ehr/static/css/app.css` (`.voice-scribe-btn` states). One new Playwright test. No Python/backend changes. |
 | Explicitly not done | No keyboard shortcut this round. No server-side transcription option. No medical-vocabulary biasing. No model pre-loading. None of this bears on the four go-live prerequisites (§38.6). |
+
+## 93. Voice Scribe Fix: Bare Module Specifiers Broke Every Transcription (v2.66)
+
+### 93.1 Origin
+
+User report right after §92 shipped: the mic button visibly recorded (browser-level microphone indicator active, audio levels visible), but no text ever appeared in the target field -- no visible error either, just silence.
+
+### 93.2 Root cause
+
+Confirmed with a real Playwright browser session (mocking only the microphone/recorder/audio-decode APIs, letting the real vendored library load) rather than guessed: `transformers.web.min.js` contains two **static, bare** ES module imports --
+`import * as CS from "onnxruntime-web/webgpu"` and `import {Tensor} from "onnxruntime-common"`. Bare specifiers (no `/`, `./`, `../`, or full URL) only resolve inside a bundler's module graph (webpack/vite rewrite them at build time); loaded directly via the browser's native ES module loader -- which is exactly how this app loads it, since it has no build step -- both imports failed immediately with `TypeError: Failed to resolve module specifier`, rejecting the whole dynamic `import()` of the library before the pipeline, and therefore the model, was ever reached. `voice_scribe.js`'s own `.catch` swallowed this into the button's transient error state (reverts to idle after 3 seconds), which is why nothing appeared to go wrong -- the failure was real but easy to miss.
+
+The first import (`onnxruntime-web/webgpu`) is genuinely dead code in this build (confirmed: its namespace, `CS`, is never referenced anywhere in the bundle). The second (`onnxruntime-common`'s `Tensor` class) is load-bearing -- actively constructed at runtime (`new Zb(...)` in the minified bundle) -- so it could not simply be stubbed out.
+
+### 93.3 Fix
+
+A `<script type="importmap">` added to each of the three templates' `extra_js` blocks (`exams/form.html`, `exams/detail.html`, `prescriptions/detail.html`), before the `voice_scribe.js` script tag, pointing both bare specifiers at locally vendored stand-ins:
+- `onnxruntime-web/webgpu` -> a new, intentionally empty stub (`ehr/static/js/vendor/transformers/onnxruntime-web-webgpu-stub.js`) -- safe because that import is unused dead code, and this app never uses the WebGPU backend (WASM only).
+- `onnxruntime-common` -> the real `onnxruntime-common` npm package (v1.30.0, MIT), vendored locally at `ehr/static/js/vendor/onnxruntime-common/` (its ESM build, `dist/esm/*.js` -- confirmed to have no further bare imports of its own, so it's fully self-contained once vendored). The exact dev-prerelease version transformers.js's `package.json` pins (`1.31.0-dev...`) isn't published to npm; the `Tensor` class API has been stable across versions, and this was confirmed working end-to-end after vendoring.
+
+### 93.4 Verified
+
+Confirmed via a real (non-mocked) Playwright browser session that the import-resolution `TypeError` is gone after the fix -- the library now loads successfully and reaches an actual `fetch()` to huggingface.co for the model config (which then fails only because this sandboxed dev environment's own network policy blocks huggingface.co outbound -- confirmed separately with a direct `curl`, not a code issue, and not expected to reproduce on a real clinic network). New Playwright regression test `test_voice_scribe_vendored_library_resolves_bare_module_specifiers`: dynamically imports the **real** vendored library (no interception/mocking of it, unlike the original feature test, which -- in hindsight -- fully stubbed the library's own network request and so never actually exercised its real module-resolution path) and asserts it loads without a bare-specifier error. Full suite run to confirm no regressions.
+
+### 93.5 Explicitly not done
+
+No change to which model is used, the field wiring, or the UI -- this is purely a module-loading fix. Real end-to-end transcription accuracy still isn't (and can't be) verified by an automated test; that remains doctor QA once this is deployed and reachable on a real network.
+
+**Version 2.66 change log (relative to v2.65) — Voice Scribe Fix: Bare Module Specifiers:**
+
+| Area | Change |
+| --- | --- |
+| Bug fix | Voice Scribe's vendored `@huggingface/transformers` bundle had two bare ES module specifiers that only resolve inside a bundler, silently breaking every transcription in this build-step-free app (mic recorded fine, nothing was ever transcribed, no visible error). Fixed with an import map plus a newly-vendored `onnxruntime-common` package. |
+| New vendored dependency | `onnxruntime-common` v1.30.0 (MIT), vendored locally at `ehr/static/js/vendor/onnxruntime-common/`. |
+| New file | `ehr/static/js/vendor/transformers/onnxruntime-web-webgpu-stub.js` (an intentionally empty stub for a confirmed-unused import). |
+| Updated | `ehr/templates/exams/form.html`, `ehr/templates/exams/detail.html`, `ehr/templates/prescriptions/detail.html` (import map added to each `extra_js` block). One new Playwright regression test. |
+| Explicitly not done | No functional/UI changes -- module-loading fix only. Real transcription accuracy remains doctor QA. |
