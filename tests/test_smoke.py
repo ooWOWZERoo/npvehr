@@ -3177,6 +3177,41 @@ def _mock_voice_scribe_apis(page):
     """)
 
 
+def test_voice_scribe_vendored_library_resolves_bare_module_specifiers(logged_in_page, live_server):
+    """Regression test for a real bug found after this feature first shipped:
+    the vendored @huggingface/transformers bundle contains two static bare
+    module specifiers (`import * as CS from "onnxruntime-web/webgpu"`,
+    `import {Tensor} from "onnxruntime-common"`) that only resolve inside a
+    bundler's module graph -- loaded directly via the browser's native ES
+    module loader (this app has no build step), both failed with "Failed to
+    resolve module specifier", silently breaking every transcription: the
+    microphone recorded fine (so nothing looked wrong to a doctor), but the
+    dynamic import() of the library itself rejected before ever reaching the
+    model, and the resulting error was swallowed into the button's own
+    transient error state. Fixed with a `<script type="importmap">` in each
+    template's `extra_js` block pointing both bare specifiers at locally
+    vendored stand-ins (an empty stub for the genuinely-unused WebGPU import;
+    the real vendored `onnxruntime-common` package for the load-bearing
+    `Tensor` class). This test dynamically imports the REAL vendored library
+    with no mocking/interception of it -- proving the fix without needing
+    real network access to huggingface.co, since it only needs to get past
+    module resolution, not actually load a model."""
+    page = logged_in_page
+    page.goto(live_server + "/exams/new")
+    result = page.evaluate("""
+        async () => {
+            try {
+                const mod = await import('/static/js/vendor/transformers/transformers.web.min.js');
+                return { ok: true, hasPipeline: typeof mod.pipeline === 'function' };
+            } catch (e) {
+                return { ok: false, error: e.message };
+            }
+        }
+    """)
+    assert result["ok"], f"Vendored library failed to load: {result.get('error')}"
+    assert result["hasPipeline"] is True
+
+
 def test_voice_scribe_buttons_render_and_transcribe_into_target_field(logged_in_page, live_server):
     """Voice Scribe (user request): a click-to-toggle mic button next to
     every free-text exam field and both post-signing addenda, dictating

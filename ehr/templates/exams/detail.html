@@ -423,5 +423,8 @@
 {% endif %}
 {% endblock %}
 {% block extra_js %}
+<script type="importmap">
+{"imports": {"onnxruntime-web/webgpu": "/static/js/vendor/transformers/onnxruntime-web-webgpu-stub.js", "onnxruntime-common": "/static/js/vendor/onnxruntime-common/index.js"}}
+</script>
 <script src="/static/js/voice_scribe.js"></script>
 {% endblock %}
