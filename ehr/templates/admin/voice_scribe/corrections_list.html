@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Voice Scribe Vocabulary &mdash; Admin{% endblock %}
+{% block content %}
+<div class="page-header"><h1>Voice Scribe Vocabulary Corrections</h1></div>
+<div class="card form-card"><h3>Add Correction</h3>
+  <form method="post" action="/admin/voice-scribe/corrections/new">
+    <div class="form-row cols-4">
+      <div class="form-group"><label>Mis-transcription* <input name="phrase" required placeholder="e.g. terigium"></label></div>
+      <div class="form-group"><label>Correct Spelling* <input name="correction" required placeholder="e.g. pterygium"></label></div>
+    </div>
+    <button type="submit" class="btn btn-primary">Add Correction</button>
+  </form>
+</div>
+<div class="card" style="margin-top:1rem">
+  <table><thead><tr><th>Mis-transcription</th><th>Correct Spelling</th><th>Status</th><th></th></tr></thead><tbody>
+  {% for c in corrections %}
+    <tr>
+      <td>{{ c.phrase }}</td>
+      <td>{{ c.correction }}</td>
+      <td><span class="badge {{ 'badge-completed' if c.active else 'badge-cancelled' }}">{{ 'Active' if c.active else 'Inactive' }}</span></td>
+      <td style="display:flex;gap:0.5rem">
+        <a href="/admin/voice-scribe/corrections/{{ c.id }}/edit" class="btn btn-sm btn-secondary">Edit</a>
+        <form method="post" action="/admin/voice-scribe/corrections/{{ c.id }}/toggle-active" onsubmit="return confirm('{{ 'Deactivate' if c.active else 'Reactivate' }} this correction?');">
+          <button type="submit" class="btn btn-sm btn-secondary">{{ 'Deactivate' if c.active else 'Reactivate' }}</button>
+        </form>
+        <form method="post" action="/admin/voice-scribe/corrections/{{ c.id }}/delete" onsubmit="return confirm('Delete this correction permanently?');">
+          <button type="submit" class="btn btn-sm btn-secondary">Delete</button>
+        </form>
+      </td>
+    </tr>
+  {% else %}<tr><td colspan="4" style="text-align:center;color:#64748b">No corrections found.</td></tr>
+  {% endfor %}
+  </tbody></table>
+  <p style="font-size:0.8rem;color:#64748b;margin-top:0.75rem">
+    Voice Scribe's client-side speech-to-text model can't be trained or fine-tuned; this table is a
+    find/replace correction applied to dictated text before it lands in a field, matched
+    case-insensitively as a whole word or phrase. Add an entry whenever dictation reliably mis-hears
+    an ocular/optometric term -- the "Mis-transcription" is what Whisper actually produced, not what
+    was said. Deactivating a correction stops it from being applied without deleting it.
+  </p>
+</div>
+{% endblock %}

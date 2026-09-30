@@ -1571,6 +1571,30 @@ class FieldChangeAuditEvent(Base):
     )
 
 
+class VoiceScribeCorrection(Base):
+    """Voice Scribe's ocular/optometric vocabulary correction table (user
+    request: "how do we train the scribe to learn how to spell ocular/
+    vision/optometric words" -- the client-side WASM Whisper model can't
+    actually be trained/fine-tuned, so this is a curated find/replace table
+    instead, same posture as this app's other curated lookups (ICD-10 in
+    ap_composer.py, CPT in cpt_mapper.py, NCCI edits in ncci_edits.py).
+    `phrase` is a common Whisper mis-transcription (matched case-
+    insensitively, whole-word/phrase, by voice_scribe.js); `correction` is
+    the correct spelling to substitute. Seeded with an initial curated list
+    (migration_054_seed_voice_scribe_corrections); staff can add/edit/
+    remove/deactivate further entries via /admin/voice-scribe/corrections
+    as real mis-transcriptions are observed in practice -- there's no way
+    to enumerate every one up front without a corpus of real dictation
+    audio, which this feature deliberately never collects or stores."""
+    __tablename__ = "voice_scribe_corrections"
+    id = Column(Integer, primary_key=True, index=True)
+    phrase = Column(String, nullable=False, unique=True)
+    correction = Column(String, nullable=False)
+    active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 def init_db():
     # NOTE: schema evolution for pre-existing tables (e.g. adding columns to the
     # long-lived `appointments` table) is handled by the versioned migration

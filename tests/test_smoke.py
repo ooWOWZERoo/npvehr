@@ -3,6 +3,7 @@ the main navigation destinations render without error. Not exhaustive
 workflow coverage -- just enough to catch a broken build or a routing/auth
 regression before it reaches a real deployment.
 """
+import json
 import re
 from datetime import datetime, timedelta
 
@@ -3344,3 +3345,136 @@ def test_voice_scribe_buttons_render_and_transcribe_into_target_field(logged_in_
     page.locator("form[action$='/sign'] button[type=\"submit\"]").click()
     page.wait_for_load_state("networkidle")
     assert page.locator('.voice-scribe-btn[data-target="note"]').count() == 1
+
+
+def test_voice_scribe_corrects_common_optometric_mis_transcriptions(logged_in_page, live_server):
+    """User feedback after Voice Scribe shipped: Whisper isn't trained on
+    ocular/optometric vocabulary and reliably mis-hears domain terms as
+    similar-sounding, more common English words -- and this feature can't
+    "train" a client-side WASM model at all. Fixed with a find/replace
+    correction table (VoiceScribeCorrection, seeded by
+    migration_054_seed_voice_scribe_corrections, admin-editable at
+    /admin/voice-scribe/corrections -- see
+    test_voice_scribe_vocabulary_admin_crud below), fetched by
+    voice_scribe.js and applied to the transcript before it lands in the
+    field. This test mocks only the transcription pipeline (same pattern as
+    test_voice_scribe_buttons_render_and_transcribe_into_target_field) to
+    return canned text containing several real seeded entries, and asserts
+    the corrected spellings -- not the raw mis-hearings -- land in the
+    field (using the real, unmocked corrections.json endpoint and seeded
+    data), including a case-preservation check (a sentence-leading
+    mis-hearing should come out capitalized)."""
+    page = logged_in_page
+    page.goto(live_server + "/exams/new")
+
+    _mock_voice_scribe_apis(page)
+    raw_transcript = ("Fun dust exam notable for a terigium and mild bluff eritis; "
+                       "patient also reports hyper opia and a stigmatism.")
+    page.route("**/static/js/vendor/transformers/transformers.web.min.js", lambda route: route.fulfill(
+        content_type="application/javascript",
+        body="""
+            export function pipeline(task, model, opts) {
+                if (opts && opts.progress_callback) opts.progress_callback({status: 'progress', progress: 100});
+                return Promise.resolve(function () {
+                    return Promise.resolve({ text: %s });
+                });
+            }
+            export const env = {};
+        """ % json.dumps(raw_transcript)))
+    page.goto(live_server + "/exams/new")
+
+    mic = page.locator('.voice-scribe-btn[data-target="ros_notes"]')
+    mic.click()
+    page.wait_for_timeout(200)
+    mic.click()  # stop -> triggers the mocked transcription
+    page.wait_for_function(
+        "document.querySelector('.voice-scribe-btn[data-target=\"ros_notes\"]').classList.contains('vs-idle')",
+        timeout=10000)
+
+    corrected = page.locator('textarea[name="ros_notes"]').input_value()
+    assert corrected == ("Fundus exam notable for a pterygium and mild blepharitis; "
+                          "patient also reports hyperopia and astigmatism.")
+
+
+def test_voice_scribe_vocabulary_admin_crud(logged_in_page, live_server):
+    """User request: "is there a way to expose the correction-dictionary to
+    the admin so the admin can add/edit/remove/update vision terms" --
+    Whisper can't actually be trained/fine-tuned client-side, so this admin
+    CRUD table (VoiceScribeCorrection) is the real lever. Covers: the seeded
+    corrections render; creating a new one; editing it (confirmed logged to
+    the existing Field Change Audit Log, same mechanism as Service edits);
+    toggling it inactive/active; and deleting it outright (unlike a
+    Service, a text correction has no downstream records, so a real delete
+    is offered, not just deactivate)."""
+    page = logged_in_page
+    page.goto(live_server + "/admin/voice-scribe/corrections")
+    assert "pterygium" in page.content()
+
+    page.fill('input[name="phrase"]', "regtest mis hearing")
+    page.fill('input[name="correction"]', "regtest correct spelling")
+    page.locator('button[type="submit"]', has_text="Add Correction").click()
+    page.wait_for_load_state("networkidle")
+    row = page.locator("tr", has_text="regtest mis hearing")
+    assert row.count() == 1
+    assert "regtest correct spelling" in row.inner_text()
+
+    row.locator("a", has_text="Edit").click()
+    page.wait_for_load_state("networkidle")
+    assert page.locator('input[name="correction"]').input_value() == "regtest correct spelling"
+    page.fill('input[name="correction"]', "regtest updated spelling")
+    page.locator('button[type="submit"]', has_text="Save Changes").click()
+    page.wait_for_url(re.compile(r"/admin/voice-scribe/corrections$"))
+    row = page.locator("tr", has_text="regtest mis hearing")
+    assert "regtest updated spelling" in row.inner_text()
+
+    page.goto(live_server + "/admin/field-audit")
+    audit_row = page.locator("tr", has_text="voice_scribe_corrections").filter(has_text="correction")
+    assert audit_row.count() >= 1
+    assert "regtest correct spelling" in audit_row.first.inner_text()
+    assert "regtest updated spelling" in audit_row.first.inner_text()
+
+    page.goto(live_server + "/admin/voice-scribe/corrections")
+    row = page.locator("tr", has_text="regtest mis hearing")
+    page.on("dialog", lambda d: d.accept())
+    row.locator("button", has_text="Deactivate").click()
+    page.wait_for_load_state("networkidle")
+    row = page.locator("tr", has_text="regtest mis hearing")
+    assert "INACTIVE" in row.inner_text().upper()
+
+    # A deactivated correction is excluded from the JSON feed voice_scribe.js
+    # fetches -- proves toggling active actually affects behavior, not just
+    # the admin display.
+    corrections_feed = json.loads(page.evaluate(
+        "() => fetch('/admin/voice-scribe/corrections.json').then(r => r.text())"))
+    assert "regtest mis hearing" not in corrections_feed
+
+    row.locator("button", has_text="Reactivate").click()
+    page.wait_for_load_state("networkidle")
+    corrections_feed = json.loads(page.evaluate(
+        "() => fetch('/admin/voice-scribe/corrections.json').then(r => r.text())"))
+    assert corrections_feed.get("regtest mis hearing") == "regtest updated spelling"
+
+    row = page.locator("tr", has_text="regtest mis hearing")
+    row.locator("button", has_text="Delete").click()
+    page.wait_for_load_state("networkidle")
+    assert page.locator("tr", has_text="regtest mis hearing").count() == 0
+
+
+def test_voice_scribe_vocabulary_admin_requires_admin_role(live_server, page):
+    """VOICE_SCRIBE_VOCAB_EDIT is System/Practice Administrator only (a
+    practice-wide dictionary configuration, not a clinical or billing
+    responsibility) -- a Front Desk login must not be able to reach the
+    admin CRUD pages, even though corrections.json itself (read by every
+    doctor's browser during dictation) is intentionally open to any logged-
+    in role."""
+    page.goto(live_server + "/login")
+    page.fill("#email", "frontdesk@newpathvision.example")
+    page.fill("#password", "ChangeMe123!")
+    page.click("button[type=submit]")
+    page.wait_for_url(f"{live_server}/")
+
+    resp = page.goto(live_server + "/admin/voice-scribe/corrections")
+    assert resp.status == 403
+
+    resp = page.goto(live_server + "/admin/voice-scribe/corrections.json")
+    assert resp.status == 200
