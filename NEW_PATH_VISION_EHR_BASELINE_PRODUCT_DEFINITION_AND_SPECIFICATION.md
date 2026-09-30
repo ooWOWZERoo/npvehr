@@ -4499,3 +4499,35 @@ No fully dynamic/arbitrary-count return-visit list -- capped at exactly two, mat
 | New schema | `eye_exam_followups` (migration 052, replacing the single-recommendation columns on `EyeExam`, now legacy), `diagnostic_orders.follow_up_id`, `billing_override_events`. |
 | Updated | `ehr/models/database.py` (`EyeExamFollowUp`, `BillingOverrideEvent`, `DiagnosticOrder.follow_up_id`), `ehr/db/migrations.py` (migration 052), `ehr/auth/permissions.py` (`BILLING_OVERRIDE`), `ehr/services/billing_override.py` (new), `ehr/services/followup_recommendations.py` (per-followup, not per-exam), `ehr/routes/exams.py` (`_parse_return_visit_block`, per-block billing enforcement), `ehr/routes/appointments.py` (`follow_up_id` rename, billing enforcement on create/edit), `ehr/routes/patients.py` (`schedule_href`, followup_id-scoped dismiss route), `ehr/templates/exams/form.html` (second return-visit block + JS), `ehr/templates/appointments/form.html`/`edit.html` (override UI), `ehr/templates/patients/_workspace.html`/`appointments_tab.html`/`_followup_recommendations.html`, `ehr/templates/exams/detail.html`/`portal/records_visit_detail.html` (render from `EyeExamFollowUp`). Two new Playwright tests, three updated; one new migration-suite test. |
 | Explicitly not done | No arbitrary-count return-visit list (capped at two). No enforcement on the read-only Billing Preview card. No admin UI for the override audit log yet. Pre-existing, unrelated `test_portal_phase4_followups` failure not addressed (confirmed to predate this round). None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |
+
+## 89. Patient Overview Cleanup + Test Suite Fixes (v2.62)
+
+### 89.1 Origin
+
+User feedback from a screenshot of a real patient's overview page, three points: (1) the identity header showed "Provider: —" for a patient with real visit/order history; (2) the same pending diagnostic order appeared twice on the page, once as an amber look-back "outstanding order" banner and again as a row in the Pending Diagnostic Orders table, with no apparent reason for the duplication; (3) separately, fix the one known pre-existing CI failure (`test_portal_phase4_followups`, logged in `CLAUDE.md` after the v2.61 round).
+
+### 89.2 What changed
+
+**Provider header fallback**: `_workspace_ctx` (`ehr/routes/patients.py`) resolved "Provider" purely from the patient's most recent `Appointment`, so a patient with real exam/order history but no `Appointment` row at all (an exam entered directly, never booked through the calendar) showed "—" despite having an established provider relationship. Now falls back to the most recent `EyeExam`'s provider (a NOT NULL column, always present) before giving up.
+
+**Outstanding-order alert/table duplication**: `lookback_alerts.get_alerts_for_patient`'s `outstanding_order` alert type is patient-wide and not condition-gated -- it fires for every `DiagnosticOrder` in `ordered`/`scheduled`/`in_progress` status, which is the *exact same row set* the patient overview's Pending Diagnostic Orders table already lists (with strictly more actions -- it has Cancel, the banner didn't). On the patient overview specifically, this was pure duplicate noise, not an intentional second view. `patient_detail` now filters `outstanding_order` alerts out of what it passes to `_lookback_alerts.html`, keeping `interval_due` alerts (an overdue test that hasn't even been ordered yet has no equivalent on this page) fully in place. The New Exam form (`new_exam_form`) is untouched and still shows both alert types in full, since it has no orders table of its own to be redundant with.
+
+**Test suite fix (`test_portal_phase4_followups`)**: root-caused, not a flake. The test sets a 12-hour self-service reschedule cutoff, then books "tomorrow's first available slot" and asserts a Reschedule link is present. Seeded provider hours start at 09:00 UTC, so whenever the suite happened to run between roughly 21:00 and 09:00 UTC, tomorrow's first slot really was under 12 hours away -- the app's cutoff logic (`portal/appointments.html`) was correctly hiding the link; the test's own date math was the bug, not the app. Fixed by booking 3 days out instead of 1 (skipping weekends the same way), guaranteeing roughly 48 hours of margin regardless of time of day.
+
+### 89.3 Verified
+
+`python3 -m py_compile` on every touched Python file. Two existing Playwright tests (`test_lookback_alerts_interval_due_and_outstanding_order`, `test_diagnostic_order_deep_links_to_visit_focus_section`) updated for the overview page no longer showing `outstanding_order` banners -- both now additionally verify the New Exam form still shows the full banner set, and the overview's Pending Diagnostic Orders table carries the same actions/deep-links the removed banner used to. Manual verification (running instance, Playwright script) confirmed the provider-header fallback: a patient with an exam but no appointment now shows the exam's provider instead of "—". Full suite: **97 passed, 0 failed** -- the first fully green run since `test_portal_phase4_followups` was logged as a known issue.
+
+### 89.4 Explicitly not done
+
+No change to the `interval_due` alert type, the New Exam form's alert display, or the underlying `DiagnosticOrder`/look-back data model -- this round is a display-layer de-duplication on one page, not a rework of the alert engine. No provider-header fallback beyond one more level (Appointment, then most-recent-exam) -- a patient with neither still shows "—", which is accurate (no relationship exists to show). None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6.
+
+**Version 2.62 change log (relative to v2.61) — Patient Overview Cleanup + Test Suite Fixes:**
+
+| Area | Change |
+| --- | --- |
+| Bug fix | Patient workspace header now falls back to the most recent exam's provider when there's no appointment history, instead of always showing "—". |
+| Bug fix | Patient overview no longer shows a redundant "outstanding order" banner for a test already listed in the Pending Diagnostic Orders table below it; the New Exam form (no such table) is unaffected. |
+| Test fix | `test_portal_phase4_followups`'s pre-existing, time-of-day-dependent failure root-caused and fixed (test's own date math, not an app bug) -- full suite now fully green. |
+| Updated | `ehr/routes/patients.py` (`_workspace_ctx` provider fallback, `patient_detail` alert filtering), `tests/test_smoke.py` (two tests updated for the overview change, one test's date math fixed), `CLAUDE.md` (pre-existing-issue note replaced with the time-of-day-test-math lesson). |
+| Explicitly not done | No rework of the look-back alert engine or data model. No further provider-header fallback levels. None of this bears on the four go-live prerequisites (§38.6), which are unchanged from v2.6. |

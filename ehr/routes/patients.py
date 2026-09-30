@@ -241,14 +241,24 @@ def _get_patient_or_404(db: Session, patient_id: int, user=None):
     return p
 
 def _workspace_ctx(db: Session, p: Patient, active_tab: str) -> dict:
-    # "Provider" in the identity header: no primary-provider field exists on Patient,
-    # so this is best-effort -- the provider from the patient's most recent appointment,
-    # falling back to '—' when there is no appointment history at all.
+    # "Provider" in the identity header: no primary-provider field exists on
+    # Patient, so this is best-effort -- the provider from the patient's
+    # most recent appointment. A patient can have real visit history
+    # (exams, diagnostic orders) with no Appointment row at all -- an exam
+    # entered directly rather than booked through the calendar never gets
+    # one -- so this previously showed "—" even for a patient with an
+    # established provider relationship. Falls back to the most recent
+    # EyeExam's provider (every exam has one, NOT NULL) before giving up.
     last_appt = (db.query(Appointment).filter(Appointment.patient_id == p.id)
                  .order_by(Appointment.scheduled_at.desc()).first())
     provider_label = None
     if last_appt and last_appt.provider:
         provider_label = f"Dr. {last_appt.provider.last_name}"
+    else:
+        last_exam = (db.query(EyeExam).filter(EyeExam.patient_id == p.id)
+                     .order_by(EyeExam.exam_date.desc()).first())
+        if last_exam and last_exam.provider:
+            provider_label = f"Dr. {last_exam.provider.last_name}"
     # Return-visit recommendation carry-forward, round 2 (user request): the
     # workspace header's generic "Schedule Appt" button previously never
     # carried a patient's pending recommendation at all -- only the
@@ -303,7 +313,18 @@ def patient_detail(request: Request, patient_id: int, db: Session = Depends(get_
         # Look-back & clinical alert engine (Phase 4, BUILD_BACKLOG.md 0a) --
         # computed fresh on every page load (no background job infra exists
         # in this app beyond the one cron-secret reminder endpoint).
-        "lookback_alerts": lookback_alerts.get_alerts_for_patient(db, p.id),
+        # 'outstanding_order' alerts are filtered out here specifically:
+        # they're patient-wide (every ordered/scheduled/in_progress
+        # DiagnosticOrder, not condition-gated -- see get_alerts_for_patient's
+        # own docstring), so on THIS page they name the exact same rows the
+        # Pending Diagnostic Orders table below already lists, with strictly
+        # fewer actions (no Cancel) -- pure duplicate noise. 'interval_due'
+        # alerts (an overdue test that hasn't even been ordered yet) have no
+        # equivalent elsewhere on this page and are kept. The New Exam form
+        # has no orders table of its own, so it still gets both types in full
+        # (see new_exam_form in ehr/routes/exams.py).
+        "lookback_alerts": [a for a in lookback_alerts.get_alerts_for_patient(db, p.id)
+                             if a["type"] != "outstanding_order"],
         "pending_followups": followup_recommendations.get_pending_followups(db, p.id),
     })
     return templates.TemplateResponse(request, "patients/overview.html", ctx)

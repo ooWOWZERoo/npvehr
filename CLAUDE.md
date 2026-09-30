@@ -77,14 +77,18 @@ rebuilding things that already exist or breaking established patterns.
   changes and re-running against the base commit before you write it off —
   don't assume.
 
-## Known pre-existing issue (as of v2.61 / PR #34)
+## A time-of-day trap in Playwright date-math tests
 
-`test_portal_phase4_followups` fails intermittently-but-reproducibly on a
-`Locator.get_attribute` timeout waiting for `a[href*="/reschedule"]` on
-`/portal/appointments?booked=1`. Confirmed to reproduce on the unmodified
-base commit (unrelated to portal/reschedule changes) — not yet root-caused.
-Worth investigating as its own task; don't assume a future red run of this
-specific test is caused by your change without checking.
+`test_portal_phase4_followups` used to fail intermittently-but-reproducibly
+(fixed in v2.62): it set a 12-hour self-service reschedule cutoff, then
+booked "tomorrow's first slot" and asserted a Reschedule link was present.
+Seeded provider hours start at 09:00 UTC, so whenever the suite happened to
+run between ~21:00 and ~09:00 UTC, tomorrow's first slot was under 12 hours
+away and the app *correctly* hid the link — the test's date math, not the
+app, was wrong. When a date/time-window test fails, check whether its
+margin against `datetime.utcnow()` actually holds at every hour of the day
+before assuming a code regression; a `weekday_offset` of 1-2 days is often
+not enough margin against a same-order-of-magnitude cutoff window.
 
 ## Workflow
 

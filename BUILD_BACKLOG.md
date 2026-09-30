@@ -1,6 +1,6 @@
 # New Path Vision EHR — Master Build Backlog
 
-**Status:** Living tracking document. **Baseline as of:** spec v2.61 / research doc v2.24 (2026-09-27).
+**Status:** Living tracking document. **Baseline as of:** spec v2.62 / research doc v2.24 (2026-09-30).
 
 ## Purpose and how to use this document
 
@@ -45,6 +45,7 @@ This consolidates every outstanding build item, investigation, and test scattere
 - [x] **NCCI Procedure-to-Procedure edit advisory** — curated CMS NCCI PTP-edit lookup (4 code pairs, sourced from the real CMS v32.3 file), surfaced as a non-blocking booking-form/Billing-Preview warning; also fixed a pre-existing OCT/OCT_ONH (92134/92133) conflation in the Glaucoma dashboard's order checkbox and the look-back engine's glaucoma profile, with a scoped historical-data backfill. **Done, v2.59** — see baseline spec §86.
 - [x] **Return-visit recommendation carry-forward** — user request: a provider's return-visit interval/tests/reason on an exam now carries forward as a "Recommended Follow-Up" banner on the patient overview, pre-fills the booking form via a "Book Follow-Up" link, and (once actually booked) transitions the recommendation and its underlying diagnostic orders to "scheduled" -- closing a front-desk-dependent handoff gap. Reuses the existing NCCI advisory and diagnostic-order machinery rather than building new. **Done, v2.60** — see baseline spec §87.
 - [x] **Multi-return-visit planning + NCCI billing-rule enforcement** — user follow-up on §87: up to two independent return-visit recommendations per exam (new `EyeExamFollowUp` table), and the NCCI PTP-edit check becomes an actual save-time block (New Exam return-visit checklist, appointment Scheduled Tests) overridable only by an Optometrist/Provider, Practice Administrator, or System Administrator with a logged reason (`BillingOverrideEvent`); a truly non-overridable (indicator-0) pair blocks everyone. Also fixed the generic "Schedule Appt" button never carrying a patient's pending recommendation. **Done, v2.61** — see baseline spec §88.
+- [x] **Patient overview cleanup + test suite fixes** — user feedback from a screenshot: patient header's "Provider" now falls back to the most recent exam's provider when there's no appointment history; the redundant "outstanding order" look-back banner (duplicating the Pending Diagnostic Orders table on the same page) is suppressed there while staying intact on the New Exam form; and the one known pre-existing CI failure (`test_portal_phase4_followups`) is root-caused and fixed -- full suite fully green for the first time. **Done, v2.62** — see baseline spec §89.
 
 ### 0a. Chief-Complaint Triage, E/M Coding, CPT Mapping, Orders & Look-Back Alerts (user request, 2026-09-23) — closed out, v2.38
 
