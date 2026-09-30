@@ -1339,6 +1339,76 @@ def migration_052_followup_per_visit(conn):
             WHERE ordered_exam_id = :eid AND follow_up_id IS NULL
         """), {"fid": new_id, "eid": exam_id})
 
+def migration_053_seed_services(conn):
+    """Service & Fee Catalog, Phase 1 (user request: "the ability to create a
+    service with associated cpt code" plus a real practice fee schedule).
+    `services` itself needs no CREATE TABLE here -- it's an ordinary new
+    SQLAlchemy model, created for free by Base.metadata.create_all() before
+    this migration ever runs (see Service in ehr/models/database.py). This
+    migration only seeds the practice's actual fee schedule -- 35 real
+    services across Exam Levels, Contact Lens Fitting, Medical Testing, Dry
+    Eye/Procedures, and Materials -- using the "Recommended Fee" the
+    practice decided on (not "Your Current Fee"), so the catalog starts
+    live at the new pricing strategy rather than at today's unchanged
+    rates; staff can edit any of them afterward via /admin/billing/services.
+    Several rows (contact-lens fitting tiers, Ortho-K packages) have no real
+    CPT code at all -- cpt_code is left null for those, matching
+    DiagnosticTest.cpt_code's existing nullable convention. Idempotent via a
+    code-existence check per row, same shape as migration_035/037/049."""
+    if not _table_exists(conn, "services"):
+        return
+    existing = {r[0] for r in conn.execute(text("SELECT code FROM services")).fetchall()}
+    test_ids = {}
+    if _table_exists(conn, "diagnostic_tests"):
+        test_ids = {r[0]: r[1] for r in conn.execute(
+            text("SELECT code, id FROM diagnostic_tests")).fetchall()}
+    # (code, name, category, cpt_code, diagnostic_test_code, fee)
+    services = [
+        ("92004", "Comp Eye Exam, New Patient", "Exam Levels", "92004", None, 185.00),
+        ("92014", "Comp Eye Exam, Established", "Exam Levels", "92014", None, 165.00),
+        ("99202", "E/M Level 2 Visit, New Patient", "Exam Levels", "99202", None, 110.00),
+        ("99212", "E/M Level 2 Visit, Established", "Exam Levels", "99212", None, 75.00),
+        ("99203", "E/M Level 3 Visit, New Patient", "Exam Levels", "99203", None, 150.00),
+        ("99213", "E/M Level 3 Visit, Established", "Exam Levels", "99213", None, 115.00),
+        ("99204", "E/M Level 4 Visit, New Patient", "Exam Levels", "99204", None, 220.00),
+        ("99214", "E/M Level 4 Visit, Established", "Exam Levels", "99214", None, 165.00),
+        ("92015", "Determination of Refractive State", "Exam Levels", "92015", None, 55.00),
+        ("66984", "Cataract ECC Global / Post-Op", "Exam Levels", "66984", None, 250.00),
+        ("CL_SPHERE_FIT", "Standard Spherical Fitting", "Contact Lens Fitting", None, None, 70.00),
+        ("CL_TORIC_FIT", "Toric / Astigmatism Fitting", "Contact Lens Fitting", None, None, 95.00),
+        ("CL_MULTIFOCAL_FIT", "Multifocal / Multifocal Toric Fitting", "Contact Lens Fitting", None, None, 145.00),
+        ("CL_RGP_FIT", "Rigid Gas Permeable Fitting", "Contact Lens Fitting", None, None, 160.00),
+        ("ORTHOK_EVAL", "Orthokeratology Consultation/Eval", "Contact Lens Fitting", None, None, 175.00),
+        ("ORTHOK_PACKAGE", "Orthokeratology Annual Package", "Contact Lens Fitting", None, None, 2500.00),
+        ("92082", "Intermediate Visual Field (VF)", "Medical Testing", "92082", None, 70.00),
+        ("92083", "Extended Visual Field (VF)", "Medical Testing", "92083", "VF", 125.00),
+        ("92132", "OCT Anterior Segment", "Medical Testing", "92132", None, 125.00),
+        ("92133", "OCT Optic Nerve Head (ONH)", "Medical Testing", "92133", "OCT_ONH", 75.00),
+        ("92134", "OCT Macula (MAC)", "Medical Testing", "92134", "OCT", 100.00),
+        ("92250", "Fundus Photography", "Medical Testing", "92250", "OPTOS", 100.00),
+        ("92020", "Gonioscopy", "Medical Testing", "92020", "GONIOSCOPY", 75.00),
+        ("76513", "Ultrasound Biomicroscopy (UBM)", "Medical Testing", "76513", None, 300.00),
+        ("92273", "Electroretinography (ERG)", "Medical Testing", "92273", "ERG", 300.00),
+        ("76512", "B-Scan Ultrasound", "Medical Testing", "76512", None, 175.00),
+        ("0507T", "Meibography (Dry Eye Eval)", "Dry Eye / Procedures", "0507T", "MEIBOGRAPHY", 150.00),
+        ("0207T", "Meiboflow Treatment", "Dry Eye / Procedures", "0207T", None, 150.00),
+        ("68761", "Punctal Plug Insertion", "Dry Eye / Procedures", "68761", None, 335.00),
+        ("67820", "Epilation (Lash Removal)", "Dry Eye / Procedures", "67820", None, 90.00),
+        ("65778", "Amniotic Membrane Placement", "Dry Eye / Procedures", "65778", None, 2000.00),
+        ("92070", "Bandage Contact Lens Application", "Dry Eye / Procedures", "92070", None, 110.00),
+        ("92025", "Corneal Topography", "Dry Eye / Procedures", "92025", "CORNEAL_ANALYZER", 60.00),
+        ("76514", "Pachymetry (Corneal Thickness)", "Dry Eye / Procedures", "76514", "PACHYMETRY", 50.00),
+        ("OPTOS_SCREENING", "Retinal Imaging Screening", "Materials", None, None, 42.00),
+    ]
+    for i, (code, name, category, cpt_code, test_code, fee) in enumerate(services):
+        if code in existing:
+            continue
+        conn.execute(text("""
+            INSERT INTO services (code, name, category, cpt_code, diagnostic_test_id, fee, active, display_order)
+            VALUES (:code, :name, :category, :cpt_code, :dt_id, :fee, TRUE, :order)
+        """), {"code": code, "name": name, "category": category, "cpt_code": cpt_code,
+                "dt_id": test_ids.get(test_code), "fee": fee, "order": i * 10})
+
 def migration_038_patient_self_registered_at(conn):
     """Patient Self-Registration (BUILD_BACKLOG.md 5a follow-up): flags a
     chart created by the patient themselves via /portal/register, so staff
@@ -1588,6 +1658,7 @@ POST_CREATE_ALL_MIGRATIONS = [
     ("050_backfill_glaucoma_oct_onh_orders", migration_050_backfill_glaucoma_oct_onh_orders),
     ("051_followup_recommendation_tracking", migration_051_followup_recommendation_tracking),
     ("052_followup_per_visit", migration_052_followup_per_visit),
+    ("053_seed_services", migration_053_seed_services),
 ]
 
 # ---------------------------------------------------------------------------
@@ -1636,6 +1707,9 @@ def down_047_vitreous_and_cd_ratio(conn):
         for col in ("cd_ratio_od", "cd_ratio_os", "vitreous_od", "vitreous_os"):
             conn.execute(text(f"ALTER TABLE eye_exams DROP COLUMN {col}"))
 
+def down_053_seed_services(conn):
+    conn.execute(text("DROP TABLE IF EXISTS services"))
+
 def down_048_ros_and_social_history(conn):
     if _table_exists(conn, "eye_exams"):
         for col in ("ros_constitutional", "ros_cardiovascular", "ros_respiratory",
@@ -1660,6 +1734,7 @@ DOWN_MIGRATIONS = {
     "046_create_appointment_resource_selections": down_046_create_appointment_resource_selections,
     "047_vitreous_and_cd_ratio": down_047_vitreous_and_cd_ratio,
     "048_ros_and_social_history": down_048_ros_and_social_history,
+    "053_seed_services": down_053_seed_services,
 }
 
 

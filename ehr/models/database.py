@@ -406,6 +406,34 @@ class CptCode(Base):
     active = Column(Boolean, default=True)
 
 
+class Service(Base):
+    """The practice's own billable-service/fee catalog -- what staff actually
+    charges for a procedure, test, exam level, contact-lens fitting, or
+    material, as distinct from `CptCode` (a bare code+description lookup)
+    and `DiagnosticTest` (the clinical/scheduling catalog, no price at all).
+    A Service optionally carries a CPT code (several real entries, like
+    contact-lens fitting tiers and Ortho-K packages, have none) and can
+    optionally link to a `DiagnosticTest` so a future round can auto-add a
+    charge when that test is ordered/performed. `category` is a plain
+    display-grouping string (e.g. "Exam Levels", "Medical Testing"), not a
+    rigid enum -- matches the practice's own fee-schedule groupings rather
+    than a separate taxonomy. Staff-facing pricing only: this app has no
+    billing/claims infrastructure, and nothing here is ever transmitted or
+    submitted as a real claim or invoice."""
+    __tablename__ = "services"
+    id = Column(Integer, primary_key=True, index=True)
+    code = Column(String, nullable=False, unique=True)
+    name = Column(String, nullable=False)
+    category = Column(String, nullable=False)
+    cpt_code = Column(String)
+    diagnostic_test_id = Column(Integer, ForeignKey("diagnostic_tests.id"))
+    fee = Column(Float, nullable=False)
+    active = Column(Boolean, default=True)
+    display_order = Column(Integer, default=0)
+
+    diagnostic_test = relationship("DiagnosticTest")
+
+
 class AppointmentTest(Base):
     __tablename__ = "appointment_tests"
     id = Column(Integer, primary_key=True, index=True)

@@ -3017,3 +3017,55 @@ def test_billing_rule_blocks_non_override_role_and_logs_override(logged_in_page,
     admin_page.fill("#followup_billing_override_reason", "Documented clinical justification")
     admin_page.locator('form[action="/exams/new"] button[type="submit"]', has_text="Save Exam").click()
     admin_page.wait_for_url(re.compile(r"/exams/\d+"))
+
+
+def test_service_fee_catalog_create_edit_and_toggle_active(logged_in_page, live_server):
+    """Service & Fee Catalog (user request: "the ability to create a service
+    with associated cpt code"), Phase 1 of a larger pricing/live-charge plan.
+    Covers: the seeded practice fee schedule renders grouped by category;
+    creating a new service; editing its fee (confirmed logged to the
+    existing Field Change Audit Log, same mechanism as Provider edits); and
+    toggling it inactive/active. Staff-facing pricing only -- this app has
+    no billing/claims infrastructure and nothing here is ever billed or
+    transmitted."""
+    page = logged_in_page
+    page.goto(live_server + "/admin/billing/services")
+    assert "Medical Testing" in page.content()
+    assert "92004" in page.content()
+
+    page.fill('input[name="code"]', "REGTEST_SVC")
+    page.fill('input[name="name"]', "Regression Test Service")
+    page.fill('input[name="category"]', "Regression Testing")
+    page.fill('input[name="cpt_code"]', "99999")
+    page.fill('input[name="fee"]', "42.50")
+    page.locator('button[type="submit"]', has_text="Add Service").click()
+    page.wait_for_load_state("networkidle")
+    row = page.locator("tr", has_text="Regression Test Service")
+    assert row.count() == 1
+    assert "$42.50" in row.inner_text()
+
+    row.locator("a", has_text="Edit").click()
+    page.wait_for_load_state("networkidle")
+    assert page.locator('input[name="fee"]').input_value() == "42.50"
+    page.fill('input[name="fee"]', "55.00")
+    page.locator('button[type="submit"]', has_text="Save Changes").click()
+    page.wait_for_url(re.compile(r"/admin/billing/services$"))
+    row = page.locator("tr", has_text="Regression Test Service")
+    assert "$55.00" in row.inner_text()
+
+    page.goto(live_server + "/admin/field-audit")
+    audit_row = page.locator("tr", has_text="services").filter(has_text="fee")
+    assert audit_row.count() >= 1
+    assert "42.5" in audit_row.first.inner_text() and "55.0" in audit_row.first.inner_text()
+
+    page.goto(live_server + "/admin/billing/services")
+    row = page.locator("tr", has_text="Regression Test Service")
+    page.on("dialog", lambda d: d.accept())
+    row.locator("button", has_text="Deactivate").click()
+    page.wait_for_load_state("networkidle")
+    row = page.locator("tr", has_text="Regression Test Service")
+    assert "INACTIVE" in row.inner_text().upper()
+    row.locator("button", has_text="Reactivate").click()
+    page.wait_for_load_state("networkidle")
+    row = page.locator("tr", has_text="Regression Test Service")
+    assert "ACTIVE" in row.inner_text().upper() and "INACTIVE" not in row.inner_text().upper()
