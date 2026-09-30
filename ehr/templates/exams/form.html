@@ -14,7 +14,7 @@
       </div>
       <div class="form-group"><label>Exam Date* <input name="exam_date" type="date" value="{{ today }}" required></label></div>
     </div>
-    <div class="form-group"><label>Chief Complaint <textarea name="chief_complaint" id="chief_complaint"></textarea></label></div>
+    <div class="form-group voice-scribe-field"><label>Chief Complaint <textarea name="chief_complaint" id="chief_complaint"></textarea></label><button type="button" class="voice-scribe-btn" data-target="chief_complaint" title="Voice dictation" aria-label="Voice dictation">&#127908;</button></div>
     <div class="form-group" style="max-width:420px">
       <label>Suggested Exam Type <select name="exam_type_confirmed" id="exam_type_confirmed">
         <option value="">&mdash;</option>
@@ -126,7 +126,7 @@
       {% endfor %}
     </table>
     </div>
-    <div class="form-group"><label>ROS Notes <textarea name="ros_notes"></textarea></label></div>
+    <div class="form-group voice-scribe-field"><label>ROS Notes <textarea name="ros_notes"></textarea></label><button type="button" class="voice-scribe-btn" data-target="ros_notes" title="Voice dictation" aria-label="Voice dictation">&#127908;</button></div>
     <div class="vf-card vf-on" data-vf-card="focus-refractive">
       <button type="button" class="vf-head" data-vf-head="focus-refractive">
         <span class="vf-dot vf-dot-head" data-dot-head="focus-refractive"></span>
@@ -245,7 +245,7 @@
     <div class="form-row cols-2">
       <div class="form-group"><label>Follow-up Interval <select name="ant_follow_up_interval"><option value="">&mdash;</option><option>24 hours</option><option>1 week</option><option>2 weeks</option><option>1 month</option><option>3 months</option><option>6 months</option></select></label>
       </div>
-      <div class="form-group"><label>Clinical Notes <input name="ant_clinical_notes"></label></div>
+      <div class="form-group voice-scribe-field"><label>Clinical Notes <input name="ant_clinical_notes"></label><button type="button" class="voice-scribe-btn" data-target="ant_clinical_notes" title="Voice dictation" aria-label="Voice dictation">&#127908;</button></div>
     </div>
       </div>
     </div>
@@ -286,7 +286,7 @@
     <div class="form-row cols-2">
       <div class="form-group"><label>Follow-up Interval <select name="de_follow_up_interval"><option value="">&mdash;</option><option>24 hours</option><option>1 week</option><option>2 weeks</option><option>1 month</option><option>3 months</option></select></label>
       </div>
-      <div class="form-group"><label>Clinical Notes <input name="de_clinical_notes"></label></div>
+      <div class="form-group voice-scribe-field"><label>Clinical Notes <input name="de_clinical_notes"></label><button type="button" class="voice-scribe-btn" data-target="de_clinical_notes" title="Voice dictation" aria-label="Voice dictation">&#127908;</button></div>
     </div>
       </div>
     </div>
@@ -347,7 +347,7 @@
     <div class="form-row cols-2">
       <div class="form-group"><label>Follow-up Interval <select name="gt_follow_up_interval"><option value="">&mdash;</option><option>1 month</option><option>3 months</option><option>6 months</option><option>1 year</option></select></label>
       </div>
-      <div class="form-group"><label>Clinical Notes <input name="gt_clinical_notes"></label></div>
+      <div class="form-group voice-scribe-field"><label>Clinical Notes <input name="gt_clinical_notes"></label><button type="button" class="voice-scribe-btn" data-target="gt_clinical_notes" title="Voice dictation" aria-label="Voice dictation">&#127908;</button></div>
     </div>
       </div>
     </div>
@@ -396,7 +396,7 @@
       <div class="form-group"><label>Follow-up Interval <select name="bv_follow_up_interval"><option value="">&mdash;</option><option>1 week</option><option>2 weeks</option><option>1 month</option><option>3 months</option></select></label>
       </div>
     </div>
-    <div class="form-group"><label>Clinical Notes <input name="bv_clinical_notes"></label></div>
+    <div class="form-group voice-scribe-field"><label>Clinical Notes <input name="bv_clinical_notes"></label><button type="button" class="voice-scribe-btn" data-target="bv_clinical_notes" title="Voice dictation" aria-label="Voice dictation">&#127908;</button></div>
       </div>
     </div>
     <div class="vf-card" data-vf-card="focus-surgery">
@@ -434,7 +434,7 @@
       </div>
     </div>
     <div class="form-group"><label>Surgical Flap/Wound Status <input name="sx_surgical_flap_or_wound_status" placeholder="Intact, Clear, Well-Apposed"></label></div>
-    <div class="form-group"><label>Steroid Taper Schedule <textarea name="sx_steroid_taper_schedule" placeholder="Pred Forte: QID x 1 week, then TID..."></textarea></label></div>
+    <div class="form-group voice-scribe-field"><label>Steroid Taper Schedule <textarea name="sx_steroid_taper_schedule" placeholder="Pred Forte: QID x 1 week, then TID..."></textarea></label><button type="button" class="voice-scribe-btn" data-target="sx_steroid_taper_schedule" title="Voice dictation" aria-label="Voice dictation">&#127908;</button></div>
     <div class="form-row cols-2">
       <div class="form-group"><label>NSAID Drops Frequency <input name="sx_nsaid_drops_frequency"></label></div>
       <div class="form-group"><label>Antibiotic Drops Status <input name="sx_antibiotic_drops_status"></label></div>
@@ -442,7 +442,7 @@
     <div class="form-row cols-2">
       <div class="form-group"><label>Follow-up Interval <select name="sx_follow_up_interval"><option value="">&mdash;</option><option>1 day</option><option>1 week</option><option>1 month</option><option>3 months</option></select></label>
       </div>
-      <div class="form-group"><label>Clinical Notes <input name="sx_clinical_notes"></label></div>
+      <div class="form-group voice-scribe-field"><label>Clinical Notes <input name="sx_clinical_notes"></label><button type="button" class="voice-scribe-btn" data-target="sx_clinical_notes" title="Voice dictation" aria-label="Voice dictation">&#127908;</button></div>
     </div>
       </div>
     </div>
@@ -463,8 +463,8 @@
     </div>
     <div id="ap_validation_issues" style="display:none;margin-bottom:var(--space-2);font-size:0.85rem;color:#b45309"></div>
     <div class="form-row cols-2">
-      <div class="form-group"><label>Assessment <textarea name="assessment" id="assessment"></textarea></label></div>
-      <div class="form-group"><label>Plan <textarea name="plan" id="plan"></textarea></label></div>
+      <div class="form-group voice-scribe-field"><label>Assessment <textarea name="assessment" id="assessment"></textarea></label><button type="button" class="voice-scribe-btn" data-target="assessment" title="Voice dictation" aria-label="Voice dictation">&#127908;</button></div>
+      <div class="form-group voice-scribe-field"><label>Plan <textarea name="plan" id="plan"></textarea></label><button type="button" class="voice-scribe-btn" data-target="plan" title="Voice dictation" aria-label="Voice dictation">&#127908;</button></div>
     </div>
     <div class="form-group"><label>Diagnosis Codes (ICD-10) <input name="diagnosis_codes" id="diagnosis_codes" placeholder="H52.13, H52.219"></label></div>
     <div class="form-group"><label>Tests Ordered/Reviewed This Visit <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; feeds the E/M-level suggestion below only; not itself saved to the chart</span></label></div>
@@ -514,8 +514,9 @@
       </div>
       {% endif %}
       <div id="followup_validation_issue" style="display:none;margin-bottom:var(--space-2);font-size:0.85rem;color:#b45309"></div>
-      <div class="form-group"><label>Reason for Follow-up <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; required whenever a return interval or a follow-up test above is set; shown to whoever books the next appointment</span>
+      <div class="form-group voice-scribe-field"><label>Reason for Follow-up <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; required whenever a return interval or a follow-up test above is set; shown to whoever books the next appointment</span>
         <textarea name="follow_up_reason" id="follow_up_reason"></textarea></label>
+        <button type="button" class="voice-scribe-btn" data-target="follow_up_reason" title="Voice dictation" aria-label="Voice dictation">&#127908;</button>
       </div>
     </div>
 
@@ -547,8 +548,9 @@
       </div>
       {% endif %}
       <div id="followup_validation_issue_2" style="display:none;margin-bottom:var(--space-2);font-size:0.85rem;color:#b45309"></div>
-      <div class="form-group"><label>Reason for Follow-up <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; required whenever a return interval or a follow-up test above is set</span>
+      <div class="form-group voice-scribe-field"><label>Reason for Follow-up <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; required whenever a return interval or a follow-up test above is set</span>
         <textarea name="follow_up_reason_2" id="follow_up_reason_2"></textarea></label>
+        <button type="button" class="voice-scribe-btn" data-target="follow_up_reason_2" title="Voice dictation" aria-label="Voice dictation">&#127908;</button>
       </div>
     </div>
     <div class="form-group" style="margin-top:0.5rem">
@@ -1320,4 +1322,7 @@ function removeReturnVisit2() {
   refresh();
 })();
 </script>
+{% endblock %}
+{% block extra_js %}
+<script src="/static/js/voice_scribe.js"></script>
 {% endblock %}

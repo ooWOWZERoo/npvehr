@@ -4601,3 +4601,39 @@ No charge creation from the return-visit/follow-up planning blocks or the appoin
 | New routes | `POST /patients/{id}/charges/add`, `POST /patients/{id}/charges/{charge_id}/void`. |
 | Updated | `ehr/models/database.py` (`VisitCharge`), `ehr/services/billing_ledger.py` (new), `ehr/routes/patients.py` (ledger context, add/void routes, order-completion wiring), `ehr/routes/appointments.py` (`_apply_tests` scheduled-test wiring), `ehr/routes/exams.py` (exam-save wiring), `ehr/templates/patients/overview.html`. One new Playwright test. |
 | Explicitly not done | No charge-quantity/fee editing after add. No external fee-benchmark data or "recommended fee" automation. No real inventory tracking for materials. None of this bears on the four go-live prerequisites (§38.6). This closes out the 3-phase Service & Fee Catalog plan. |
+
+## 92. Voice Scribe for Free-Text Exam Fields (v2.65)
+
+### 92.1 Origin
+
+User request: a "convenience feature for the doctors" -- a button to dictate into a free-text field during and after the exam instead of typing, with a click to start and a click to stop. An initial candidate, OpenWhispr (github.com/OpenWhispr/openwhispr), was researched and ruled out: it's an Electron desktop app that types into whatever window has OS focus via a global hotkey, with no embeddable web component or field-scoped API, and no clinical/PHI-handling design at all -- it can't cleanly attach to a specific browser field.
+
+**Architecture decided with the user**: in-browser, client-side transcription -- audio is captured and transcribed entirely in the browser, never sent to any server. A self-hosted server-side model was ruled out because this app's Vercel deployment is a serverless FastAPI function (30s max duration, no persistent disk, cold starts) -- a poor home for a model that needs to stay warm. A cloud STT API (OpenAI/Google/etc.) was ruled out because it would mean sending doctor dictation to a third party, a materially different privacy posture than everything else in this app. **This is a 100% frontend feature -- no new routes, models, or migrations.**
+
+### 92.2 What changed
+
+**Library**: `@huggingface/transformers` v4.3.0's browser bundle (`transformers.web.min.js`, MIT), vendored locally at `ehr/static/js/vendor/transformers/`, matching this app's existing FullCalendar vendoring convention ("vendored locally rather than CDN-loaded"). It wraps ONNX Runtime Web and exposes an `automatic-speech-recognition` pipeline running Whisper entirely in-browser (WASM). The *library* is vendored; the Whisper model weights (`Xenova/whisper-small.en`, confirmed with the user as the "small" size for better medical-term accuracy over "base") and the ONNX Runtime Web WASM backend binaries are both large, generic, non-patient binary assets that the library fetches from their public CDNs on first use per browser and caches thereafter (its own IndexedDB/Cache API caching) -- a fundamentally different trust boundary than sending recorded dictation audio anywhere, so this doesn't conflict with the "audio never leaves the machine" goal.
+
+**New `ehr/static/js/voice_scribe.js`**: a single reusable widget (vanilla JS, no build step, mirrors `app.js`'s IIFE style). Finds every `.voice-scribe-btn[data-target="<field>"]` on the page and wires a click-to-toggle handler: `navigator.mediaDevices.getUserMedia` + `MediaRecorder` capture audio until clicked again, then the recording is decoded to a 16kHz Float32Array and run through the (lazily loaded, first-use-only) Whisper pipeline; the resulting text is appended into the target field. Explicitly dispatches real `input`/`change` events after setting `.value` -- setting a field's value directly does not fire those events, and this codebase has hit that exact bug class twice before for unrelated fields (`follow_up_unit`'s edited-flag bug, `exam_type_confirmed`), so dictated text needed to trigger the existing live composers (chief-complaint triage, Assessment & Plan, etc.) exactly as a real keystroke would. Confirmed with the user: **click-button-only interaction** (no keyboard shortcut this round) and **every free-text field**, including the short single-line "Clinical Notes" inputs, not just the narrative ones.
+
+**Fields wired** (14 total): `chief_complaint`, `ros_notes`, `assessment`, `plan`, `follow_up_reason`/`follow_up_reason_2`, `sx_steroid_taper_schedule`, and the five per-dashboard `*_clinical_notes` inputs on `ehr/templates/exams/form.html`; plus the post-signing addendum note field on both `ehr/templates/exams/detail.html` and `ehr/templates/prescriptions/detail.html` -- this app's only mechanism for adding anything after a signed record ("post exam," per the user's request). Each of these three templates gets a `{% block extra_js %}` (base.html's existing block, already used by `patients/_workspace.html`/`store_ops/daily_closing.html`) loading the vendored library + `voice_scribe.js`, kept out of the global `base.html` include so pages with no free-text fields never load the WASM runtime.
+
+**CSS** (`ehr/static/css/app.css`): `.voice-scribe-btn` idle/loading/recording (pulsing red)/transcribing/error states, sharing `.icon-btn`'s circular sizing.
+
+### 92.3 Verified
+
+No Python changes at all this round (confirmed via `git diff --stat` -- purely `ehr/static/`/`ehr/templates/`). New Playwright test `test_voice_scribe_buttons_render_and_transcribe_into_target_field`: every field gets a correctly-targeted button; a denied microphone shows a clear error state; and -- mocking `getUserMedia`/`MediaRecorder`/audio-decoding and intercepting the vendored library's network request to return a canned transcript -- a full record-stop-transcribe cycle lands the text in the target field AND fires real `input`/`change` events, proven by the existing chief-complaint triage composer reacting to the dictated text exactly as it would to typed text. Real speech-to-text accuracy cannot be meaningfully judged by an automated test -- that remains doctor QA. Full suite run to confirm no regressions.
+
+### 92.4 Explicitly not done
+
+No keyboard shortcut (confirmed deferred to a future round once the button UX is proven). No server-side transcription fallback or option. No custom medical-vocabulary biasing/prompting. No pre-loading the model before first click (lazy-loaded on first use to avoid slowing down page load for doctors not dictating that session). No editing of already-transcribed text beyond normal typing. None of this bears on the four go-live prerequisites (§38.6).
+
+**Version 2.65 change log (relative to v2.64) — Voice Scribe for Free-Text Exam Fields:**
+
+| Area | Change |
+| --- | --- |
+| New feature | A click-to-toggle voice dictation button next to every free-text exam field and both post-signing addenda -- in-browser transcription only, audio never leaves the doctor's machine. |
+| New vendored dependency | `@huggingface/transformers` v4.3.0 browser bundle (MIT), vendored locally at `ehr/static/js/vendor/transformers/`. |
+| New file | `ehr/static/js/voice_scribe.js`. |
+| Updated | `ehr/templates/exams/form.html` (12 fields), `ehr/templates/exams/detail.html` / `ehr/templates/prescriptions/detail.html` (addendum field each), `ehr/static/css/app.css` (`.voice-scribe-btn` states). One new Playwright test. No Python/backend changes. |
+| Explicitly not done | No keyboard shortcut this round. No server-side transcription option. No medical-vocabulary biasing. No model pre-loading. None of this bears on the four go-live prerequisites (§38.6). |
