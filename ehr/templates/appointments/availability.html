@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Availability &mdash; New Path Vision EHR{% endblock %}
 {% block content %}
-<div class="page-header"><h1>Provider Availability</h1><a href="/appointments/calendar" class="btn btn-secondary">Back to Calendar</a></div>
+<div class="page-header"><div><span class="page-eyebrow">Schedule</span><h1>Provider Availability</h1></div><a href="/appointments/calendar" class="btn btn-secondary">Back to Calendar</a></div>
 <div class="card">
   <form method="get" style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:flex-end">
     <div class="form-group" style="margin:0"><label>Provider <select name="provider_id" onchange="this.form.submit()"><option value="">Choose a provider&hellip;</option>

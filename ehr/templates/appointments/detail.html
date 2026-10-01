@@ -2,7 +2,7 @@
 {% block title %}Appointment &mdash; New Path Vision EHR{% endblock %}
 {% block content %}
 <div class="page-header">
-  <h1>Appointment #{{ appt.id }}</h1>
+  <div><span class="page-eyebrow">Visit</span><h1>Appointment #{{ appt.id }}</h1></div>
   <div style="display:flex;gap:0.5rem">
     <a href="/appointments/{{ appt.id }}/edit" class="btn btn-secondary btn-sm">Edit / Reschedule</a>
     <a href="/appointments/" class="btn btn-secondary btn-sm">Back</a>

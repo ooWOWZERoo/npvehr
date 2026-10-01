@@ -4895,3 +4895,23 @@ The remaining chart tabs and the patient create/edit form were not re-laid-out b
 | Sign-in | Hero + card layout, theme-aware. |
 | Patients | List header; chart header card, sub-nav active style, Overview stat tiles. |
 
+## 101. Redesign P3: Appointments (v2.74)
+
+### 101.1 What changed
+
+Third phase of the app-wide "Launchpad" extension (§99, §100). Every appointment page (list, calendar/board, detail, booking form, edit, waitlist, reminders, availability) gets an eyebrow label above its heading. The active calendar view button (Month/Week/Day/Providers) now has a visible selected state, and the list's empty result is an `.empty-state`. The calendar itself, its FullCalendar dark overrides, and all forms and tables come from the P1 shared restyle.
+
+### 101.2 Preserved
+
+Routes, field names, ids, `data-view-link` hooks, `#boardTitle` (set by JS), table structure and the "No appointments" text are unchanged.
+
+### 101.3 Not done
+
+No layout rebuild of the booking form or the calendar toolbar beyond the shared restyle.
+
+**Version 2.74 change log (relative to v2.73) -- Redesign P3:**
+
+| Area | Change |
+| --- | --- |
+| Appointments | Eyebrow headers on 8 pages, active-view button state, list empty state. |
+
