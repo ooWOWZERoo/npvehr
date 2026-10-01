@@ -8,9 +8,9 @@
 {% set badge_class = {'placed': 'badge-ordered', 'in_fabrication': 'badge-in_progress', 'shipped': 'badge-scheduled',
                        'received': 'badge-checked_in', 'dispensed': 'badge-completed', 'cancelled': 'badge-cancelled'} %}
 <div class="page-header">
-  <h1>Lab Order #{{ order.id }}
+  <div><span class="page-eyebrow">Orders</span><h1>Lab Order #{{ order.id }}
     <span class="badge {{ badge_class[order.status] }}" style="margin-left:0.5rem;vertical-align:middle">{{ status_label[order.status] }}</span>
-  </h1>
+  </h1></div>
   <div style="display:flex;gap:0.5rem">
     <a href="/patients/{{ order.patient_id }}" class="btn btn-secondary btn-sm">Patient</a>
     <a href="/prescriptions/{{ order.rx_id }}" class="btn btn-secondary btn-sm">Prescription</a>
