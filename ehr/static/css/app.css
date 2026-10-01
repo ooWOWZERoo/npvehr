@@ -110,7 +110,13 @@ html { -webkit-text-size-adjust: 100%; }
    any one page's own content). This is a safety net on top of that real fix,
    not a substitute for it: legitimate wide content (data tables) keeps its
    own scoped horizontal scroll via .table-responsive, unaffected here. */
-html, body { overflow-x: hidden; }
+/* Horizontal overflow is trimmed on <html> (the viewport) only. Putting
+   overflow-x:hidden on <body> too would turn <body> into a scroll container and
+   silently break every position:sticky descendant (the exam-room step rail,
+   the sticky save bar, the sidebar). overflow:clip on body is no alternative:
+   it also forbids *programmatic* scrolling, which would make content that
+   overflows to the right (wide admin tables) permanently unreachable. */
+html { overflow-x: hidden; }
 body { font-family: var(--font-body); margin: 0; background: var(--canvas); color: var(--ink); font-size: 0.9rem; line-height: 1.5; }
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
@@ -399,6 +405,8 @@ tr:hover td { background: var(--primary-soft); }
 .sidebar-overlay { display: none; }
 .main-col { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 @media (min-width: 901px) {
+  /* Stay put while a long page (the exam form) scrolls; the nav list scrolls inside it. */
+  .sidebar { position: sticky; top: 0; height: 100vh; align-self: flex-start; }
   .app-shell.sidebar-collapsed .sidebar { width: var(--sidebar-collapsed-width); }
   .app-shell.sidebar-collapsed .sidebar-brand-text,
   .app-shell.sidebar-collapsed .sidebar-label,
@@ -594,4 +602,163 @@ html[data-theme="dark"] .fc a { color: inherit; }
     --border: #DDE4DD; --primary: #1F6F5C; --primary-strong: #154F42; --primary-soft: #E4F0EB;
     --ink-strong: #154F42; --accent: #C9A227; --accent-soft: #FBF3DC;
   }
+}
+
+/* ===== New Exam "exam room" (Launchpad redesign) =====================
+   A guided, step-railed layout for exams/form.html. Everything here is
+   token-driven, so it follows the light/dark theme with no extra rules.
+   The form's own ids/names/data-attributes (which the composers, voice
+   scribe and tests depend on) are unchanged -- this is layout + skin. */
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.exam-room { display: grid; grid-template-columns: 252px minmax(0, 1fr); gap: var(--space-6); align-items: start; max-width: 1480px; }
+.exam-main { min-width: 0; display: flex; flex-direction: column; gap: var(--space-5); }
+.exam-main .page-header { margin-bottom: 0; }
+.eyebrow { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; color: var(--ink-strong); }
+.muted { color: var(--ink-muted); }
+
+.exam-rail { position: sticky; top: var(--space-4); align-self: start; display: flex; flex-direction: column; gap: var(--space-4); max-height: calc(100vh - 2rem); overflow-y: auto; }
+.exam-rail-patient { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: var(--space-4); display: flex; flex-direction: column; gap: 2px; }
+.exam-rail-patient strong { font-family: var(--font-display); font-size: 1rem; color: var(--ink); }
+.exam-rail-patient a { font-size: 0.8rem; }
+.exam-steps { list-style: none; margin: 0; padding: var(--space-2); background: var(--surface); border: 1px solid var(--border); border-radius: 14px; display: flex; flex-direction: column; gap: 2px; }
+.exam-step { display: flex; align-items: center; gap: var(--space-3); padding: 0.55rem 0.65rem; border-radius: 10px; color: var(--ink); font-size: 0.85rem; text-decoration: none; }
+.exam-step:hover { background: var(--primary-soft); text-decoration: none; }
+.exam-step-mark { width: 24px; height: 24px; border-radius: 50%; border: 1px solid var(--border); color: var(--ink-muted); display: inline-flex; align-items: center; justify-content: center; font-size: 0.72rem; font-weight: 700; flex-shrink: 0; }
+.exam-step.is-done .exam-step-mark { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
+.exam-step.is-active { background: var(--nav-active-bg); color: var(--nav-active-ink); font-weight: 600; }
+.exam-step.is-active .exam-step-mark { background: var(--nav-active-ink); border-color: var(--nav-active-ink); color: var(--nav-active-bg); }
+.exam-rail-progress { font-size: 0.75rem; color: var(--ink-muted); padding: 0 var(--space-2); }
+
+.exam-before { display: flex; flex-direction: column; gap: var(--space-2); }
+.exam-before .alert { margin-bottom: 0; }
+
+.exam-form { display: flex; flex-direction: column; gap: var(--space-5); }
+.exam-section { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: var(--space-6); scroll-margin-top: var(--space-4); }
+.exam-section-head { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; margin-bottom: var(--space-5); }
+.exam-section-head h2 { margin: 2px 0 0; font-size: 1.5rem; letter-spacing: -0.02em; }
+.exam-section-sub { margin: var(--space-1) 0 0; color: var(--ink-muted); font-size: 0.88rem; }
+.exam-hero-title { font-family: var(--font-display); font-size: 2.4rem; line-height: 1.05; font-weight: 800; letter-spacing: -0.03em; margin: var(--space-2) 0 var(--space-5); }
+
+/* labelled inputs (replace the old .form-group chrome inside the exam room) */
+.fld { display: flex; flex-direction: column; gap: 6px; font-size: 0.78rem; font-weight: 600; color: var(--ink-muted); min-width: 0; }
+.fld input, .fld select, .fld textarea { width: 100%; padding: 0.55rem 0.7rem; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--ink); font: 400 0.9rem var(--font-body); min-width: 0; }
+.fld input[type="number"], .fld input.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.fld input:focus, .fld select:focus, .fld textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.field-grid { display: grid; gap: var(--space-3); }
+.field-grid.cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.field-grid.cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.field-grid.cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.field-grid.cols-5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.visit-strip { display: grid; grid-template-columns: 2fr 1.2fr 1fr; gap: var(--space-4); margin-bottom: var(--space-5); }
+
+/* chief complaint hero field with in-corner dictation button */
+.hero-field { position: relative; display: block; }
+.hero-field textarea { width: 100%; min-height: 110px; padding: 1rem 3.4rem 1rem 1.1rem; border: 1px solid var(--border); border-radius: 14px; background: var(--surface-sunken); color: var(--ink); font: 400 1.05rem/1.5 var(--font-body); resize: vertical; }
+.hero-field textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.hero-field .voice-scribe-btn { position: absolute; right: 0.7rem; top: 0.7rem; margin-top: 0; width: 2.4rem; height: 2.4rem; }
+
+/* exam-type picker (cards drive the hidden #exam_type_confirmed select) */
+.exam-type-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-3); margin-top: var(--space-4); }
+.type-card { all: unset; box-sizing: border-box; cursor: pointer; display: flex; flex-direction: column; gap: 4px; padding: var(--space-4); min-height: 104px; border: 2px solid var(--border); border-radius: 14px; background: var(--surface); position: relative; }
+.type-card:hover { border-color: var(--primary); }
+.type-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.type-card[aria-checked="true"] { border-color: var(--primary); background: var(--primary-soft); }
+.type-card-title { font-weight: 700; font-size: 0.98rem; color: var(--ink); }
+.type-card-desc { font-size: 0.8rem; color: var(--ink-muted); }
+.type-card-flag { position: absolute; top: 10px; right: 10px; font-size: 0.65rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; background: var(--nav-active-bg); color: var(--nav-active-ink); }
+.type-card-flag[hidden] { display: none; }
+.exam-note { margin-top: var(--space-2); font-size: 0.8rem; color: var(--ink-muted); min-height: 1.2em; }
+
+/* focus-area tiles (the .focus-toggle checkbox overlays the whole tile) */
+.focus-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-3); }
+.focus-tile { position: relative; display: flex; align-items: center; gap: var(--space-3); padding: var(--space-4); border: 2px solid var(--border); border-radius: 14px; background: var(--surface); cursor: pointer; min-height: 84px; }
+.focus-tile:hover { border-color: var(--primary); }
+.focus-tile input.focus-toggle { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.focus-tile:has(input:checked) { border-color: var(--primary); background: var(--primary-soft); }
+.focus-tile:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+.focus-tile-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.focus-tile-title { font-weight: 700; font-size: 0.92rem; color: var(--ink); }
+.focus-tile-meta { font-size: 0.76rem; color: var(--ink-muted); }
+.focus-tile-check { width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid var(--border); display: inline-flex; align-items: center; justify-content: center; font-size: 0.75rem; color: transparent; flex-shrink: 0; }
+.focus-tile:has(input:checked) .focus-tile-check { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
+.focus-summary { margin-top: var(--space-3); font-size: 0.85rem; color: var(--ink-muted); }
+
+/* side-by-side right/left eye cards */
+.eye-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
+.eye-card { background: var(--surface-sunken); border: 1px solid var(--border); border-radius: 14px; padding: var(--space-5); display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
+.eye-card-head { display: flex; align-items: baseline; justify-content: space-between; }
+.eye-code { font-family: var(--font-display); font-size: 1.9rem; font-weight: 800; color: var(--ink-strong); line-height: 1; }
+.eye-subhead { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-strong); margin-bottom: var(--space-2); }
+.eye-divider { border: 0; border-top: 1px solid var(--border); margin: 0; }
+.exam-strip { margin-top: var(--space-4); display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-3); }
+
+/* Habitual / Manifest / Cycloplegic tabs */
+.rx-tabs { display: inline-flex; gap: 4px; padding: 4px; background: var(--surface-sunken); border: 1px solid var(--border); border-radius: 12px; }
+.rx-tab { all: unset; box-sizing: border-box; cursor: pointer; padding: 0.5rem 0.95rem; border-radius: 9px; font-size: 0.85rem; font-weight: 600; color: var(--ink-muted); display: inline-flex; align-items: center; gap: 6px; }
+.rx-tab:hover { color: var(--ink); }
+.rx-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.rx-tab[aria-selected="true"] { background: var(--primary); color: var(--on-primary); }
+.rx-tab-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: 0; }
+.rx-tab.has-values .rx-tab-dot { opacity: 0.85; }
+.rx-group[hidden] { display: none; }
+.rx-group-hint { font-size: 0.78rem; color: var(--ink-muted); margin-bottom: var(--space-2); }
+
+/* review of systems */
+.ros-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-3); margin-bottom: var(--space-4); }
+
+/* focus-area assessment panels live inside their own section */
+.exam-section .vf-card { margin: var(--space-3) 0; border-radius: 12px; }
+.areas-empty { padding: var(--space-5); text-align: center; color: var(--ink-muted); border: 1px dashed var(--border); border-radius: 12px; }
+.areas-empty[hidden] { display: none; }
+
+/* assessment & plan / return visit callouts */
+.exam-plan { background: var(--primary-soft); border-color: var(--primary); }
+.exam-plan .fld input, .exam-plan .fld select, .exam-plan .fld textarea, .exam-plan .form-group input, .exam-plan .form-group select, .exam-plan .form-group textarea { background: var(--surface); }
+.exam-return { background: var(--caution-bg); border-color: var(--caution-border); }
+.exam-return .form-group input, .exam-return .form-group select, .exam-return .form-group textarea { background: var(--surface); }
+.exam-subtitle { font-size: 0.78rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-strong); margin: var(--space-5) 0 var(--space-3); }
+
+/* sticky save bar: one submit button, always reachable on a long form */
+.exam-savebar { position: sticky; bottom: 0; z-index: 6; display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); padding: var(--space-3) var(--space-5); background: var(--surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 -8px 24px -12px var(--shadow-pop); }
+.exam-savebar .btn { padding: 0.65rem 1.6rem; font-size: 0.95rem; }
+
+@media (max-width: 1100px) {
+  .exam-room { grid-template-columns: minmax(0, 1fr); }
+  .exam-rail { position: sticky; top: 0; z-index: 7; max-height: none; flex-direction: row; align-items: center; overflow-x: auto; padding: var(--space-2) 0; background: var(--canvas); }
+  .exam-rail-patient { display: none; }
+  .exam-steps { flex-direction: row; flex-shrink: 0; }
+  .exam-step { white-space: nowrap; }
+  .exam-rail-progress { display: none; }
+}
+@media (max-width: 900px) {
+  .exam-type-cards, .focus-tiles, .exam-strip, .ros-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .eye-pair, .visit-strip { grid-template-columns: minmax(0, 1fr); }
+  .field-grid.cols-5 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .exam-section { padding: var(--space-4); }
+  .exam-hero-title { font-size: 1.8rem; }
+}
+@media (max-width: 520px) {
+  .exam-type-cards, .focus-tiles, .exam-strip, .ros-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: no-preference) { .type-card, .focus-tile, .exam-step { transition: background 0.12s ease, border-color 0.12s ease; } }
+
+/* number inputs in the dense Rx grids: no spinner chrome eating the digits */
+.fld input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
+.fld input[type="number"]::-webkit-inner-spin-button, .fld input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.field-grid.cols-5 { gap: var(--space-2); }
+.field-grid.cols-5 .fld input { padding-inline: 0.4rem; font-size: 0.85rem; text-align: center; }
+.focus-tile .vf-dot { display: none !important; }
+.exam-plan .voice-scribe-field textarea { min-height: 170px; }
+.exam-section .form-row { margin-bottom: var(--space-3); }
+.exam-section .test-chip-list + .form-row, .exam-section .test-chip-list { margin-bottom: var(--space-3); }
+@media (max-width: 1100px) { .exam-section { scroll-margin-top: 4.75rem; } }
+
+/* Phone-width topbar: everything must fit in the viewport (html clips overflow,
+   so anything wider is just unreachable). The clock is dropped, the env badge
+   may shrink, and the theme toggle is compact. */
+@media (max-width: 600px) {
+  .topbar-clock { display: none; }
+  .env-badge { flex-shrink: 1; min-width: 0; max-width: 64px; overflow: hidden; text-overflow: ellipsis; }
+  .theme-toggle { width: 2rem; height: 2rem; }
+  .topbar .btn { padding: 0.3rem 0.5rem; }
 }
