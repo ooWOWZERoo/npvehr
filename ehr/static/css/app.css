@@ -16,6 +16,7 @@
   /* Semantic tokens -- every colour the UI needs lives here (light) and in
      the html[data-theme="dark"] block below, so the dark theme is a pure
      token swap, not a second stylesheet. */
+  --link: #1F6F5C;
   --chrome: #154F42;            /* sidebar / topbar / navbar fill */
   --on-chrome: #FFFFFF;
   --on-primary: #FFFFFF;
@@ -76,6 +77,7 @@ html[data-theme="dark"] {
   --primary-soft: #24372e;
   --accent: #e0c25a;
   --accent-soft: #3a3418;
+  --link: #b9e39a;
   --chrome: #132a20;
   --on-chrome: #eef3ef;
   --ink-strong: #cfe8a9;
@@ -118,7 +120,7 @@ html { -webkit-text-size-adjust: 100%; }
    overflows to the right (wide admin tables) permanently unreachable. */
 html { overflow-x: hidden; }
 body { font-family: var(--font-body); margin: 0; background: var(--canvas); color: var(--ink); font-size: 0.9rem; line-height: 1.5; }
-a { color: var(--accent); text-decoration: none; }
+a { color: var(--link); text-decoration: none; }
 a:hover { text-decoration: underline; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
 
@@ -762,3 +764,104 @@ html[data-theme="dark"] .fc a { color: inherit; }
   .theme-toggle { width: 2rem; height: 2rem; }
   .topbar .btn { padding: 0.3rem 0.5rem; }
 }
+
+
+/* ======================================================================
+   Design system: the shared "Launchpad" components (v2.72)
+   Promoted from the New Exam "exam room" so every page can use them.
+   Part 1 restyles the building blocks pages already use (so all pages pick
+   up the look at once); part 2 defines the generic components new page
+   layouts are composed from. Everything is token-driven, so it follows
+   the light/dark theme automatically.
+   ====================================================================== */
+
+/* --- 1. restyled existing building blocks --- */
+h1 { font-weight: 800; letter-spacing: -0.03em; }
+.page-header h1 { margin: 2px 0 0; font-size: 2rem; }
+.card { border-radius: 16px; padding: var(--space-5) var(--space-6); }
+.card .card { border-radius: 14px; padding: var(--space-5); }
+.card-title { letter-spacing: 0.16em; }
+.btn { border-radius: 10px; }
+.btn-sm { border-radius: 8px; }
+.badge { border-radius: 999px; padding: 0.2rem 0.65rem; }
+.alert { border-radius: 12px; }
+.table-responsive { border: 1px solid var(--border); border-radius: 12px; }
+th { letter-spacing: 0.1em; }
+.form-group label { font-size: 0.78rem; color: var(--ink-muted); }
+.form-group input, .form-group select, .form-group textarea { border-radius: 8px; padding: 0.55rem 0.7rem; }
+.form-group .checkbox-row label, .checkbox-row label { color: var(--ink); }
+.section-title { font-family: var(--font-body); font-size: 0.72rem; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-strong); border-bottom: 1px solid var(--border); padding-bottom: var(--space-2); margin: var(--space-6) 0 var(--space-4); }
+.section-title span { text-transform: none; letter-spacing: normal; font-size: 0.8rem; }
+.sidebar-link, .sidebar-expand-toggle { border-radius: 10px; width: calc(100% - 16px); margin: 1px 8px; }
+.sidebar-subnav a { border-radius: 8px; }
+.pw-subnav { border-radius: 16px; }
+.pw-subnav a { border-radius: 10px; }
+.vf-card, .appt-card, #calendar, .board-col-calendar { border-radius: 12px; }
+
+/* tab bars: the old admin tab links and the generic .tabs share one look */
+.tabs, .admin-nav-tabs { display: inline-flex; flex-wrap: wrap; gap: 4px; padding: 4px; background: var(--surface-sunken); border: 1px solid var(--border); border-radius: 12px; margin-bottom: var(--space-4); }
+.tab, .admin-nav-tabs a { all: unset; box-sizing: border-box; cursor: pointer; padding: 0.5rem 0.95rem; border-radius: 9px; font-size: 0.85rem; font-weight: 600; color: var(--ink-muted); display: inline-flex; align-items: center; gap: 6px; }
+.tab:hover, .admin-nav-tabs a:hover { color: var(--ink); }
+.tab:focus-visible, .admin-nav-tabs a:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.tab[aria-selected="true"], .tab.active, .admin-nav-tabs a.active { background: var(--primary); color: var(--on-primary); }
+
+/* long forms: the action row stays reachable (search-form action cells opt out below) */
+.form-card .form-actions { position: sticky; bottom: 0; z-index: 5; background: var(--surface); padding: var(--space-3) 0; margin-top: var(--space-5); border-top: 1px solid var(--border); }
+.form-group-actions .form-actions { position: static; padding: 0; border-top: 0; margin-top: 0; background: transparent; }
+
+/* --- 2. generic components --- */
+.page-eyebrow { display: block; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; color: var(--ink-strong); }
+.page-lede { margin: var(--space-2) 0 0; color: var(--ink-muted); font-size: 0.95rem; max-width: 64ch; }
+.stack { display: flex; flex-direction: column; gap: var(--space-5); }
+.row-between { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; }
+
+/* a titled section card (the exam room's .exam-section, generalised) */
+.section { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: var(--space-6); }
+.section-head { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; margin-bottom: var(--space-5); }
+.section-head h2 { margin: 2px 0 0; font-size: 1.5rem; letter-spacing: -0.02em; }
+.section-sub { margin: var(--space-1) 0 0; color: var(--ink-muted); font-size: 0.88rem; }
+.section.is-callout { background: var(--primary-soft); border-color: var(--primary); }
+.section.is-warm { background: var(--caution-bg); border-color: var(--caution-border); }
+/* the sunken inner box (the exam room's .eye-card) */
+.panel { background: var(--surface-sunken); border: 1px solid var(--border); border-radius: 14px; padding: var(--space-5); min-width: 0; }
+.panel-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: var(--space-4); }
+
+/* selectable / navigable tiles */
+.tile-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--space-3); }
+.tile { all: unset; box-sizing: border-box; cursor: pointer; position: relative; display: flex; flex-direction: column; gap: 4px; padding: var(--space-4); min-height: 96px; border: 2px solid var(--border); border-radius: 14px; background: var(--surface); color: var(--ink); }
+a.tile:hover { text-decoration: none; }
+.tile:hover { border-color: var(--primary); }
+.tile:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tile.is-selected, .tile[aria-checked="true"], .tile[aria-pressed="true"] { border-color: var(--primary); background: var(--primary-soft); }
+.tile-title { font-weight: 700; font-size: 0.98rem; color: var(--ink); }
+.tile-meta { font-size: 0.8rem; color: var(--ink-muted); }
+.tile-icon { font-size: 1.3rem; line-height: 1; margin-bottom: 4px; }
+
+/* big-number stat tiles */
+.stat-tile { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: var(--space-5); display: flex; flex-direction: column; gap: 4px; }
+.stat-tile-label { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-muted); }
+.stat-tile-value { font-family: var(--font-display); font-size: 2.6rem; font-weight: 800; line-height: 1.05; letter-spacing: -0.03em; color: var(--ink-strong); font-variant-numeric: tabular-nums; }
+.stat-tile-note { font-size: 0.8rem; color: var(--ink-muted); }
+
+/* a list row inside a card: icon, text, trailing action */
+.list-row { display: flex; align-items: center; gap: var(--space-4); padding: var(--space-4) 0; border-top: 1px solid var(--border); }
+.list-row:first-child { border-top: 0; }
+.list-row-icon { width: 44px; height: 44px; border-radius: 10px; background: var(--primary-soft); color: var(--ink-strong); display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.list-row-body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.list-row-title { font-weight: 600; color: var(--ink); }
+.list-row-meta { font-size: 0.85rem; color: var(--ink-muted); }
+
+.empty-state { text-align: center; padding: var(--space-7) var(--space-5); color: var(--ink-muted); border: 1px dashed var(--border); border-radius: 14px; }
+.empty-state strong { display: block; color: var(--ink); font-family: var(--font-display); font-size: 1.05rem; margin-bottom: 4px; }
+
+/* the exam room's save bar, generalised (use on any long form) */
+.savebar { position: sticky; bottom: 0; z-index: 6; display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); padding: var(--space-3) var(--space-5); background: var(--surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 -8px 24px -12px var(--shadow-pop); }
+
+@media (max-width: 900px) {
+  .section { padding: var(--space-4); }
+  .page-header h1 { font-size: 1.6rem; }
+}
+
+/* inputs inside dense data tables (Rx values, closing counts, exam grids) */
+.exam-table input, .exam-table select, .dc-table input, .dc-table select { border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--ink); padding: 0.4rem 0.5rem; font-family: inherit; }
+.exam-table input:focus, .exam-table select:focus, .dc-table input:focus, .dc-table select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }

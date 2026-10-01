@@ -4837,3 +4837,38 @@ New `test_wide_tables_scroll_inside_their_card_so_edit_columns_stay_reachable`: 
 | Bug fix | 25 bare tables in 18 staff templates wrapped in `.table-responsive`; wide admin tables scroll inside their card instead of clipping their Edit column. |
 | Tests | One new Playwright test (structural + behavioural). |
 | Explicitly not done | Portal and Rx print page untouched; no new scroll-affordance styling (shadow/fade) on the scroller. |
+
+## 99. Design System: Shared "Launchpad" Components (v2.72)
+
+### 99.1 Origin
+
+User request: "I like the look of the new exam page, let's extend that look to all the pages in the project" -- scoped (by the user) to **full per-page redesigns of the staff app and the patient portal**. That is too large to do honestly in one change, so it is delivered in phases, one PR each: **P1 (this section) the shared design system**; then P2 dashboard/login/patients, P3 appointments, P4 prescriptions/orders/exam detail, P5 admin and store operations, P6 the patient portal. Each later phase keeps every field name, id and workflow intact, as the exam page did.
+
+### 99.2 What P1 does
+
+**Part 1 restyles the building blocks every page already uses**, so all ~65 staff pages pick up the look at once, with no template changes: cards (16px radius), the page heading, eyebrow-style section titles, form fields (8px radius, muted small labels), buttons and badges (rounded/pill), alerts, tables (a bordered, rounded scroller with letter-spaced headers; inputs inside dense tables are styled instead of left at browser defaults), the admin tab links (now a pill segmented control), the sidebar (rounded items), and the patient sub-nav. Form action rows (`.form-card .form-actions`) are now sticky at the bottom of long forms; search-form action cells opt out.
+
+**Part 2 defines the generic, token-driven components later phases compose pages from** (promoted from the exam room): `.section` / `.section-head` / `.section-sub` (+ `.is-callout`, `.is-warm`), `.panel` / `.panel-grid` (the sunken inner box), `.tile-grid` / `.tile` (selectable or navigable; `is-selected` / `aria-checked` / `aria-pressed`), `.stat-tile`, `.tabs` / `.tab`, `.list-row`, `.empty-state`, `.savebar`, `.page-eyebrow` / `.page-lede`, `.stack`. The exam room's own classes are unchanged (they still work); new pages use the generic ones.
+
+### 99.3 A real accessibility fix found along the way
+
+Links used the gold accent (`#C9A227`, about 2.3:1 on white -- below WCAG AA). Links now use a new `--link` token (green `#1F6F5C` in light, lime `#b9e39a` in dark), measured at or above 4.5:1 in both themes, and pinned by a test.
+
+### 99.4 Verified
+
+Full Playwright suite green. New `test_design_system_components_and_link_contrast_in_both_themes` injects each generic component into a live page and reads back computed style (shape, and that the section surface actually follows the theme), and asserts link contrast >= 4.5:1 in light and dark. Dashboard, patients list and chart, appointment and Rx forms, the calendar board, admin scheduling/billing and daily closing were reviewed by screenshot in light and dark.
+
+### 99.5 Explicitly not done in P1
+
+No page layouts were rebuilt (that is P2-P6); the generic components are defined but mostly unused until then. The patient portal is not touched yet (P6).
+
+**Version 2.72 change log (relative to v2.71) -- Design system:**
+
+| Area | Change |
+| --- | --- |
+| Restyle | Shared building blocks (cards, headings, fields, buttons, badges, alerts, tables, tabs, sidebar, sub-nav) restyled app-wide to the exam-room look. |
+| New components | `.section`, `.panel`, `.tile`, `.stat-tile`, `.tabs`/`.tab`, `.list-row`, `.empty-state`, `.savebar`, `.page-eyebrow`/`.page-lede`, `.stack`. |
+| Forms | Action rows sticky at the bottom of long forms. |
+| Accessibility | Links moved from gold (about 2.3:1) to `--link`, at or above 4.5:1 in both themes. |
+| Tests | One new Playwright test pinning the component contract and link contrast. |
+| Explicitly not done | No page layouts rebuilt; portal untouched. |
