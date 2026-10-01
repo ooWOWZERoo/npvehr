@@ -31,7 +31,7 @@
     <div class="form-row cols-2">
       <div class="form-group checkbox-row"><input type="checkbox" name="patient_bookable" value="true" id="patient_bookable" {{ 'checked' if version and version.patient_bookable }}><label for="patient_bookable" style="margin:0">Bookable through the online patient portal</label></div>
     </div>
-    <p style="font-size:0.8rem;color:#64748b;margin-top:-0.5rem">Off by default -- only types explicitly opted in here show up for patients self-booking at /portal (BUILD_BACKLOG.md 5a Phase 4). Staff booking (this form's own booking flow) is unaffected either way.</p>
+    <p style="font-size:0.8rem;color:var(--ink-muted);margin-top:-0.5rem">Off by default -- only types explicitly opted in here show up for patients self-booking at /portal (BUILD_BACKLOG.md 5a Phase 4). Staff booking (this form's own booking flow) is unaffected either way.</p>
     <div class="form-row cols-2">
       <div class="form-group"><label>New-Patient Duration (min, multiple of 5) <input name="new_duration_minutes" type="number" step="5" value="{{ version.new_duration_minutes if version else '' }}"></label></div>
       <div class="form-group"><label>Established-Patient Duration (min, multiple of 5) <input name="established_duration_minutes" type="number" step="5" value="{{ version.established_duration_minutes if version else '' }}"></label></div>
@@ -49,7 +49,7 @@
       <div class="form-group"><label>Base Color (hex) <input name="base_color" type="text" placeholder="#0F766E" value="{{ version.base_color if version else '' }}"></label></div>
       <div class="form-group checkbox-row" style="align-items:flex-end;padding-bottom:0.5rem"><input type="checkbox" name="active" value="true" id="active" {{ 'checked' if version and version.active }}><label for="active" style="margin:0">Active (bookable)</label></div>
     </div>
-    <p style="font-size:0.8rem;color:#64748b">
+    <p style="font-size:0.8rem;color:var(--ink-muted)">
       Conditional color rules (spec 9.3/9.5, e.g. Medical Eye Evaluation's new/follow-up/test-count precedence)
       are seeded automatically for the system catalog and carried forward on republish;
       {% if type_ %}<a href="/admin/scheduling/appointment-types/{{ type_.id }}/color-rules">manage this type's color rules</a>{% else %}manage a type's color rules from its detail page once created{% endif %}.
@@ -58,7 +58,7 @@
     {% if type_ %}
     <div class="section-title">Publish New Version</div>
     <div class="form-group"><label>Change Reason* (required to publish, spec 17.4) <input name="change_reason" required placeholder="Why is this version being published?"></label></div>
-    <p style="font-size:0.8rem;color:#64748b">Publishing creates a new immutable version. Previously booked appointments keep referencing the version active when they were booked (spec 3.22-3.24) &mdash; nothing here rewrites them.</p>
+    <p style="font-size:0.8rem;color:var(--ink-muted)">Publishing creates a new immutable version. Previously booked appointments keep referencing the version active when they were booked (spec 3.22-3.24) &mdash; nothing here rewrites them.</p>
     {% endif %}
     <div class="form-actions"><button type="submit" class="btn btn-primary">{{ 'Publish New Version' if type_ else 'Create Appointment Type' }}</button></div>
   </form>

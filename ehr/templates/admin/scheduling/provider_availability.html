@@ -4,7 +4,7 @@
 <div class="page-header"><h1>Scheduling Administration</h1></div>
 {% include "admin/scheduling/_nav.html" %}
 <div class="card form-card"><h3>Slot Granularity</h3>
-  <p style="font-size:0.85rem;color:#64748b;margin-top:-0.5rem">
+  <p style="font-size:0.85rem;color:var(--ink-muted);margin-top:-0.5rem">
     Which start times get offered to staff and patients when booking (e.g. every 15 minutes) --
     a display/offering setting only. The underlying conflict check always considers the exact
     duration and buffers of the appointment type being booked, so a longer exam can never be
@@ -53,7 +53,7 @@
   {% for t in templates_ %}
     {% set p = providers|selectattr('id', 'equalto', t.provider_id)|first %}
     <tr><td>{{ 'Dr. ' + p.last_name if p else t.provider_id }}</td><td>{{ day_names[t.day_of_week] }}</td><td>{{ t.start_time }}</td><td>{{ t.end_time }}</td><td>{{ 'Yes' if t.active else 'No' }}</td></tr>
-  {% else %}<tr><td colspan="5" style="text-align:center;color:#64748b">No working hours defined yet -- the availability search will show no open slots for any provider until hours are added here.</td></tr>
+  {% else %}<tr><td colspan="5" style="text-align:center;color:var(--ink-muted)">No working hours defined yet -- the availability search will show no open slots for any provider until hours are added here.</td></tr>
   {% endfor %}
   </tbody></table>
 </div>

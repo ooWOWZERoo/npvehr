@@ -12,7 +12,7 @@
     </div>
     <button type="submit" class="btn btn-primary">Add Closure</button>
   </form>
-  <p style="font-size:0.8rem;color:#64748b;margin-top:0.75rem">
+  <p style="font-size:0.8rem;color:var(--ink-muted);margin-top:0.75rem">
     A closure blocks new appointment bookings for every provider on that date (practice-wide), not just
     one resource or provider. Attempting to book on a closed date is rejected with a clear error message.
   </p>
@@ -29,7 +29,7 @@
         </form>
       </td>
     </tr>
-  {% else %}<tr><td colspan="5" style="text-align:center;color:#64748b">No closures defined yet.</td></tr>
+  {% else %}<tr><td colspan="5" style="text-align:center;color:var(--ink-muted)">No closures defined yet.</td></tr>
   {% endfor %}
   </tbody></table>
 </div>

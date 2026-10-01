@@ -22,13 +22,13 @@
 <div class="card">
   <h2>Problem List</h2>
   {% if not problems %}
-  <p style="color:#64748b">No problems recorded for this patient yet.</p>
+  <p style="color:var(--ink-muted)">No problems recorded for this patient yet.</p>
   {% else %}
   {% for problem in problems %}
   <div class="card" style="margin-bottom:1rem{{ ';opacity:0.6' if problem.status == 'Resolved' }}">
     <div style="display:flex;justify-content:space-between;align-items:baseline">
       <h3>{{ problem.diagnosis_name }}{% if problem.laterality %} {{ problem.laterality }}{% endif %}
-        {% if problem.status == 'Resolved' %}<span class="badge" style="background:#e2e8f0;color:#475569">Resolved</span>{% endif %}
+        {% if problem.status == 'Resolved' %}<span class="badge" style="background:var(--border);color:var(--ink-muted)">Resolved</span>{% endif %}
       </h3>
       {% if problem.status != 'Resolved' %}
       <form method="post" action="/patients/{{ patient.id }}/problems/{{ problem.id }}/resolve" style="display:inline">

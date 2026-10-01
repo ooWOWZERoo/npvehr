@@ -3478,3 +3478,148 @@ def test_voice_scribe_vocabulary_admin_requires_admin_role(live_server, page):
 
     resp = page.goto(live_server + "/admin/voice-scribe/corrections.json")
     assert resp.status == 200
+
+
+def test_theme_toggle_switches_persists_and_themes_the_page(logged_in_page, live_server):
+    """Whole-app light/dark theme (user request, "Launchpad" look): the topbar
+    toggle flips html[data-theme], the choice survives a reload (saved in
+    localStorage and applied by an inline <head> script before first paint,
+    so there is no light flash), and the dark palette really reaches the
+    page -- proven by the computed page background and a pure-token surface
+    (.card) changing, not just the attribute appearing. Light stays the
+    default for anyone who has never toggled."""
+    page = logged_in_page
+    page.goto(live_server + "/")
+    toggle = page.locator("#themeToggle")
+    assert page.evaluate("document.documentElement.getAttribute('data-theme')") is None
+    assert toggle.get_attribute("aria-pressed") == "false"
+    light_bg = page.evaluate("getComputedStyle(document.body).backgroundColor")
+
+    toggle.click()
+    assert page.evaluate("document.documentElement.getAttribute('data-theme')") == "dark"
+    assert toggle.get_attribute("aria-pressed") == "true"
+    dark_bg = page.evaluate("getComputedStyle(document.body).backgroundColor")
+    assert dark_bg != light_bg
+    assert dark_bg == "rgb(24, 35, 30)"  # --canvas in the dark palette
+
+    page.reload()
+    assert page.evaluate("document.documentElement.getAttribute('data-theme')") == "dark"
+    assert page.evaluate("getComputedStyle(document.body).backgroundColor") == "rgb(24, 35, 30)"
+
+    page.locator("#themeToggle").click()
+    assert page.evaluate("document.documentElement.getAttribute('data-theme')") is None
+    assert page.evaluate("localStorage.getItem('npv-theme')") == "light"
+    assert page.evaluate("getComputedStyle(document.body).backgroundColor") == light_bg
+
+
+def test_exam_room_exam_type_cards_follow_suggestion_and_manual_pick(logged_in_page, live_server):
+    """New Exam "exam room" redesign: the four exam-type cards are the visible
+    control over the (now off-screen) #exam_type_confirmed select that the
+    chief-complaint triage composer and every older test still drive. A
+    suggestion from the chief complaint must light up the matching card and
+    mark it "Suggested"; clicking a different card is a manual choice, so
+    further chief-complaint typing must stop overwriting it -- the same
+    'edited flag' behaviour the select always had, now reached via a card."""
+    page = logged_in_page
+    page.goto(live_server + "/exams/new")
+    select = page.locator("#exam_type_confirmed")
+    urgent = page.locator('.type-card[data-type-value="Emergent/Urgent Medical"]')
+    routine = page.locator('.type-card[data-type-value="Routine Vision"]')
+
+    page.fill("#chief_complaint", "sudden vision loss, severe pain, red eye")
+    assert select.input_value() == "Emergent/Urgent Medical"
+    assert urgent.get_attribute("aria-checked") == "true"
+    assert urgent.locator(".type-card-flag").is_visible()
+    assert routine.get_attribute("aria-checked") == "false"
+
+    routine.click()
+    assert select.input_value() == "Routine Vision"
+    assert routine.get_attribute("aria-checked") == "true"
+    assert urgent.get_attribute("aria-checked") == "false"
+    # The original suggestion stays flagged so the clinician can see what was suggested.
+    assert urgent.locator(".type-card-flag").is_visible()
+
+    page.fill("#chief_complaint", "sudden vision loss, severe pain, red eye, also flashes")
+    assert select.input_value() == "Routine Vision"  # manual choice is not overwritten
+
+
+def test_exam_room_rx_tabs_keep_every_refraction_group_submitting(logged_in_page, live_server):
+    """Habitual / Manifest / Cycloplegic are tabs over three groups of inputs
+    per eye. Only one group is visible at a time, but all three stay in the DOM
+    and in the POST -- proven by entering a value in two different tabs, saving,
+    and finding both on the saved exam. Also covers the tablist's keyboard
+    contract (arrow keys move selection) since these are real role=tab buttons."""
+    page = logged_in_page
+    page.goto(live_server + "/exams/new")
+    hab_group = page.locator('[data-rx-group="hab"]').first
+    man_group = page.locator('[data-rx-group="man"]').first
+    assert man_group.is_visible() and hab_group.is_hidden()
+    assert page.locator("#rx-tab-man").get_attribute("aria-selected") == "true"
+
+    page.locator("#rx-tab-hab").click()
+    assert hab_group.is_visible() and man_group.is_hidden()
+    page.fill('input[name="hab_od_sphere"]', "-2.75")
+    page.wait_for_function("document.getElementById('rx-tab-hab').classList.contains('has-values')", timeout=5000)
+
+    page.locator("#rx-tab-man").click()
+    page.fill('input[name="man_od_sphere"]', "-3.25")
+
+    page.locator("#rx-tab-man").focus()
+    page.keyboard.press("ArrowRight")
+    assert page.locator("#rx-tab-cyc").get_attribute("aria-selected") == "true"
+    assert page.locator('[data-rx-group="cyc"]').first.is_visible()
+
+    page.select_option('select[name="patient_id"]', index=0)
+    page.select_option('select[name="provider_id"]', index=0)
+    page.locator('form[action="/exams/new"] button[type="submit"]', has_text="Save Exam").click()
+    page.wait_for_url(re.compile(r"/exams/\d+$"))
+    body = page.content()
+    assert "-2.75" in body and "-3.25" in body
+
+
+def test_exam_room_rail_focus_summary_and_patient_card(logged_in_page, live_server):
+    """The exam room's left rail and summaries are driven by script, so they get
+    their own coverage: the step rail jumps to a section, marks it active, and
+    marks a section "started" once something in it changes from how the form
+    opened (default selections don't count); the focus-area summary and the
+    "Area assessments" empty state follow the focus tiles; the rail's patient
+    card follows the Patient select; and there is exactly one Save Exam button
+    (the look-back alerts' own forms must stay outside the exam form)."""
+    page = logged_in_page
+    page.goto(live_server + "/exams/new")
+    assert page.locator('button:has-text("Save Exam")').count() == 1
+
+    entrance_link = page.locator('[data-step-link="entrance"]')
+    assert "is-done" not in (entrance_link.get_attribute("class") or "")
+    entrance_link.click()
+    page.wait_for_function(
+        "document.querySelector('[data-step-link=\"entrance\"]').getAttribute('aria-current') === 'step'", timeout=5000)
+    # The rail is position:sticky -- it must still be on screen after scrolling a
+    # long way down. (An overflow-x:hidden on <body> once silently broke this by
+    # turning <body> into a scroll container, so assert it explicitly.)
+    assert page.evaluate("window.scrollY") > 300
+    rail_top = page.locator(".exam-rail").bounding_box()["y"]
+    assert 0 <= rail_top < 120, f"step rail scrolled out of view (top={rail_top})"
+    page.fill('input[name="pupil_size_light_od"]', "3.5")
+    # The "started" mark is applied on the next animation frame, so wait for it.
+    page.wait_for_function(
+        "document.querySelector('[data-step-link=\"entrance\"]').classList.contains('is-done')", timeout=5000)
+    assert "is-done" not in (page.locator('[data-step-link="health"]').get_attribute("class") or "")
+    assert "sections started" in page.locator("#examProgress").inner_text()
+
+    summary = page.locator("#focusSummary")
+    empty = page.locator("#areasEmpty")
+    assert "1 area selected" in summary.inner_text() and empty.is_hidden()  # Refractive is pre-checked
+    page.locator('.focus-toggle[data-target="focus-glaucoma"]').check()
+    assert "2 areas selected" in summary.inner_text()
+    page.locator('.focus-toggle[data-target="focus-glaucoma"]').uncheck()
+    page.locator('.focus-toggle[data-target="focus-refractive"]').uncheck()
+    assert "No focus area selected" in summary.inner_text()
+    assert empty.is_visible()
+
+    options = page.locator('select[name="patient_id"] option').all()
+    assert len(options) >= 2
+    second_value = options[1].get_attribute("value")
+    page.select_option('select[name="patient_id"]', second_value)
+    assert page.locator("#railPatientName").inner_text() == options[1].inner_text().strip()
+    assert page.locator("#railPatientLink").get_attribute("href") == f"/patients/{second_value}"

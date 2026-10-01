@@ -17,12 +17,12 @@
     <tr><th>Priority</th><th>Patient</th><th>Date Range</th><th>Notes</th><th>Notified</th><th></th></tr>
     {% for e in waitlist_matches %}
     <tr>
-      <td>{% if e.priority == 'urgent' %}<span style="color:#b91c1c;font-weight:700">Urgent</span>{% else %}Normal{% endif %}</td>
+      <td>{% if e.priority == 'urgent' %}<span style="color:var(--danger-text);font-weight:700">Urgent</span>{% else %}Normal{% endif %}</td>
       <td><a href="/patients/{{ e.patient_id }}">{{ e.patient.last_name }}, {{ e.patient.first_name }}</a>
         {% if e.patient.phone %}<div style="font-size:0.75rem;color:var(--ink-muted)">{{ e.patient.phone }}</div>{% endif %}</td>
       <td class="mono-data">{{ e.desired_date_start or '—' }} &ndash; {{ e.desired_date_end or '—' }}</td>
       <td>{{ e.notes or '—' }}</td>
-      <td>{% if e.id in notified_entry_ids %}<span style="color:#166534;font-weight:600">Yes</span>{% else %}<span style="color:var(--ink-muted)">No</span>{% endif %}</td>
+      <td>{% if e.id in notified_entry_ids %}<span style="color:var(--success-ink);font-weight:600">Yes</span>{% else %}<span style="color:var(--ink-muted)">No</span>{% endif %}</td>
       <td><a href="/appointments/new?patient_id={{ e.patient_id }}&provider_id={{ appt.provider_id }}&date={{ appt.scheduled_at.date().isoformat() }}" class="btn btn-sm btn-primary">Book</a></td>
     </tr>
     {% endfor %}
@@ -55,7 +55,7 @@
       </div>
       <button type="submit" class="btn btn-primary">Update</button>
     </form>
-    <h3 style="margin-top:1.25rem">Check-In / Visit Flow <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; staff reference only, never billed or transmitted</span></h3>
+    <h3 style="margin-top:1.25rem">Check-In / Visit Flow <span style="font-weight:normal;color:var(--ink-muted);font-size:0.8rem">&mdash; staff reference only, never billed or transmitted</span></h3>
     <form method="post" action="/appointments/{{ appt.id }}/visit-flow">
       <div class="form-group"><label>Flow <select name="visit_flow">
           <option value="vision" {{ 'selected' if (appt.visit_flow or suggested_visit_flow) == 'vision' }}>Routine Vision / Commercial Vision Plan</option>
@@ -74,7 +74,7 @@
       <td>{{ e.old_value or '—' }} &rarr; {{ e.new_value or '—' }}</td><td>{{ e.reason or '—' }}</td></tr>
     {% endfor %}
     </tbody></table>
-    {% else %}<p style="color:#64748b">No audit events.</p>{% endif %}
+    {% else %}<p style="color:var(--ink-muted)">No audit events.</p>{% endif %}
   </div>
 </div>
 {% endblock %}

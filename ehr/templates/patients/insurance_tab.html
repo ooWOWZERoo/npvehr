@@ -17,7 +17,7 @@
       <td>{{ plan.payer_name or '—' }}</td>
       <td class="mono-data">{{ plan.member_id or '—' }}</td>
       <td class="mono-data">{{ plan.group_number or '—' }}</td>
-      <td>{% if plan.is_active %}<span style="color:#166534;font-weight:600">Active</span>{% else %}<span style="color:var(--ink-muted)">Inactive</span>{% endif %}</td>
+      <td>{% if plan.is_active %}<span style="color:var(--success-ink);font-weight:600">Active</span>{% else %}<span style="color:var(--ink-muted)">Inactive</span>{% endif %}</td>
       <td>{% if plan.is_active %}<form method="post" action="/patients/{{ patient.id }}/insurance/plans/{{ plan.id }}/deactivate" style="display:inline"><button type="submit" class="btn btn-sm btn-secondary">Deactivate</button></form>{% endif %}</td>
     </tr>
     {% endfor %}

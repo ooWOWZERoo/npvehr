@@ -4748,3 +4748,66 @@ No change to the model itself (still `whisper-small.en`), no prompt-conditioning
 | New route file | `ehr/routes/admin_voice_scribe.py` (CRUD + a role-open `corrections.json` feed for `voice_scribe.js` to fetch). |
 | Performance | Idle-time preload of the model/WASM backend after page load (was: first-click-only); decoder-only int8 quantization (`dtype: {encoder_model: "fp32", decoder_model_merged: "q8"}`) for a smaller, faster first download. |
 | Explicitly not done | Model unchanged; no decoder-prompt-conditioning; no bulk-import UI for corrections. |
+
+## 96. App-Wide Light/Dark Theme, "Launchpad" Palette (v2.69)
+
+### 96.1 Origin
+
+User request: a design critique of the New Exam form plus prototypes in the style of two marketing-product screenshots they supplied (a dark editorial "studio" home and a dark-green "launchpad" workspace). Two prototypes were built on a design canvas; the user chose **Launchpad**, and -- asked how far to take it -- chose an **app-wide theme with a light/dark toggle** (rather than dark on the exam form only) and the **full exam-form rebuild** (§97). This section is the theme; §97 is the form.
+
+### 96.2 Design
+
+The dark theme is a **pure CSS-token swap**, not a second stylesheet. `ehr/static/css/app.css` already routed most colour through `:root` variables; this round completes that: new semantic tokens (`--chrome`, `--on-chrome`, `--on-primary`, `--ink-strong`, `--nav-active-bg/-ink`, `--success-*`, `--info-*`, `--warn-*`, `--amber-*`, `--caution-*`, `--danger-*`, `--series-od/-os`, `--shadow-pop`, `--scrim`) are defined for light and overridden under `html[data-theme="dark"]` with a Launchpad-derived palette (deep forest greens, lime highlight). Every hardcoded hex in `app.css` and in 44 staff templates (the slate-grey muted text, status reds/ambers/greens, hairline borders, chart strokes) was replaced by a token, so **light mode renders identically** to before. One genuine design problem surfaced and was solved: `--primary-strong` had been used both as *text on light* and as a *dark fill* (sidebar/topbar), which cannot both hold in a dark theme -- split into `--ink-strong` (emphasised text) and `--chrome` (chrome fill).
+
+A topbar toggle (`#themeToggle`, `aria-pressed`, labelled "Switch to dark/light theme") flips `html[data-theme]` and persists the choice in `localStorage` (`npv-theme`); an inline script in `<head>` (base.html and login.html) applies it before first paint, so there is no light flash. **Light stays the default** for anyone who has never toggled -- the OS colour-scheme preference is deliberately *not* followed, to avoid surprising existing users. `color-scheme: dark` makes native controls (date pickers, scrollbars) follow. FullCalendar's `--fc-*` variables are overridden for dark; printing always uses the light palette.
+
+### 96.3 Explicitly not done
+
+The **patient portal** (`portal/_base.html`) is a separate, patient-facing application surface with its own light styling and no toggle -- left light on purpose. The unrelated `prescriptions/print.html` stays light (it is paper output). No per-user server-side theme preference (browser-local only). No automatic dark mode from the OS setting.
+
+### 96.4 Verified
+
+Full Playwright suite green; new `test_theme_toggle_switches_persists_and_themes_the_page` (default light; toggle flips the attribute and `aria-pressed`; the dark palette really reaches the page -- computed body background, not just the attribute; survives a reload; flips back). Dashboard, patient list/chart, exam detail, appointment form, calendar board, admin scheduling and billing pages, and daily closing were reviewed by screenshot in both themes.
+
+**Version 2.69 change log (relative to v2.68) -- App-wide light/dark theme:**
+
+| Area | Change |
+| --- | --- |
+| New feature | Light/dark theme toggle in the topbar; dark "Launchpad" palette; choice persisted per browser and applied before first paint. |
+| CSS | Semantic colour tokens added; all hardcoded colours in `app.css` and 44 staff templates tokenized; `--primary-strong` split into `--ink-strong` / `--chrome`; FullCalendar and print handled. |
+| Layout fix | `body { overflow-x: hidden }` -> `clip` (hidden made `<body>` a scroll container and silently broke every `position: sticky` descendant); desktop sidebar is now sticky. |
+| Explicitly not done | Patient portal and Rx print page stay light; no OS-preference auto-switch; no server-side preference. |
+
+## 97. New Exam "Exam Room" Redesign (v2.70)
+
+### 97.1 Critique that prompted it
+
+The old form was one ~1,300-line page with a flat hierarchy: every section used the same small uppercase heading; the chief complaint (the key input) was a plain textarea below three dropdowns; Visit Focus -- the central decision of the visit -- was a row of small checkbox chips whose panels appeared far below, after Fundus and Review of Systems; right/left eye data sat in eight separate OD/OS-row tables with 5-7 columns each, so the two eyes were rarely side by side; and nothing signalled progress or where the auto-drafted Assessment & Plan came from.
+
+### 97.2 What changed (layout and skin only)
+
+`exams/form.html` is rebuilt as a guided "exam room": a sticky **step rail** (9 steps, scrollspy-highlighted, with a mark on each section the clinician has actually started and an "N of 9 sections started" line) beside the form; a guided **intake** ("What brings them in today?": patient/provider/date strip, a large chief-complaint field with the dictation button in its corner, and four **exam-type cards** -- the suggested one flagged); **focus areas** as six selectable tiles with a live summary; **side-by-side OD | OS cards** for Acuity & refraction (with **Habitual / Manifest / Cycloplegic tabs**, Manifest by default), Entrance tests (pupils, motility/confrontation, IOP, then APD/IOP method/cover test), and Slit lamp & fundus; Review of Systems as a compact grid; the six focus-area assessment panels gathered under "Area assessments" with an empty state; Assessment & Plan and Return Visit as distinct callout cards; and a **sticky save bar**. It follows the light/dark theme automatically (§96). Responsive: the rail becomes a horizontal strip under 1100px, cards stack under 900px.
+
+### 97.3 What deliberately did not change
+
+Every field `name`, `id` and `data-*` hook is unchanged, and the six focus-area panels are carried over verbatim -- so the Assessment & Plan composer, ICD-10/E-M suggestion, exam-type triage, follow-up/NCCI checks, the focus-area accordion and deep-link, Voice Scribe, server-side `create_exam`, and every pre-existing test keep working unmodified. Two constraints shaped the markup and are worth keeping: the look-back alerts contain their own `<form>`s (Mark Complete / Order Now), so they stay **outside** the exam `<form>` (nested forms are invalid and the inner one silently stops working); and there is exactly **one** "Save Exam" submit button. The exam-type select remains the single source of truth (kept in the DOM, off-screen); the cards drive it with real `input`/`change` events so a card pick counts as a manual choice and later chief-complaint edits no longer overwrite it, exactly as before. The composer's programmatic suggestion calls `window.examRoom.syncExamType()` (the one-line hook added to `refresh()`) because setting `.value` fires no event.
+
+New file `ehr/static/js/exam_room.js` holds only presentation behaviour (cards, tabs, summaries, rail). Two behaviours worth noting: the three refraction groups per eye all remain in the DOM and submit (tabs only toggle `hidden`); and "started" for a section means a field *changed from how the form opened*, so default selections (IOP method = Goldmann, the pre-checked Refractive focus) do not count.
+
+### 97.4 Verified
+
+Full Playwright suite green. New tests: `test_exam_room_exam_type_cards_follow_suggestion_and_manual_pick`; `test_exam_room_rx_tabs_keep_every_refraction_group_submitting` (values entered in two different tabs both appear on the saved exam; arrow-key tab navigation); `test_exam_room_rail_focus_summary_and_patient_card` (rail jump + active marker, "started" marks, focus summary and empty state, patient card, single Save button). Reviewed by screenshot in light and dark at 1440, 820 and 390px.
+
+### 97.5 Explicitly not done
+
+No "draft autosaved" indicator (nothing autosaves, so it would be false). The other pages' forms (New Rx, appointment booking, patient demographics) are not redesigned -- they only gain the theme. The Visit Focus panels' internal tables keep their existing layout.
+
+**Version 2.70 change log (relative to v2.69) -- New Exam "exam room":**
+
+| Area | Change |
+| --- | --- |
+| UI redesign | `exams/form.html` rebuilt: step rail, guided intake, exam-type cards, focus tiles, side-by-side OD/OS cards with Rx tabs, area-assessment section, callout A&P / return-visit cards, sticky save bar. |
+| New file | `ehr/static/js/exam_room.js` (presentation behaviour only). |
+| Hook | One line in the form's composer `refresh()` syncs the exam-type cards when it sets the suggestion. |
+| Tests | Three new Playwright tests; every pre-existing exam-form test passes unmodified. |
+| Explicitly not done | Other forms not redesigned; no autosave indicator; no change to any field name, composer logic or server code. |

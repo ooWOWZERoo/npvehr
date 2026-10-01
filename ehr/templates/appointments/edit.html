@@ -113,7 +113,7 @@ function renderResourcePicker(){
   container.innerHTML = '';
   var requirements = RESOURCE_PICKER[sel.value] || [];
   if (requirements.length === 0) {
-    container.innerHTML = '<p style="font-size:0.85rem;color:#64748b">No manually-assignable resources for this appointment type -- assignment is automatic.</p>';
+    container.innerHTML = '<p style="font-size:0.85rem;color:var(--ink-muted)">No manually-assignable resources for this appointment type -- assignment is automatic.</p>';
     return;
   }
   requirements.forEach(function(req){

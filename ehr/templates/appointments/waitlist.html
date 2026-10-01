@@ -9,14 +9,14 @@
 </div>
 <div class="card">
   {% if not entries %}
-  <p style="color:#64748b;text-align:center">No patients currently waiting for an earlier slot.</p>
+  <p style="color:var(--ink-muted);text-align:center">No patients currently waiting for an earlier slot.</p>
   {% else %}
   <div class="table-responsive">
   <table class="exam-table">
     <tr><th>Priority</th><th>Patient</th><th>Provider</th><th>Type</th><th>Date Range</th><th>Notes</th><th>Added</th><th></th></tr>
     {% for e in entries %}
     <tr>
-      <td>{% if e.priority == 'urgent' %}<span style="color:#b91c1c;font-weight:700">Urgent</span>{% else %}Normal{% endif %}</td>
+      <td>{% if e.priority == 'urgent' %}<span style="color:var(--danger-text);font-weight:700">Urgent</span>{% else %}Normal{% endif %}</td>
       <td><a href="/patients/{{ e.patient_id }}">{{ e.patient.last_name }}, {{ e.patient.first_name }}</a>
         {% if e.patient.phone %}<div style="font-size:0.75rem;color:var(--ink-muted)">{{ e.patient.phone }}</div>{% endif %}</td>
       <td>{{ 'Dr. ' + e.provider.last_name if e.provider else 'Any' }}</td>
@@ -36,7 +36,7 @@
   <h3>Recent Waitlist Notifications</h3>
   <p style="color:var(--ink-muted);font-size:0.85rem;margin-top:-0.5rem">Every attempted (mock) send when a matching slot opened up. No real SMS/email vendor is connected yet -- "Sent" means the mock send interface logged what would have gone out.</p>
   {% if not notifications %}
-  <p style="color:#64748b;text-align:center">No waitlist notifications sent yet.</p>
+  <p style="color:var(--ink-muted);text-align:center">No waitlist notifications sent yet.</p>
   {% else %}
   <div class="table-responsive">
   <table class="exam-table">
@@ -48,9 +48,9 @@
       <td><a href="/appointments/{{ n.appointment_id }}">#{{ n.appointment_id }}</a></td>
       <td>{{ n.channel|upper }}</td>
       <td>
-        {% if n.status == 'sent' %}<span style="color:#166534;font-weight:600">Sent</span>
-        {% elif n.status == 'skipped_no_opt_in' %}<span style="color:#92400e">Skipped (no opt-in)</span>
-        {% else %}<span style="color:#b91c1c;font-weight:600">Failed</span>{% endif %}
+        {% if n.status == 'sent' %}<span style="color:var(--success-ink);font-weight:600">Sent</span>
+        {% elif n.status == 'skipped_no_opt_in' %}<span style="color:var(--caution-ink)">Skipped (no opt-in)</span>
+        {% else %}<span style="color:var(--danger-text);font-weight:600">Failed</span>{% endif %}
       </td>
     </tr>
     {% endfor %}

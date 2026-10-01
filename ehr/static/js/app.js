@@ -60,6 +60,27 @@
 
   // ---------- Sidebar: collapse (desktop, remembered) + drawer (mobile) ----------
   var COLLAPSE_KEY = "npv_sidebar_collapsed";
+  // Light/dark theme toggle. The saved choice is applied before first paint by
+  // the inline script in base.html's <head>; this only flips and persists it.
+  (function initThemeToggle() {
+    var btn = document.getElementById("themeToggle");
+    if (!btn) return;
+    var root = document.documentElement;
+    function sync() {
+      var dark = root.getAttribute("data-theme") === "dark";
+      btn.setAttribute("aria-pressed", dark ? "true" : "false");
+      btn.setAttribute("aria-label", dark ? "Switch to light theme" : "Switch to dark theme");
+      btn.title = dark ? "Switch to light theme" : "Switch to dark theme";
+    }
+    sync();
+    btn.addEventListener("click", function () {
+      var dark = root.getAttribute("data-theme") !== "dark";
+      if (dark) { root.setAttribute("data-theme", "dark"); } else { root.removeAttribute("data-theme"); }
+      try { localStorage.setItem("npv-theme", dark ? "dark" : "light"); } catch (e) { /* private mode: applies for this page only */ }
+      sync();
+    });
+  })();
+
   var collapseBtn = document.getElementById("sidebarCollapseBtn");
   var hamburgerBtn = document.getElementById("hamburgerBtn");
   var overlay = document.getElementById("sidebarOverlay");
@@ -167,7 +188,7 @@
               for (var i = 0; i < data.length; i++) {
                 var p = data[i];
                 html += '<a href="/patients/' + p.id + '">' + escapeHtml(p.name) +
-                  (p.dob ? ' <span style="color:#94a3b8">(' + escapeHtml(p.dob) + ")</span>" : "") + "</a>";
+                  (p.dob ? ' <span style="color:var(--slate)">(' + escapeHtml(p.dob) + ")</span>" : "") + "</a>";
               }
               switcherResults.innerHTML = html;
             }

@@ -72,7 +72,7 @@
 <div class="card" style="margin-top:1rem">
   <h3>Billing Preview <span style="font-weight:normal;color:var(--ink-muted);font-size:0.8rem">&mdash; staff reference only, not a submitted claim</span></h3>
   {% if not cpt_summary.visit_flow %}
-  <p style="color:#b45309">This visit hasn't been checked in with a flow yet &mdash; <a href="/appointments/{{ exam.appointment_id }}">confirm on the appointment page</a> to see the full preview.</p>
+  <p style="color:var(--caution-note)">This visit hasn't been checked in with a flow yet &mdash; <a href="/appointments/{{ exam.appointment_id }}">confirm on the appointment page</a> to see the full preview.</p>
   {% elif cpt_summary.visit_flow == 'medical' %}
   <div class="form-row cols-2">
     <div>

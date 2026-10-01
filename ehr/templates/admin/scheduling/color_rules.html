@@ -33,7 +33,7 @@
     </tbody>
   </table>
   {% else %}
-  <p style="color:#64748b">No conditional rules yet &mdash; this type resolves to its base color (<span class="color-swatch" style="background:{{ version.base_color }}"></span> {{ version.base_color or 'not set' }}) for every booking.</p>
+  <p style="color:var(--ink-muted)">No conditional rules yet &mdash; this type resolves to its base color (<span class="color-swatch" style="background:{{ version.base_color }}"></span> {{ version.base_color or 'not set' }}) for every booking.</p>
   {% endif %}
 </div>
 
@@ -65,7 +65,7 @@
       <div class="form-group"><label>Color (hex)* <input name="color" type="text" placeholder="#0F766E" required></label></div>
       <div class="form-group"><label>Reason Code <input name="reason_code" type="text" placeholder="e.g. established_follow_up"></label></div>
     </div>
-    <p style="font-size:0.8rem;color:#64748b">
+    <p style="font-size:0.8rem;color:var(--ink-muted)">
       Rules are evaluated in priority order (lowest number first); the first rule whose conditions all
       match wins. If no rule matches, the type's base color is used. Editing rules here changes future
       bookings' resolved color only &mdash; already-booked appointments keep the color that was resolved

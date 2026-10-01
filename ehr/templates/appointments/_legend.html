@@ -3,7 +3,7 @@
   <div class="legend" role="list" aria-label="Appointment type color legend">
     {% for v in legend_types %}
     <div class="legend-item" role="listitem">
-      <span class="color-swatch" style="background:{{ v.base_color or '#94a3b8' }}"></span>
+      <span class="color-swatch" style="background:{{ v.base_color or 'var(--slate)' }}"></span>
       <span>{{ v.calendar_abbreviation }} &ndash; {{ v.display_name }}</span>
     </div>
     {% if v.color_rules %}
