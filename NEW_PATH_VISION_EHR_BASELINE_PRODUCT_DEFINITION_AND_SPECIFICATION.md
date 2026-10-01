@@ -4872,3 +4872,26 @@ No page layouts were rebuilt (that is P2-P6); the generic components are defined
 | Accessibility | Links moved from gold (about 2.3:1) to `--link`, at or above 4.5:1 in both themes. |
 | Tests | One new Playwright test pinning the component contract and link contrast. |
 | Explicitly not done | No page layouts rebuilt; portal untouched. |
+
+## 100. Redesign P2: Dashboard, Sign-in, Patient List and Chart (v2.73)
+
+### 100.1 What changed
+
+Second phase of the app-wide "Launchpad" extension (see §99). **Dashboard**: eyebrow + lede header, a quick-action tile row (New Exam / New Appointment / New Patient / New Rx), `.stat-tile` totals, and Upcoming Appointments / Recent Patients as sections with "View All" links and `.empty-state` placeholders; the overdue-scheduled `alert_banner` is unchanged. **Sign-in**: two-column hero + card on the themed canvas (stacks on phones); `#email`, `#password`, hidden `next`/`csrf_token`, `.alert-error` and the no-flash theme script are unchanged. **Patient list**: eyebrow/lede header; table, search fields and pagination unchanged. **Patient chart**: identity header is now a card with a "Patient chart" eyebrow and larger name; the sub-nav active state is a soft tint with an accent bar; the Overview uses `.stat-tile`s for balance/credit/today's services, eyebrow labels, and empty states. Every other chart tab picks up the P1 shared restyle.
+
+### 100.2 Preserved
+
+All routes, form field names, ids, `.pw-subnav` link targets, table structure and button text are unchanged, so existing Playwright selectors still apply.
+
+### 100.3 Not done
+
+The remaining chart tabs and the patient create/edit form were not re-laid-out beyond the shared restyle.
+
+**Version 2.73 change log (relative to v2.72) -- Redesign P2:**
+
+| Area | Change |
+| --- | --- |
+| Dashboard | Quick-action tiles, stat tiles, section cards, empty states. |
+| Sign-in | Hero + card layout, theme-aware. |
+| Patients | List header; chart header card, sub-nav active style, Overview stat tiles. |
+

@@ -4,26 +4,27 @@
 {% include "patients/_lookback_alerts.html" %}
 {% include "patients/_followup_recommendations.html" %}
 <div class="card">
-  <h3>Balances &amp; Credits</h3>
+  <span class="page-eyebrow">Account</span>
+  <h3 style="margin-top:2px">Balances &amp; Credits</h3>
   <div class="stats-grid">
-    <div class="card" style="box-shadow:none;border:1px solid var(--border)">
-      <div class="card-title">Patient Balance</div>
-      <div class="card-value" style="color:{{ 'var(--danger-ink)' if (patient.balance_due or 0) > 0.005 else 'var(--ink-strong)' }}">
+    <div class="stat-tile">
+      <div class="stat-tile-label">Patient Balance</div>
+      <div class="stat-tile-value" style="color:{{ 'var(--danger-ink)' if (patient.balance_due or 0) > 0.005 else 'var(--ink-strong)' }}">
         ${{ '%.2f'|format(patient.balance_due) if patient.balance_due and patient.balance_due > 0.005 else '0.00' }}
       </div>
     </div>
-    <div class="card" style="box-shadow:none;border:1px solid var(--border)">
-      <div class="card-title">Patient Credit</div>
-      <div class="card-value" style="color:{{ 'var(--caution-ink)' if (patient.balance_due or 0) < -0.005 else 'var(--ink-strong)' }}">
+    <div class="stat-tile">
+      <div class="stat-tile-label">Patient Credit</div>
+      <div class="stat-tile-value" style="color:{{ 'var(--caution-ink)' if (patient.balance_due or 0) < -0.005 else 'var(--ink-strong)' }}">
         ${{ '%.2f'|format(-patient.balance_due) if patient.balance_due and patient.balance_due < -0.005 else '0.00' }}
       </div>
     </div>
-    <div class="card" style="box-shadow:none;border:1px solid var(--border)">
-      <div class="card-title">Today's Services &amp; Materials</div>
+    <div class="stat-tile">
+      <div class="stat-tile-label">Today's Services &amp; Materials</div>
       {% if today_appointment %}
-      <div class="card-value">${{ '%.2f'|format(todays_charges_total) }}</div>
+      <div class="stat-tile-value">${{ '%.2f'|format(todays_charges_total) }}</div>
       {% else %}
-      <div class="card-value" style="font-size:1rem;color:var(--ink-muted);font-style:italic">No visit scheduled today</div>
+      <div class="stat-tile-value" style="font-size:1rem;color:var(--ink-muted);font-style:italic">No visit scheduled today</div>
       {% endif %}
     </div>
   </div>
@@ -72,7 +73,8 @@
 
 {% if pending_orders %}
 <div class="card" style="margin-top:1rem">
-  <h3>Pending Diagnostic Orders</h3>
+  <span class="page-eyebrow">Orders</span>
+  <h3 style="margin-top:2px">Pending Diagnostic Orders</h3>
   <div class="table-responsive"><table class="exam-table">
     <tr><th>Test</th><th>Status</th><th>Ordered</th><th></th></tr>
     {% for o in pending_orders %}
@@ -111,7 +113,7 @@
           <div class="appt-card-meta">{{ a.reason or 'Appointment' }}</div>
         </a>
       {% endfor %}
-    {% else %}<p style="color:var(--ink-muted)">No appointments on file.</p>{% endif %}
+    {% else %}<div class="empty-state"><strong>No appointments</strong>Nothing on file yet.</div>{% endif %}
   </div>
   <div class="card">
     <div class="page-header" style="margin-bottom:0.75rem"><h3 style="margin:0">Eye Exams</h3><a href="/patients/{{ patient.id }}/orders/exams" class="btn btn-sm btn-secondary">View All</a></div>
@@ -122,7 +124,7 @@
         <td><a href="/exams/{{ e.id }}" class="btn btn-sm btn-secondary">View</a></td></tr>
     {% endfor %}
     </tbody></table></div>
-    {% else %}<p style="color:var(--ink-muted)">No exams recorded.</p>{% endif %}
+    {% else %}<div class="empty-state"><strong>No exams</strong>None recorded yet.</div>{% endif %}
   </div>
   <div class="card">
     <div class="page-header" style="margin-bottom:0.75rem"><h3 style="margin:0">Prescriptions</h3><a href="/patients/{{ patient.id }}/rx" class="btn btn-sm btn-secondary">View All</a></div>
@@ -133,7 +135,7 @@
         <td><a href="/prescriptions/{{ rx.id }}" class="btn btn-sm btn-secondary">View</a></td></tr>
     {% endfor %}
     </tbody></table></div>
-    {% else %}<p style="color:var(--ink-muted)">No prescriptions recorded.</p>{% endif %}
+    {% else %}<div class="empty-state"><strong>No prescriptions</strong>None recorded yet.</div>{% endif %}
   </div>
 </div>
 {% endblock %}
