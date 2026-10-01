@@ -1287,14 +1287,18 @@ def test_waitlist_auto_notify_on_cancellation_and_idempotency(logged_in_page, li
 
     # Idempotency: reschedule back to 'scheduled' then cancel again --
     # no second notice for the same waitlist entry+appointment+channel.
+    # wait_for_url alone would match the page we are already on (the detail URL is
+    # both before and after the POST), returning before the submit navigates and
+    # letting the next goto() abort the in-flight POST (ERR_ABORTED). Wait for the
+    # navigation itself instead.
     page.goto(live_server + f"/appointments/{appt_id}")
     page.select_option('select[name="status"]', "scheduled")
-    page.locator('form select[name="status"]').evaluate("el => el.form.requestSubmit()")
-    page.wait_for_url(re.compile(rf"/appointments/{appt_id}$"))
+    with page.expect_navigation():
+        page.locator('form select[name="status"]').evaluate("el => el.form.requestSubmit()")
     page.wait_for_load_state("networkidle")
     page.select_option('select[name="status"]', "cancelled")
-    page.locator('form select[name="status"]').evaluate("el => el.form.requestSubmit()")
-    page.wait_for_url(re.compile(rf"/appointments/{appt_id}$"))
+    with page.expect_navigation():
+        page.locator('form select[name="status"]').evaluate("el => el.form.requestSubmit()")
     page.wait_for_load_state("networkidle")
 
     page.goto(live_server + "/appointments/waitlist")
@@ -3669,3 +3673,57 @@ def test_wide_tables_scroll_inside_their_card_so_edit_columns_stay_reachable(log
     edit.scroll_into_view_if_needed()
     right = edit.bounding_box()["x"] + edit.bounding_box()["width"]
     assert right <= 1000, f"Edit link still off-screen (right edge {right})"
+
+
+def test_design_system_components_and_link_contrast_in_both_themes(logged_in_page, live_server):
+    """Design system (v2.72): the exam room's components were promoted into
+    generic, token-driven classes every page can use (.section, .panel, .tile,
+    .stat-tile, .tabs/.tab, .empty-state, ...). No page consumes most of them
+    yet, so this pins their contract directly by injecting each into a live
+    page and reading back computed style -- shape, and that they actually
+    follow the theme (the section surface differs between light and dark).
+    Also guards a real accessibility fix: links were the gold accent (about
+    2.3:1 on white); they now use --link and must clear WCAG AA (4.5:1)
+    against the page surface in BOTH themes."""
+    page = logged_in_page
+    page.goto(live_server + "/")
+    probe = """() => {
+        const host = document.createElement('div');
+        host.id = 'ds-probe';
+        host.innerHTML = `
+          <section class="section" id="p-section"><div class="section-head"><h2>t</h2></div></section>
+          <div class="panel" id="p-panel"></div>
+          <button class="tile" id="p-tile"><span class="tile-title">x</span></button>
+          <div class="stat-tile" id="p-stat"><span class="stat-tile-value">9</span></div>
+          <div class="tabs" id="p-tabs"><button class="tab" aria-selected="true" id="p-tab">a</button></div>
+          <div class="empty-state" id="p-empty">none</div>
+          <a href="#" id="p-link">link</a>`;
+        document.querySelector('.container').appendChild(host);
+        const cs = (id) => getComputedStyle(document.getElementById(id));
+        const lum = (rgb) => { const [r,g,b] = rgb.match(/\\d+(\\.\\d+)?/g).slice(0,3).map(Number).map(v => { v/=255; return v <= 0.03928 ? v/12.92 : Math.pow((v+0.055)/1.055, 2.4); }); return 0.2126*r + 0.7152*g + 0.0722*b; };
+        const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((m, n) => n - m); return (x + 0.05) / (y + 0.05); };
+        const surface = cs('p-section').backgroundColor;
+        const out = {
+          sectionRadius: cs('p-section').borderTopLeftRadius, sectionBg: surface,
+          panelRadius: cs('p-panel').borderTopLeftRadius,
+          tileBorder: cs('p-tile').borderTopWidth, tileRadius: cs('p-tile').borderTopLeftRadius,
+          statSize: parseFloat(getComputedStyle(document.querySelector('#p-stat .stat-tile-value')).fontSize),
+          tabSelectedBg: cs('p-tab').backgroundColor,
+          emptyBorder: cs('p-empty').borderTopStyle,
+          linkContrast: ratio(cs('p-link').color, getComputedStyle(document.body).backgroundColor),
+        };
+        host.remove();
+        return out;
+    }"""
+    light = page.evaluate(probe)
+    assert light["sectionRadius"] == "16px" and light["panelRadius"] == "14px"
+    assert light["tileBorder"] == "2px" and light["tileRadius"] == "14px"
+    assert light["statSize"] >= 40
+    assert light["tabSelectedBg"] != "rgba(0, 0, 0, 0)"
+    assert light["emptyBorder"] == "dashed"
+    assert light["linkContrast"] >= 4.5, f"light link contrast {light['linkContrast']:.2f}"
+
+    page.locator("#themeToggle").click()
+    dark = page.evaluate(probe)
+    assert dark["sectionBg"] != light["sectionBg"], "section surface must follow the theme"
+    assert dark["linkContrast"] >= 4.5, f"dark link contrast {dark['linkContrast']:.2f}"
