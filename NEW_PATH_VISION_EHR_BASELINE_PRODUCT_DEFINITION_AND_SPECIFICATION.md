@@ -4935,3 +4935,23 @@ No structural re-layout of exam detail (it already reads as sections) or the ord
 | --- | --- |
 | Rx / orders / exam detail | Eyebrow headers on 6 pages; heading badge sizing. |
 
+## 103. Redesign P5: Admin, Store Operations, Placeholders (v2.76)
+
+### 103.1 What changed
+
+Fifth phase of the app-wide "Launchpad" extension (§99-§102). All 23 admin pages (scheduling administration, billing services, user accounts, Voice Scribe vocabulary, authentication and field audit logs), the Daily Closing page and the placeholder page get an eyebrow label ("Administration", "Store operations", "Coming soon") above their heading. Tables, forms, tabs (the scheduling sub-nav is already styled as pills from P1) and badges come from the shared restyle.
+
+### 103.2 Preserved
+
+Routes, field names, ids, permissions and all table/edit-column structure are unchanged.
+
+### 103.3 Not done
+
+No per-page re-layout of the admin screens; they are dense CRUD tables where the shared restyle is the intended treatment.
+
+**Version 2.76 change log (relative to v2.75) -- Redesign P5:**
+
+| Area | Change |
+| --- | --- |
+| Admin / store ops / placeholder | Eyebrow headers on 25 pages. |
+

@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ type_.code }} History &mdash; Admin{% endblock %}
 {% block content %}
-<div class="page-header"><h1>Version &amp; Audit History &mdash; {{ type_.code }}</h1><a href="/admin/scheduling/appointment-types/{{ type_.id }}" class="btn btn-secondary">Back</a></div>
+<div class="page-header"><div><span class="page-eyebrow">Administration</span><h1>Version &amp; Audit History &mdash; {{ type_.code }}</h1></div><a href="/admin/scheduling/appointment-types/{{ type_.id }}" class="btn btn-secondary">Back</a></div>
 {% include "admin/scheduling/_nav.html" %}
 <div class="card"><h3>Versions</h3>
   <div class="table-responsive"><table><thead><tr><th>Version</th><th>Display Name</th><th>Active</th><th>Effective From</th><th>Change Reason</th></tr></thead><tbody>

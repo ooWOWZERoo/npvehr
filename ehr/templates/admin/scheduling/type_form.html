@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ 'Edit' if type_ else 'New' }} Appointment Type &mdash; Admin{% endblock %}
 {% block content %}
-<div class="page-header"><h1>{{ 'Edit / Publish New Version: ' + version.display_name if type_ else 'New Appointment Type' }}</h1>
+<div class="page-header"><div><span class="page-eyebrow">Administration</span><h1>{{ 'Edit / Publish New Version: ' + version.display_name if type_ else 'New Appointment Type' }}</h1></div>
   <a href="/admin/scheduling/appointment-types" class="btn btn-secondary">Cancel</a></div>
 {% include "admin/scheduling/_nav.html" %}
 <div class="card form-card">
