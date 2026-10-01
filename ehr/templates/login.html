@@ -17,27 +17,31 @@
   <link rel="stylesheet" href="/static/css/app.css">
   <style>
     body.login-body {
-      min-height: 100vh; display: flex; align-items: center; justify-content: center;
-      background: linear-gradient(160deg, var(--primary-strong), var(--primary) 60%, var(--primary-soft));
+      min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: var(--space-5);
+      background: radial-gradient(1200px 600px at 15% -10%, var(--primary-soft), transparent 60%), var(--canvas);
     }
+    .login-shell { display: grid; grid-template-columns: 1.1fr 1fr; gap: var(--space-7); align-items: center; width: 100%; max-width: 960px; }
+    .login-hero h2 { font-size: clamp(2rem, 4.5vw, 3.2rem); line-height: 1.05; letter-spacing: -0.03em; margin: var(--space-3) 0; color: var(--ink-strong); }
+    .login-hero p { color: var(--ink-muted); font-size: 1rem; max-width: 40ch; margin: 0; }
     .login-card {
-      background: var(--surface); border-radius: 14px; box-shadow: 0 20px 50px var(--shadow-pop);
-      padding: var(--space-7) var(--space-6); width: 100%; max-width: 380px;
+      background: var(--surface); border: 1px solid var(--border); border-radius: 20px; box-shadow: 0 20px 50px var(--shadow-pop);
+      padding: var(--space-7) var(--space-6); width: 100%;
     }
-    .login-brand { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-6); }
-    .login-brand img { height: 40px; width: auto; }
-    .login-brand-text { font-family: var(--font-display); font-size: 1.3rem; font-weight: 700; color: var(--ink-strong); }
-    .login-card h1 { font-size: 1.3rem; margin-bottom: var(--space-2); }
+    .login-card h1 { font-size: 1.4rem; margin-bottom: var(--space-2); }
     .login-card p.login-sub { color: var(--ink-muted); margin: 0 0 var(--space-5); font-size: 0.85rem; }
-    .login-card .btn-primary { width: 100%; justify-content: center; padding: 0.6rem; font-size: 0.9rem; }
+    .login-card .btn-primary { width: 100%; justify-content: center; padding: 0.7rem; font-size: 0.95rem; }
     .login-footnote { margin-top: var(--space-5); font-size: 0.75rem; color: var(--ink-muted); text-align: center; }
+    @media (max-width: 760px) { .login-shell { grid-template-columns: 1fr; gap: var(--space-5); } .login-hero h2 { font-size: 2rem; } }
   </style>
 </head>
 <body class="login-body">
+  <div class="login-shell">
+  <div class="login-hero">
+    <span class="page-eyebrow">New Path Vision EHR</span>
+    <h2>Every eye exam, one calm workspace.</h2>
+    <p>Charts, scheduling, and the exam room in a single place built for the way optometry actually runs.</p>
+  </div>
   <div class="login-card">
-    <div class="login-brand">
-      <span class="login-brand-text">New Path Vision EHR</span>
-    </div>
     <h1>Sign in</h1>
     <p class="login-sub">Enter your credentials to access the practice portal.</p>
     {% if error %}
@@ -58,6 +62,7 @@
     </form>
     <p class="login-footnote">Access is limited to authorized practice staff. All sign-in attempts are logged.</p>
     <p class="login-footnote">Patients: <a href="/portal/login">book or manage your appointment online</a>.</p>
+  </div>
   </div>
 </body>
 </html>

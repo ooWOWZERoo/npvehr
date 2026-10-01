@@ -17,6 +17,7 @@
       <div class="patient-photo-placeholder" style="width:80px;height:80px">No Photo</div>
     {% endif %}
     <div class="pw-header-info">
+      <span class="page-eyebrow">Patient chart</span>
       <h1>{{ display_name }}<a href="/patients/{{ patient.id }}/edit" class="icon-btn" style="margin-left:0.5rem;vertical-align:middle" title="Edit patient" aria-label="Edit patient">&#9998;</a></h1>
       <div class="pw-header-meta">
         <span>MRN: <span class="mono-data">{{ patient.mrn or '—' }}</span></span>

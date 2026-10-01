@@ -158,7 +158,7 @@ h3 { font-size: 1.05rem; font-weight: 600; margin: 0 0 var(--space-3); line-heig
 .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-4); margin-bottom: var(--space-5); }
 .dashboard-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: var(--space-5); }
 .detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: var(--space-4); }
-.detail-grid > .card, .dashboard-grid > .card { min-width: 0; }
+.detail-grid > .card, .dashboard-grid > .card, .dashboard-grid > .section { min-width: 0; }
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: var(--space-5); box-shadow: 0 1px 2px var(--hairline); }
 .card .card { box-shadow: none; border-color: var(--border); background: var(--surface-sunken); }
 /* Data-entry forms (New/Edit Patient, New/Edit Appointment, New Exam, New Prescription,
@@ -865,3 +865,13 @@ a.tile:hover { text-decoration: none; }
 /* inputs inside dense data tables (Rx values, closing counts, exam grids) */
 .exam-table input, .exam-table select, .dc-table input, .dc-table select { border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--ink); padding: 0.4rem 0.5rem; font-family: inherit; }
 .exam-table input:focus, .exam-table select:focus, .dc-table input:focus, .dc-table select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+
+/* --- P2: dashboard / patient chart header --- */
+.pw-header { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: var(--space-5); align-items: center; }
+.pw-header-info h1 { font-size: 1.8rem; letter-spacing: -0.03em; margin: 2px 0 var(--space-2); }
+.pw-subnav a.active { background: var(--primary-soft); color: var(--ink-strong); font-weight: 700; box-shadow: inset 3px 0 0 var(--primary); }
+.pw-subgroup a.active { background: var(--primary-soft); color: var(--ink-strong); font-weight: 600; box-shadow: none; }
+.stats-grid .stat-tile-value { font-size: 2.2rem; }
+.card .stats-grid { margin-bottom: var(--space-4); }
+.card .stats-grid .stat-tile { background: var(--surface-sunken); border-radius: 14px; padding: var(--space-4); }
+.card .stats-grid .stat-tile-value { font-size: 1.8rem; }

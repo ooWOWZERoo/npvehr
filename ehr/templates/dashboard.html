@@ -2,19 +2,31 @@
 {% from "_alert_banner.html" import alert_banner %}
 {% block title %}Dashboard &mdash; New Path Vision EHR{% endblock %}
 {% block content %}
-<h1>Dashboard</h1>
+<div class="page-header">
+  <div>
+    <span class="page-eyebrow">Today</span>
+    <h1>Dashboard</h1>
+    <p class="page-lede">Start a visit, jump to a chart, or see what is coming up next.</p>
+  </div>
+</div>
 {% if overdue_scheduled_count %}
   {{ alert_banner(overdue_scheduled_count|string + " appointment(s) from earlier today are still marked Scheduled — check them in or update their status.", "info") }}
 {% endif %}
+<div class="tile-grid" role="group" aria-label="Quick actions" style="margin-bottom:var(--space-5)">
+  <a class="tile" href="/exams/new"><span class="tile-icon" aria-hidden="true">&#128065;</span><span class="tile-title">New Exam</span><span class="tile-meta">Open the exam room</span></a>
+  <a class="tile" href="/appointments/new"><span class="tile-icon" aria-hidden="true">&#128197;</span><span class="tile-title">New Appointment</span><span class="tile-meta">Book a visit</span></a>
+  <a class="tile" href="/patients/new"><span class="tile-icon" aria-hidden="true">&#10133;</span><span class="tile-title">New Patient</span><span class="tile-meta">Register a chart</span></a>
+  <a class="tile" href="/prescriptions/new"><span class="tile-icon" aria-hidden="true">&#128221;</span><span class="tile-title">New Rx</span><span class="tile-meta">Glasses or contacts</span></a>
+</div>
 <div class="stats-grid">
-  <div class="card"><div class="card-title">Patients</div><div class="card-value">{{ total_patients }}</div></div>
-  <div class="card"><div class="card-title">Appointments</div><div class="card-value">{{ total_appointments }}</div></div>
-  <div class="card"><div class="card-title">Eye Exams</div><div class="card-value">{{ total_exams }}</div></div>
-  <div class="card"><div class="card-title">Prescriptions</div><div class="card-value">{{ total_rx }}</div></div>
+  <div class="stat-tile"><div class="stat-tile-label">Patients</div><div class="stat-tile-value">{{ total_patients }}</div></div>
+  <div class="stat-tile"><div class="stat-tile-label">Appointments</div><div class="stat-tile-value">{{ total_appointments }}</div></div>
+  <div class="stat-tile"><div class="stat-tile-label">Eye Exams</div><div class="stat-tile-value">{{ total_exams }}</div></div>
+  <div class="stat-tile"><div class="stat-tile-label">Prescriptions</div><div class="stat-tile-value">{{ total_rx }}</div></div>
 </div>
 <div class="dashboard-grid">
-  <div class="card">
-    <h2>Upcoming Appointments</h2>
+  <div class="section">
+    <div class="section-head"><div><span class="page-eyebrow">Schedule</span><h2>Upcoming Appointments</h2></div><a href="/appointments" class="btn btn-sm btn-secondary">View All</a></div>
     {% if upcoming %}
     <div class="table-responsive"><table><thead><tr><th>Time</th><th>Patient</th><th>Reason</th></tr></thead><tbody>
     {% for a in upcoming %}
@@ -25,10 +37,10 @@
       </tr>
     {% endfor %}
     </tbody></table></div>
-    {% else %}<p style="color:var(--ink-muted)">No upcoming appointments.</p>{% endif %}
+    {% else %}<div class="empty-state"><strong>Nothing scheduled</strong>No upcoming appointments.</div>{% endif %}
   </div>
-  <div class="card">
-    <h2>Recent Patients</h2>
+  <div class="section">
+    <div class="section-head"><div><span class="page-eyebrow">Charts</span><h2>Recent Patients</h2></div><a href="/patients" class="btn btn-sm btn-secondary">View All</a></div>
     {% if recent_patients %}
     <div class="table-responsive"><table><thead><tr><th>Name</th><th>DOB</th><th>Phone</th></tr></thead><tbody>
     {% for p in recent_patients %}
@@ -39,7 +51,7 @@
       </tr>
     {% endfor %}
     </tbody></table></div>
-    {% else %}<p style="color:var(--ink-muted)">No patients yet.</p>{% endif %}
+    {% else %}<div class="empty-state"><strong>No patients yet</strong>Register the first chart to get started.</div>{% endif %}
   </div>
 </div>
 {% endblock %}
