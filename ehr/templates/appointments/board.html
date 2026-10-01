@@ -2,7 +2,7 @@
 {% block title %}Calendar &mdash; New Path Vision EHR{% endblock %}
 {% block content %}
 <div class="page-header">
-  <h1 id="boardTitle">Calendar</h1>
+  <div><span class="page-eyebrow">Schedule</span><h1 id="boardTitle">Calendar</h1></div>
   <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
     <a href="/appointments/calendar" data-view-link="month" class="btn btn-secondary btn-sm{{ ' active' if initial_view == 'dayGridMonth' and not providers_mode }}">Month</a>
     <a href="/appointments/week" data-view-link="week" class="btn btn-secondary btn-sm{{ ' active' if initial_view == 'timeGridWeek' and not providers_mode }}">Week</a>

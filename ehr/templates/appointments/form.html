@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}New Appointment &mdash; New Path Vision EHR{% endblock %}
 {% block content %}
-<div class="page-header"><h1>New Appointment</h1><a href="/appointments/" class="btn btn-secondary">Cancel</a></div>
+<div class="page-header"><div><span class="page-eyebrow">Schedule</span><h1>New Appointment</h1></div><a href="/appointments/" class="btn btn-secondary">Cancel</a></div>
 {% if error %}<div class="alert alert-error" role="alert">{{ error }}</div>{% endif %}
 <div class="card form-card">
   <form method="post" action="/appointments/new">
