@@ -4915,3 +4915,23 @@ No layout rebuild of the booking form or the calendar toolbar beyond the shared 
 | --- | --- |
 | Appointments | Eyebrow headers on 8 pages, active-view button state, list empty state. |
 
+## 102. Redesign P4: Prescriptions, Orders, Exam Detail (v2.75)
+
+### 102.1 What changed
+
+Fourth phase of the app-wide "Launchpad" extension (§99-§101). The prescription detail/new pages, the lab-order list/detail/place pages and the signed exam detail page get an eyebrow label above their heading, and the Signed / status badges beside the headings are sized to sit with the larger title. Tables, forms, the OD/OS blocks and the printable Rx sheet come from the P1 shared restyle; the print stylesheet is unchanged.
+
+### 102.2 Preserved
+
+Routes, field names, ids, button text, sign/amend/addendum flows and the print layout are unchanged.
+
+### 102.3 Not done
+
+No structural re-layout of exam detail (it already reads as sections) or the order tables.
+
+**Version 2.75 change log (relative to v2.74) -- Redesign P4:**
+
+| Area | Change |
+| --- | --- |
+| Rx / orders / exam detail | Eyebrow headers on 6 pages; heading badge sizing. |
+

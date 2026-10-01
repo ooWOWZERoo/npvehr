@@ -880,3 +880,6 @@ a.tile:hover { text-decoration: none; }
 .page-header .btn-group-views, .page-header > div > .btn { white-space: nowrap; }
 .btn.active { background: var(--primary-soft); color: var(--ink-strong); border-color: var(--primary); font-weight: 700; }
 .detail-grid .card h3, .card > h3:first-child { letter-spacing: -0.01em; }
+
+/* --- P4: prescriptions / orders / exam detail --- */
+.page-header h1 .badge { font-size: 0.7rem; letter-spacing: 0.08em; }

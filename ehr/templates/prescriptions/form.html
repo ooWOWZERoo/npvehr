@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}New Prescription &mdash; New Path Vision EHR{% endblock %}
 {% block content %}
-<div class="page-header"><h1>New Prescription</h1><a href="/patients/" class="btn btn-secondary">Cancel</a></div>
+<div class="page-header"><div><span class="page-eyebrow">Prescription</span><h1>New Prescription</h1></div><a href="/patients/" class="btn btn-secondary">Cancel</a></div>
 <div class="card form-card">
   <form method="post" action="/prescriptions/new">
     {% if selected_exam_id %}<input type="hidden" name="exam_id" value="{{ selected_exam_id }}">{% endif %}
