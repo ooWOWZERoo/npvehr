@@ -11,7 +11,7 @@
 <div class="card">
   <h3>Current Rules (evaluated in priority order, lowest first)</h3>
   {% if version.color_rules %}
-  <table>
+  <div class="table-responsive"><table>
     <thead><tr><th>Priority</th><th>Relationship</th><th>Follow-up</th><th>Min Tests</th><th>Max Tests</th><th>Color</th><th>Reason Code</th><th></th></tr></thead>
     <tbody>
     {% for r in version.color_rules %}
@@ -31,7 +31,7 @@
       </tr>
     {% endfor %}
     </tbody>
-  </table>
+  </table></div>
   {% else %}
   <p style="color:var(--ink-muted)">No conditional rules yet &mdash; this type resolves to its base color (<span class="color-swatch" style="background:{{ version.base_color }}"></span> {{ version.base_color or 'not set' }}) for every booking.</p>
   {% endif %}

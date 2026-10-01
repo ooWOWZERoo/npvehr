@@ -12,7 +12,7 @@
   </form>
 </div>
 <div class="card" style="margin-top:1rem">
-  <table><thead><tr><th>Mis-transcription</th><th>Correct Spelling</th><th>Status</th><th></th></tr></thead><tbody>
+  <div class="table-responsive"><table><thead><tr><th>Mis-transcription</th><th>Correct Spelling</th><th>Status</th><th></th></tr></thead><tbody>
   {% for c in corrections %}
     <tr>
       <td>{{ c.phrase }}</td>
@@ -30,7 +30,7 @@
     </tr>
   {% else %}<tr><td colspan="4" style="text-align:center;color:var(--ink-muted)">No corrections found.</td></tr>
   {% endfor %}
-  </tbody></table>
+  </tbody></table></div>
   <p style="font-size:0.8rem;color:var(--ink-muted);margin-top:0.75rem">
     Voice Scribe's client-side speech-to-text model can't be trained or fine-tuned; this table is a
     find/replace correction applied to dictated text before it lands in a field, matched

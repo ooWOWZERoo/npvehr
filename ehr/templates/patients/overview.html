@@ -34,7 +34,7 @@
   {% if today_appointment %}
   <div style="margin-top:1rem;border-top:1px solid var(--border);padding-top:1rem">
     {% if todays_line_items %}
-    <table class="exam-table">
+    <div class="table-responsive"><table class="exam-table">
       <tr><th>Service</th><th>Fee</th><th>Source</th><th></th></tr>
       {% for c in todays_line_items %}
       <tr>
@@ -48,7 +48,7 @@
         </td>
       </tr>
       {% endfor %}
-    </table>
+    </table></div>
     {% endif %}
     <form method="post" action="/patients/{{ patient.id }}/charges/add"
       style="display:flex;gap:0.5rem;align-items:flex-end;margin-top:0.75rem">
@@ -73,7 +73,7 @@
 {% if pending_orders %}
 <div class="card" style="margin-top:1rem">
   <h3>Pending Diagnostic Orders</h3>
-  <table class="exam-table">
+  <div class="table-responsive"><table class="exam-table">
     <tr><th>Test</th><th>Status</th><th>Ordered</th><th></th></tr>
     {% for o in pending_orders %}
     <tr>
@@ -95,7 +95,7 @@
       </td>
     </tr>
     {% endfor %}
-  </table>
+  </table></div>
 </div>
 {% endif %}
 <div class="detail-grid" style="margin-top:1rem">
@@ -116,23 +116,23 @@
   <div class="card">
     <div class="page-header" style="margin-bottom:0.75rem"><h3 style="margin:0">Eye Exams</h3><a href="/patients/{{ patient.id }}/orders/exams" class="btn btn-sm btn-secondary">View All</a></div>
     {% if recent_exams %}
-    <table><tbody>
+    <div class="table-responsive"><table><tbody>
     {% for e in recent_exams %}
       <tr><td>{{ e.exam_date }}</td><td>{{ e.chief_complaint or '—' }}</td>
         <td><a href="/exams/{{ e.id }}" class="btn btn-sm btn-secondary">View</a></td></tr>
     {% endfor %}
-    </tbody></table>
+    </tbody></table></div>
     {% else %}<p style="color:var(--ink-muted)">No exams recorded.</p>{% endif %}
   </div>
   <div class="card">
     <div class="page-header" style="margin-bottom:0.75rem"><h3 style="margin:0">Prescriptions</h3><a href="/patients/{{ patient.id }}/rx" class="btn btn-sm btn-secondary">View All</a></div>
     {% if recent_prescriptions %}
-    <table><tbody>
+    <div class="table-responsive"><table><tbody>
     {% for rx in recent_prescriptions %}
       <tr><td>{{ rx.issue_date or '—' }}</td><td>{{ rx.rx_type }}</td>
         <td><a href="/prescriptions/{{ rx.id }}" class="btn btn-sm btn-secondary">View</a></td></tr>
     {% endfor %}
-    </tbody></table>
+    </tbody></table></div>
     {% else %}<p style="color:var(--ink-muted)">No prescriptions recorded.</p>{% endif %}
   </div>
 </div>

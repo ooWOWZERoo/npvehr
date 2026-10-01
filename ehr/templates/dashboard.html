@@ -16,7 +16,7 @@
   <div class="card">
     <h2>Upcoming Appointments</h2>
     {% if upcoming %}
-    <table><thead><tr><th>Time</th><th>Patient</th><th>Reason</th></tr></thead><tbody>
+    <div class="table-responsive"><table><thead><tr><th>Time</th><th>Patient</th><th>Reason</th></tr></thead><tbody>
     {% for a in upcoming %}
       <tr>
         <td>{{ a.scheduled_at.strftime('%m/%d %I:%M %p') }}</td>
@@ -24,13 +24,13 @@
         <td>{{ a.reason or '—' }}</td>
       </tr>
     {% endfor %}
-    </tbody></table>
+    </tbody></table></div>
     {% else %}<p style="color:var(--ink-muted)">No upcoming appointments.</p>{% endif %}
   </div>
   <div class="card">
     <h2>Recent Patients</h2>
     {% if recent_patients %}
-    <table><thead><tr><th>Name</th><th>DOB</th><th>Phone</th></tr></thead><tbody>
+    <div class="table-responsive"><table><thead><tr><th>Name</th><th>DOB</th><th>Phone</th></tr></thead><tbody>
     {% for p in recent_patients %}
       <tr>
         <td><a href="/patients/{{ p.id }}">{{ p.last_name }}, {{ p.first_name }}</a></td>
@@ -38,7 +38,7 @@
         <td>{{ p.phone or '—' }}</td>
       </tr>
     {% endfor %}
-    </tbody></table>
+    </tbody></table></div>
     {% else %}<p style="color:var(--ink-muted)">No patients yet.</p>{% endif %}
   </div>
 </div>

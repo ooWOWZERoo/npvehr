@@ -13,7 +13,7 @@
 <div class="card" style="margin-bottom:1rem;border-left:4px solid var(--primary)">
   <h3>Patients Waiting for This Slot</h3>
   <p style="color:var(--ink-muted);font-size:0.85rem;margin-top:-0.5rem">This appointment was cancelled, freeing {{ appt.scheduled_at.strftime('%A, %B %-d') }} with Dr. {{ appt.provider.last_name }}. These patients asked to be notified of an earlier {{ appt.appointment_type_version.display_name if appt.appointment_type_version else '' }} slot -- each has already been auto-notified (mock send, BUILD_BACKLOG.md 5a) on any channel they've opted into:</p>
-  <table class="exam-table">
+  <div class="table-responsive"><table class="exam-table">
     <tr><th>Priority</th><th>Patient</th><th>Date Range</th><th>Notes</th><th>Notified</th><th></th></tr>
     {% for e in waitlist_matches %}
     <tr>
@@ -26,7 +26,7 @@
       <td><a href="/appointments/new?patient_id={{ e.patient_id }}&provider_id={{ appt.provider_id }}&date={{ appt.scheduled_at.date().isoformat() }}" class="btn btn-sm btn-primary">Book</a></td>
     </tr>
     {% endfor %}
-  </table>
+  </table></div>
 </div>
 {% endif %}
 <div class="detail-grid">
@@ -68,12 +68,12 @@
     <div style="margin-top:1rem"><a href="/exams/new?patient_id={{ appt.patient_id }}&appointment_id={{ appt.id }}" class="btn btn-secondary btn-sm">Start Exam</a></div>
     <h3 style="margin-top:1.25rem">Audit History</h3>
     {% if audit_events %}
-    <table><thead><tr><th>When</th><th>Event</th><th>Field</th><th>Change</th><th>Reason</th></tr></thead><tbody>
+    <div class="table-responsive"><table><thead><tr><th>When</th><th>Event</th><th>Field</th><th>Change</th><th>Reason</th></tr></thead><tbody>
     {% for e in audit_events %}
       <tr><td>{{ e.occurred_at.strftime('%m/%d %I:%M %p') }}</td><td>{{ e.event_type }}</td><td>{{ e.field_name or '—' }}</td>
       <td>{{ e.old_value or '—' }} &rarr; {{ e.new_value or '—' }}</td><td>{{ e.reason or '—' }}</td></tr>
     {% endfor %}
-    </tbody></table>
+    </tbody></table></div>
     {% else %}<p style="color:var(--ink-muted)">No audit events.</p>{% endif %}
   </div>
 </div>

@@ -18,7 +18,7 @@
     </div>
     <button type="submit" class="btn btn-primary">Save</button>
   </form>
-  <table style="margin-top:1rem"><thead><tr><th>Provider</th><th>Override (blank = use practice default)</th><th></th></tr></thead><tbody>
+  <div class="table-responsive"><table style="margin-top:1rem"><thead><tr><th>Provider</th><th>Override (blank = use practice default)</th><th></th></tr></thead><tbody>
   {% for p in providers %}
     <tr>
       <td>Dr. {{ p.last_name }}</td>
@@ -33,7 +33,7 @@
       </td>
     </tr>
   {% endfor %}
-  </tbody></table>
+  </tbody></table></div>
 </div>
 <div class="card form-card"><h3>Add Weekly Working Hours</h3>
   <form method="post" action="/admin/scheduling/provider-availability/new">
@@ -49,12 +49,12 @@
   </form>
 </div>
 <div class="card" style="margin-top:1rem">
-  <table><thead><tr><th>Provider</th><th>Day</th><th>Start</th><th>End</th><th>Active</th></tr></thead><tbody>
+  <div class="table-responsive"><table><thead><tr><th>Provider</th><th>Day</th><th>Start</th><th>End</th><th>Active</th></tr></thead><tbody>
   {% for t in templates_ %}
     {% set p = providers|selectattr('id', 'equalto', t.provider_id)|first %}
     <tr><td>{{ 'Dr. ' + p.last_name if p else t.provider_id }}</td><td>{{ day_names[t.day_of_week] }}</td><td>{{ t.start_time }}</td><td>{{ t.end_time }}</td><td>{{ 'Yes' if t.active else 'No' }}</td></tr>
   {% else %}<tr><td colspan="5" style="text-align:center;color:var(--ink-muted)">No working hours defined yet -- the availability search will show no open slots for any provider until hours are added here.</td></tr>
   {% endfor %}
-  </tbody></table>
+  </tbody></table></div>
 </div>
 {% endblock %}

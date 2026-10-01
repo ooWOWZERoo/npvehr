@@ -53,7 +53,7 @@
         (total variance {{ '%+.2f'|format(h.total_variance) }})
       </span>
     </h3>
-    <table><thead><tr><th>Payment Type</th><th>Calculated</th><th>Actual</th><th>Variance</th><th>Explanation</th></tr></thead><tbody>
+    <div class="table-responsive"><table><thead><tr><th>Payment Type</th><th>Calculated</th><th>Actual</th><th>Variance</th><th>Explanation</th></tr></thead><tbody>
     {% for r in h.rows %}
       <tr>
         <td>{{ payment_labels.get(r.payment_type, r.payment_type) }}</td>
@@ -63,7 +63,7 @@
         <td>{{ r.explanation or '—' }}</td>
       </tr>
     {% endfor %}
-    </tbody></table>
+    </tbody></table></div>
   {% endfor %}
   {% else %}<p style="color:var(--ink-muted)">No daily closings saved yet.</p>{% endif %}
 </div>

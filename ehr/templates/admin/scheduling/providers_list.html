@@ -27,7 +27,7 @@
   </form>
 </div>
 <div class="card">
-  <table><thead><tr><th>Name</th><th>Specialty</th><th>License #</th><th>NPI</th><th>Status</th><th></th></tr></thead><tbody>
+  <div class="table-responsive"><table><thead><tr><th>Name</th><th>Specialty</th><th>License #</th><th>NPI</th><th>Status</th><th></th></tr></thead><tbody>
   {% for p in providers %}
     <tr>
       <td>Dr. {{ p.first_name }} {{ p.last_name }}</td>
@@ -44,7 +44,7 @@
     </tr>
   {% else %}<tr><td colspan="6" style="text-align:center;color:var(--ink-muted)">No providers found.</td></tr>
   {% endfor %}
-  </tbody></table>
+  </tbody></table></div>
   {% include "_pagination.html" %}
   <p style="font-size:0.8rem;color:var(--ink-muted);margin-top:0.75rem">
     Deactivating a provider does not remove them from any existing appointment, exam, or prescription record --

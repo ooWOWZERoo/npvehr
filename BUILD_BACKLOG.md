@@ -1,6 +1,6 @@
 # New Path Vision EHR — Master Build Backlog
 
-**Status:** Living tracking document. **Baseline as of:** spec v2.70 / research doc v2.24 (2026-09-30).
+**Status:** Living tracking document. **Baseline as of:** spec v2.71 / research doc v2.24 (2026-09-30).
 
 ## Purpose and how to use this document
 
@@ -49,6 +49,7 @@ This consolidates every outstanding build item, investigation, and test scattere
 - [x] **Service & Fee Catalog + live "Today's Services & Materials" charge estimate** — user request: create billable services tied to CPT codes with a practice-set fee, seeded with the practice's real fee schedule at its decided pricing; the Patient Overview's long-standing "Pending Exam: N/A" placeholder is now a live running total as tests/services are added during a visit, both manually and automatically. **Done, v2.63 (Phase 1) / v2.64 (Phases 2-3)** — see baseline spec §90-91. All 3 phases of the plan under "0b" below are complete.
 
 - [x] **App-wide light/dark theme + New Exam "exam room" redesign** — user request: critique the New Exam form and prototype a marketing-product look from two supplied screenshots; the "Launchpad" direction was chosen, with an app-wide light/dark toggle and a full rebuild of the form. **Theme, v2.69** — token-driven dark palette, topbar toggle persisted per browser, light stays default and unchanged; patient portal intentionally left light. See baseline spec §96. **Exam room, v2.70** — guided step rail, exam-type cards, focus tiles, side-by-side OD/OS cards with Habitual/Manifest/Cycloplegic tabs, sticky save bar; every field name/id/composer hook unchanged. See baseline spec §97. Follow-ups not done: redesign of the other forms (New Rx, appointment booking, patient demographics), which gain only the theme.
+- [x] **Wide admin tables clipped their Edit column** — flagged in the exam-room PR, then requested. 25 bare tables in 18 staff templates now scroll inside their card (`.table-responsive`) instead of clipping at ~1000-1280px. **Done, v2.71** — see baseline spec §98.
 
 ### 0b. Service & Fee Catalog (user request, 2026-09-30) — closed out, v2.64
 

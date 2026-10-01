@@ -16,13 +16,13 @@
   </form>
 </div>
 <div class="card" style="margin-top:1rem">
-  <table><thead><tr><th>Order</th><th>Code</th><th>Name</th><th>Abbrev</th><th>Counts Toward Color</th><th>Active</th><th></th></tr></thead><tbody>
+  <div class="table-responsive"><table><thead><tr><th>Order</th><th>Code</th><th>Name</th><th>Abbrev</th><th>Counts Toward Color</th><th>Active</th><th></th></tr></thead><tbody>
   {% for t in tests %}
     <tr><td>{{ t.display_order }}</td><td>{{ t.code }}</td><td>{{ t.display_name }}</td><td>{{ t.calendar_abbreviation }}</td>
     <td>{{ 'Yes' if t.counts_toward_color else 'No' }}</td>
     <td><span class="badge {{ 'badge-completed' if t.active else 'badge-cancelled' }}">{{ 'Active' if t.active else 'Inactive' }}</span></td>
     <td><form method="post" action="/admin/scheduling/tests/{{ t.id }}/toggle"><button class="btn btn-sm btn-secondary" type="submit">{{ 'Deactivate' if t.active else 'Activate' }}</button></form></td></tr>
   {% endfor %}
-  </tbody></table>
+  </tbody></table></div>
 </div>
 {% endblock %}
