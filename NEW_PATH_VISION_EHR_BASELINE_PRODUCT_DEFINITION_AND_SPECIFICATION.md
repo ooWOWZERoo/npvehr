@@ -4811,3 +4811,29 @@ No "draft autosaved" indicator (nothing autosaves, so it would be false). The ot
 | Hook | One line in the form's composer `refresh()` syncs the exam-type cards when it sets the suggestion. |
 | Tests | Three new Playwright tests; every pre-existing exam-form test passes unmodified. |
 | Explicitly not done | Other forms not redesigned; no autosave indicator; no change to any field name, composer logic or server code. |
+
+## 98. Wide Tables Scroll Inside Their Card (v2.71)
+
+### 98.1 Origin
+
+Flagged in §96/§97's PR as a pre-existing gap, then requested: on admin list pages (Appointment Types, Diagnostic Tests, Resources, Availability, Holidays, Service & Fee Catalog, Voice Scribe Vocabulary, and others) the table is wider than its card at roughly 1000-1280px, so the **rightmost column -- the Edit/Deactivate buttons -- was off-screen with no way to reach it**.
+
+### 98.2 Root cause
+
+These were bare `<table>`s (only some templates used the existing `.table-responsive` scroller), and the page clips horizontal overflow on `<html>` (the app-wide overflow fix of §18.3/§96), so a user cannot scroll a clipped page. Only *scripted* scrolling could reach the buttons, which is why every test that clicks Edit kept passing and nothing noticed.
+
+### 98.3 Fix
+
+All 25 unwrapped tables across 18 staff templates (admin scheduling/billing/voice-scribe, dashboard, patient overview and insurance tab, appointment detail, prescription detail, daily closing) are wrapped in the existing `.table-responsive` container (`overflow-x: auto`), so a wide table scrolls horizontally inside its own card while the page itself never overflows. Tables already wrapped were left alone. Applied by script with a "skip if already inside a scroller" check, then every template re-parsed. Not touched: the patient portal and the Rx print page.
+
+### 98.4 Verified
+
+New `test_wide_tables_scroll_inside_their_card_so_edit_columns_stay_reachable`: structurally, every `<table>` on ten affected pages has a horizontally-scrollable ancestor (it fails on the unfixed templates, naming exactly the unwrapped pages); behaviourally, at 1000px the Appointment Types table overflows its container, the page does not, and the last column's Edit link scrolls into the viewport. Full suite green.
+
+**Version 2.71 change log (relative to v2.70) -- Wide tables:**
+
+| Area | Change |
+| --- | --- |
+| Bug fix | 25 bare tables in 18 staff templates wrapped in `.table-responsive`; wide admin tables scroll inside their card instead of clipping their Edit column. |
+| Tests | One new Playwright test (structural + behavioural). |
+| Explicitly not done | Portal and Rx print page untouched; no new scroll-affordance styling (shadow/fade) on the scroller. |

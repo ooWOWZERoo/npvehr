@@ -3623,3 +3623,49 @@ def test_exam_room_rail_focus_summary_and_patient_card(logged_in_page, live_serv
     page.select_option('select[name="patient_id"]', second_value)
     assert page.locator("#railPatientName").inner_text() == options[1].inner_text().strip()
     assert page.locator("#railPatientLink").get_attribute("href") == f"/patients/{second_value}"
+
+
+def test_wide_tables_scroll_inside_their_card_so_edit_columns_stay_reachable(logged_in_page, live_server):
+    """Admin tables (Appointment Types, Diagnostic Tests, Resources, ...) are wider
+    than their card at ~1000-1280px. They were bare <table>s, and the page clips
+    horizontal overflow on <html>, so the rightmost column -- the Edit/Deactivate
+    buttons -- fell off-screen with no way to scroll to it (a user can't scroll a
+    clipped page; only scripted scrolling reached it, which is why no test
+    noticed). Every table must now sit inside a horizontally-scrollable
+    container. Asserted structurally across the affected pages, then proven
+    behaviourally: at a narrow viewport the Appointment Types table really does
+    overflow its container, the page itself does not, and the last column's
+    Edit link can be scrolled to and lands inside the viewport."""
+    page = logged_in_page
+    page.set_viewport_size({"width": 1000, "height": 800})
+    unwrapped = []
+    for path in ["/", "/admin/scheduling/appointment-types", "/admin/scheduling/tests",
+                 "/admin/scheduling/resources", "/admin/scheduling/availability",
+                 "/admin/scheduling/holidays", "/admin/billing/services",
+                 "/admin/voice-scribe/corrections", "/patients/1", "/store-ops/daily-closing"]:
+        page.goto(live_server + path)
+        page.wait_for_load_state("networkidle")
+        bad = page.evaluate("""() => Array.from(document.querySelectorAll('table')).filter(t => {
+            for (let el = t.parentElement; el; el = el.parentElement) {
+                const o = getComputedStyle(el).overflowX;
+                if (o === 'auto' || o === 'scroll') return false;
+            }
+            return true;
+        }).length""")
+        if bad:
+            unwrapped.append(f"{path}: {bad}")
+    assert not unwrapped, f"tables with no horizontal scroll container: {unwrapped}"
+
+    page.goto(live_server + "/admin/scheduling/appointment-types")
+    page.wait_for_load_state("networkidle")
+    box = page.evaluate("""() => {
+        const c = document.querySelector('.table-responsive');
+        return {scroll: c.scrollWidth, client: c.clientWidth,
+                page: document.documentElement.scrollWidth, view: document.documentElement.clientWidth};
+    }""")
+    assert box["scroll"] > box["client"], "expected the types table to overflow its card at 1000px"
+    assert box["page"] <= box["view"], "the page itself must not overflow; only the table scrolls"
+    edit = page.locator("tr a", has_text="Edit").first
+    edit.scroll_into_view_if_needed()
+    right = edit.bounding_box()["x"] + edit.bounding_box()["width"]
+    assert right <= 1000, f"Edit link still off-screen (right edge {right})"

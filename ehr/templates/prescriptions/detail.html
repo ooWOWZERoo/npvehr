@@ -97,7 +97,7 @@
                         'received': 'Received', 'dispensed': 'Dispensed', 'cancelled': 'Cancelled'} %}
 <div class="card" style="margin-top:1rem"><h3>Lab Orders</h3>
   {% if lab_orders %}
-  <table><thead><tr><th>Placed</th><th>Type</th><th>Lab</th><th>ETA</th><th>Status</th><th></th></tr></thead><tbody>
+  <div class="table-responsive"><table><thead><tr><th>Placed</th><th>Type</th><th>Lab</th><th>ETA</th><th>Status</th><th></th></tr></thead><tbody>
     {% for o in lab_orders %}
     <tr>
       <td>{{ o.placed_at.strftime('%Y-%m-%d') if o.placed_at else '—' }}</td>
@@ -108,7 +108,7 @@
       <td><a href="/orders/{{ o.id }}" class="btn btn-sm btn-secondary">View</a></td>
     </tr>
     {% endfor %}
-  </tbody></table>
+  </tbody></table></div>
   {% else %}
   <p style="color:var(--ink-muted);font-size:0.9rem">No lab orders placed yet.</p>
   {% endif %}

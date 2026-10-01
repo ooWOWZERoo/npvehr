@@ -9,7 +9,7 @@
 <div class="card" style="margin-top:1rem">
   <h3>Insurance Plans <span style="font-weight:normal;color:var(--ink-muted);font-size:0.8rem">&mdash; feeds the two-flow billing preview's check-in suggestion; a patient can have both an active vision and an active medical plan on file</span></h3>
   {% if insurance_plans %}
-  <table class="exam-table">
+  <div class="table-responsive"><table class="exam-table">
     <tr><th>Category</th><th>Payer</th><th>Member ID</th><th>Group #</th><th>Status</th><th></th></tr>
     {% for plan in insurance_plans %}
     <tr>
@@ -21,7 +21,7 @@
       <td>{% if plan.is_active %}<form method="post" action="/patients/{{ patient.id }}/insurance/plans/{{ plan.id }}/deactivate" style="display:inline"><button type="submit" class="btn btn-sm btn-secondary">Deactivate</button></form>{% endif %}</td>
     </tr>
     {% endfor %}
-  </table>
+  </table></div>
   {% else %}
   <p style="color:var(--ink-muted)">No structured insurance plans on file yet.</p>
   {% endif %}

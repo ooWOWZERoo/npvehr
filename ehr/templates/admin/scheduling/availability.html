@@ -17,11 +17,11 @@
   </form>
 </div>
 <div class="card" style="margin-top:1rem">
-  <table><thead><tr><th>Resource</th><th>Day</th><th>Start</th><th>End</th><th>Active</th></tr></thead><tbody>
+  <div class="table-responsive"><table><thead><tr><th>Resource</th><th>Day</th><th>Start</th><th>End</th><th>Active</th></tr></thead><tbody>
   {% for t in templates_ %}
     <tr><td>{{ t.resource_id }}</td><td>{{ day_names[t.day_of_week] }}</td><td>{{ t.start_time }}</td><td>{{ t.end_time }}</td><td>{{ 'Yes' if t.active else 'No' }}</td></tr>
   {% else %}<tr><td colspan="5" style="text-align:center;color:var(--ink-muted)">No availability templates defined yet. Provider-conflict detection uses existing bookings regardless.</td></tr>
   {% endfor %}
-  </tbody></table>
+  </tbody></table></div>
 </div>
 {% endblock %}

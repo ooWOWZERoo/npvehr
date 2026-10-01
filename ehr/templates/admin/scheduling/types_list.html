@@ -5,7 +5,7 @@
 {% include "admin/scheduling/_nav.html" %}
 <div class="page-header"><h2>Appointment Types</h2><a href="/admin/scheduling/appointment-types/new" class="btn btn-primary btn-sm">+ New Type</a></div>
 <div class="card">
-  <table><thead><tr><th>Order</th><th>Active</th><th>Code</th><th>Name</th><th>Service Line</th>
+  <div class="table-responsive"><table><thead><tr><th>Order</th><th>Active</th><th>Code</th><th>Name</th><th>Service Line</th>
     <th>New</th><th>Established</th><th>Color</th><th>Buffers</th><th>Version</th><th></th></tr></thead><tbody>
   {% for t, v in rows %}
     <tr>
@@ -32,6 +32,6 @@
       </td>
     </tr>
   {% endfor %}
-  </tbody></table>
+  </tbody></table></div>
 </div>
 {% endblock %}

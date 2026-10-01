@@ -27,12 +27,12 @@
   </div>
   <div class="card"><h3>Color Preview (spec 17.3) &mdash; <a href="/admin/scheduling/appointment-types/{{ type_.id }}/color-rules">Manage Color Rules</a></h3>
     {% if previews %}
-    <table><thead><tr><th>Relationship</th><th>Follow-up</th><th>Tests</th><th>Color</th><th>Reason</th></tr></thead><tbody>
+    <div class="table-responsive"><table><thead><tr><th>Relationship</th><th>Follow-up</th><th>Tests</th><th>Color</th><th>Reason</th></tr></thead><tbody>
     {% for p in previews %}
       <tr><td>{{ p.relationship }}</td><td>{{ 'Yes' if p.is_follow_up else 'No' }}</td><td>{{ p.count }}</td>
       <td><span class="color-swatch" style="background:{{ p.color }}"></span> {{ p.color }}</td><td>{{ p.reason }}</td></tr>
     {% endfor %}
-    </tbody></table>
+    </tbody></table></div>
     {% else %}<p style="color:var(--ink-muted)">No eligible relationships to preview.</p>{% endif %}
   </div>
 </div>

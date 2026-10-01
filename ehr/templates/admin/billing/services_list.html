@@ -17,7 +17,7 @@
   </form>
 </div>
 <div class="card" style="margin-top:1rem">
-  <table><thead><tr><th>Category</th><th>Code</th><th>CPT</th><th>Name</th><th>Fee</th><th>Status</th><th></th></tr></thead><tbody>
+  <div class="table-responsive"><table><thead><tr><th>Category</th><th>Code</th><th>CPT</th><th>Name</th><th>Fee</th><th>Status</th><th></th></tr></thead><tbody>
   {% set ns = namespace(last_category=None) %}
   {% for s in services %}
     {% if s.category != ns.last_category %}
@@ -40,7 +40,7 @@
     </tr>
   {% else %}<tr><td colspan="7" style="text-align:center;color:var(--ink-muted)">No services found.</td></tr>
   {% endfor %}
-  </tbody></table>
+  </tbody></table></div>
   <p style="font-size:0.8rem;color:var(--ink-muted);margin-top:0.75rem">
     This is the practice's own fee schedule for staff reference -- this app has no billing/claims infrastructure,
     and nothing here is ever transmitted, submitted, or billed to a payer. Deactivating a service does not remove
