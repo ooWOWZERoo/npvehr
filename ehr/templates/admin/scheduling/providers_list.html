@@ -42,11 +42,11 @@
         </form>
       </td>
     </tr>
-  {% else %}<tr><td colspan="6" style="text-align:center;color:#64748b">No providers found.</td></tr>
+  {% else %}<tr><td colspan="6" style="text-align:center;color:var(--ink-muted)">No providers found.</td></tr>
   {% endfor %}
   </tbody></table>
   {% include "_pagination.html" %}
-  <p style="font-size:0.8rem;color:#64748b;margin-top:0.75rem">
+  <p style="font-size:0.8rem;color:var(--ink-muted);margin-top:0.75rem">
     Deactivating a provider does not remove them from any existing appointment, exam, or prescription record --
     it only marks them as no longer active. Every booking form and availability search across the app still
     lists all providers regardless of this status this round (a follow-up to actually hide inactive providers

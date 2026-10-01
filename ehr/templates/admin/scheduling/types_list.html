@@ -16,7 +16,7 @@
       <td>{{ v.service_line if v else '—' }}</td>
       <td>{% if v %}{{ 'Yes ('+v.new_duration_minutes|string+'m)' if v.allows_new and v.new_duration_minutes else ('Yes' if v.allows_new else 'No') }}{% endif %}</td>
       <td>{% if v %}{{ 'Yes ('+v.established_duration_minutes|string+'m)' if v.allows_established and v.established_duration_minutes else ('Yes' if v.allows_established else 'No') }}{% endif %}</td>
-      <td>{% if v and v.base_color %}<span class="color-swatch" style="background:{{ v.base_color }}"></span>{% elif v and v.color_rules %}<span title="Conditional">&#9673;</span>{% else %}<span style="color:#b91c1c">unset</span>{% endif %}</td>
+      <td>{% if v and v.base_color %}<span class="color-swatch" style="background:{{ v.base_color }}"></span>{% elif v and v.color_rules %}<span title="Conditional">&#9673;</span>{% else %}<span style="color:var(--danger-text)">unset</span>{% endif %}</td>
       <td>{% if v %}{{ v.buffer_before_minutes }}/{{ v.buffer_after_minutes }} min{% endif %}</td>
       <td>{% if v %}<span class="badge-version">v{{ v.version_number }}</span>{% endif %}</td>
       <td style="white-space:nowrap">

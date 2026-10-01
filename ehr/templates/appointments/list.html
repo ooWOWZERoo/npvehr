@@ -46,7 +46,7 @@
       <td>{{ a.scheduled_at.strftime('%m/%d/%Y %I:%M %p') }}</td>
       <td>
         {% if a.appointment_type_version %}
-          <span class="color-swatch" style="background:{{ a.resolved_color or a.appointment_type_version.base_color or '#94a3b8' }}"></span>
+          <span class="color-swatch" style="background:{{ a.resolved_color or a.appointment_type_version.base_color or 'var(--slate)' }}"></span>
           {{ a.appointment_type_version.calendar_abbreviation }}
         {% else %}&mdash;{% endif %}
       </td>
@@ -57,7 +57,7 @@
       <td><span class="badge badge-{{ a.status.value }}">{{ a.status.value.replace('_',' ') }}</span></td>
       <td><a href="/appointments/{{ a.id }}" class="btn btn-sm btn-secondary">View</a></td>
     </tr>
-  {% else %}<tr><td colspan="8" style="text-align:center;color:#64748b">No appointments.</td></tr>
+  {% else %}<tr><td colspan="8" style="text-align:center;color:var(--ink-muted)">No appointments.</td></tr>
   {% endfor %}
   </tbody></table>
   </div>

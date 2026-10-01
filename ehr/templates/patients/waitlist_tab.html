@@ -24,7 +24,7 @@
 <div class="card">
   <h2>Waitlist Entries</h2>
   {% if not entries %}
-  <p style="color:#64748b">No waitlist entries for this patient.</p>
+  <p style="color:var(--ink-muted)">No waitlist entries for this patient.</p>
   {% else %}
   <div class="table-responsive">
   <table class="exam-table">
@@ -35,7 +35,7 @@
       <td>{{ 'Dr. ' + e.provider.last_name if e.provider else 'Any' }}</td>
       <td>{{ e.appointment_type_version.display_name if e.appointment_type_version else 'Any' }}</td>
       <td class="mono-data">{{ e.desired_date_start or '—' }} &ndash; {{ e.desired_date_end or '—' }}</td>
-      <td>{% if e.priority == 'urgent' %}<span style="color:#b91c1c;font-weight:700">Urgent</span>{% else %}Normal{% endif %}</td>
+      <td>{% if e.priority == 'urgent' %}<span style="color:var(--danger-text);font-weight:700">Urgent</span>{% else %}Normal{% endif %}</td>
       <td>{{ e.notes or '—' }}</td>
       <td class="mono-data">{{ e.created_at.strftime('%Y-%m-%d') if e.created_at else '—' }}</td>
       <td>

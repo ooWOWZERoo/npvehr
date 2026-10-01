@@ -14,7 +14,7 @@
 </p>
 <div class="card">
   {% if not entries %}
-  <p style="color:#64748b;text-align:center">No reminder activity yet.</p>
+  <p style="color:var(--ink-muted);text-align:center">No reminder activity yet.</p>
   {% else %}
   <div class="table-responsive">
   <table class="exam-table">
@@ -26,9 +26,9 @@
       <td>{{ e.channel|upper }}</td>
       <td>{{ e.kind|capitalize }}</td>
       <td>
-        {% if e.status == 'sent' %}<span style="color:#166534;font-weight:600">Sent</span>
-        {% elif e.status == 'skipped_no_opt_in' %}<span style="color:#92400e">Skipped (no opt-in)</span>
-        {% else %}<span style="color:#b91c1c;font-weight:600">Failed</span>{% endif %}
+        {% if e.status == 'sent' %}<span style="color:var(--success-ink);font-weight:600">Sent</span>
+        {% elif e.status == 'skipped_no_opt_in' %}<span style="color:var(--caution-ink)">Skipped (no opt-in)</span>
+        {% else %}<span style="color:var(--danger-text);font-weight:600">Failed</span>{% endif %}
       </td>
       <td class="mono-data">{{ e.recipient or '—' }}</td>
       <td>{{ e.message_body or '—' }}</td>

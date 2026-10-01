@@ -25,7 +25,7 @@
       </tr>
     {% endfor %}
     </tbody></table>
-    {% else %}<p style="color:#64748b">No upcoming appointments.</p>{% endif %}
+    {% else %}<p style="color:var(--ink-muted)">No upcoming appointments.</p>{% endif %}
   </div>
   <div class="card">
     <h2>Recent Patients</h2>
@@ -39,7 +39,7 @@
       </tr>
     {% endfor %}
     </tbody></table>
-    {% else %}<p style="color:#64748b">No patients yet.</p>{% endif %}
+    {% else %}<p style="color:var(--ink-muted)">No patients yet.</p>{% endif %}
   </div>
 </div>
 {% endblock %}

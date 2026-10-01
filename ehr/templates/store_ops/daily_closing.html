@@ -49,7 +49,7 @@
   {% if history %}
   {% for h in history %}
     <h3 style="margin-top:{{ '0' if loop.first else '1.25rem' }}">{{ h.posting_date }}
-      <span style="font-weight:400;font-size:0.8rem;color:{{ '#b91c1c' if h.total_variance != 0 else '#64748b' }}">
+      <span style="font-weight:400;font-size:0.8rem;color:{{ 'var(--danger-text)' if h.total_variance != 0 else 'var(--ink-muted)' }}">
         (total variance {{ '%+.2f'|format(h.total_variance) }})
       </span>
     </h3>
@@ -65,7 +65,7 @@
     {% endfor %}
     </tbody></table>
   {% endfor %}
-  {% else %}<p style="color:#64748b">No daily closings saved yet.</p>{% endif %}
+  {% else %}<p style="color:var(--ink-muted)">No daily closings saved yet.</p>{% endif %}
 </div>
 {% endblock %}
 {% block extra_js %}

@@ -16,7 +16,7 @@
     </div>
     <button type="submit" class="btn btn-primary">Add Resource</button>
   </form>
-  <p style="font-size:0.8rem;color:#64748b;margin-top:0.75rem">
+  <p style="font-size:0.8rem;color:var(--ink-muted);margin-top:0.75rem">
     Only provider conflicts are enforced against live bookings in this release (spec 12.1 scoping note);
     the schema here supports technicians, exam lanes, rooms, and devices without redesign for a future pass.
   </p>
@@ -25,7 +25,7 @@
   <table><thead><tr><th>Code</th><th>Name</th><th>Class</th><th>Exclusive</th><th>Active</th></tr></thead><tbody>
   {% for r in resources %}
     <tr><td>{{ r.code }}</td><td>{{ r.display_name }}</td><td>{{ r.resource_class }}</td><td>{{ 'Yes' if r.exclusive else 'No' }}</td><td>{{ 'Yes' if r.active else 'No' }}</td></tr>
-  {% else %}<tr><td colspan="5" style="text-align:center;color:#64748b">No resources defined yet.</td></tr>
+  {% else %}<tr><td colspan="5" style="text-align:center;color:var(--ink-muted)">No resources defined yet.</td></tr>
   {% endfor %}
   </tbody></table>
 </div>

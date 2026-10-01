@@ -26,7 +26,7 @@
     </div>
 
     <div class="section-title">Patient Relationship (spec 10)</div>
-    <p style="font-size:0.85rem;color:#64748b;margin-top:-0.5rem">
+    <p style="font-size:0.85rem;color:var(--ink-muted);margin-top:-0.5rem">
       Suggested: <strong id="suggested-label">{{ (suggested_relationship or 'established')|upper }}</strong>
       (established if an EyeExam predates this visit; otherwise new). Staff must confirm or override with a reason.
     </p>
@@ -52,7 +52,7 @@
             {{ 'selected' if posted.appointment_type_version_id == v.id }}>{{ v.display_name }} ({{ v.calendar_abbreviation }})</option>
           {% endfor %}
         </select>
-        <div id="eligibility-note" style="font-size:0.78rem;color:#b91c1c;margin-top:0.3rem"></div>
+        <div id="eligibility-note" style="font-size:0.78rem;color:var(--danger-text);margin-top:0.3rem"></div>
       </div>
       <div class="form-group checkbox-row" style="align-items:flex-end;padding-bottom:0.5rem">
         <input type="checkbox" id="is_follow_up" name="is_follow_up" value="true" {{ 'checked' if posted.is_follow_up }}>
@@ -134,7 +134,7 @@ function renderResourcePicker(){
   container.innerHTML = '';
   var requirements = RESOURCE_PICKER[sel.value] || [];
   if (requirements.length === 0) {
-    container.innerHTML = '<p style="font-size:0.85rem;color:#64748b">No manually-assignable resources for this appointment type -- assignment is automatic.</p>';
+    container.innerHTML = '<p style="font-size:0.85rem;color:var(--ink-muted)">No manually-assignable resources for this appointment type -- assignment is automatic.</p>';
     return;
   }
   requirements.forEach(function(req){

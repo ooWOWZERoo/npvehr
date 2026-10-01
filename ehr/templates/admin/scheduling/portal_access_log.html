@@ -4,7 +4,7 @@
 <div class="page-header"><h1>Scheduling Administration</h1></div>
 {% include "admin/scheduling/_nav.html" %}
 <div class="card"><h3>Patient Portal Access Log (most recent 200)</h3>
-  <p style="font-size:0.8rem;color:#64748b;margin-top:-0.5rem">
+  <p style="font-size:0.8rem;color:var(--ink-muted);margin-top:-0.5rem">
     One row per view a patient makes of their own clinical data through the portal (visit summaries,
     prescriptions, documents) -- recorded since the portal's clinical-data-view feature shipped;
     earlier portal activity (booking/cancelling/rescheduling) is not logged here.
@@ -21,7 +21,7 @@
         {% else %}&mdash;{% endif %}
       </td>
     </tr>
-  {% else %}<tr><td colspan="4" style="text-align:center;color:#64748b">No portal access events yet.</td></tr>
+  {% else %}<tr><td colspan="4" style="text-align:center;color:var(--ink-muted)">No portal access events yet.</td></tr>
   {% endfor %}
   </tbody></table></div>
 </div>

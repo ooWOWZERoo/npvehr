@@ -3,16 +3,16 @@
 <div class="card">
   <h2>Glaucoma Tracking</h2>
   {% if not gt_rows %}
-  <p style="color:#64748b">No glaucoma tracking recorded for this patient yet.</p>
+  <p style="color:var(--ink-muted)">No glaucoma tracking recorded for this patient yet.</p>
   {% else %}
   {% if chart %}
   <svg viewBox="0 0 {{ chart.width }} {{ chart.height }}" style="max-width:100%;height:180px;display:block;margin-bottom:0.5rem" role="img" aria-label="Current IOP OD/OS over time">
-    <line x1="0" y1="{{ chart.gridline_y }}" x2="{{ chart.width }}" y2="{{ chart.gridline_y }}" stroke="#e2e8f0" stroke-dasharray="4,4"/>
-    <polyline points="{{ chart.od_points }}" fill="none" stroke="#0f766e" stroke-width="2"/>
-    <polyline points="{{ chart.os_points }}" fill="none" stroke="#b45309" stroke-width="2"/>
+    <line x1="0" y1="{{ chart.gridline_y }}" x2="{{ chart.width }}" y2="{{ chart.gridline_y }}" style="stroke:var(--border)" stroke-dasharray="4,4"/>
+    <polyline points="{{ chart.od_points }}" fill="none" style="stroke:var(--series-od)" stroke-width="2"/>
+    <polyline points="{{ chart.os_points }}" fill="none" style="stroke:var(--series-os)" stroke-width="2"/>
   </svg>
-  <p style="font-size:0.8rem;color:#64748b;margin-top:0">
-    <span style="color:#0f766e">&#9679;</span> OD &nbsp; <span style="color:#b45309">&#9679;</span> OS &nbsp; dashed line: 21 mmHg reference
+  <p style="font-size:0.8rem;color:var(--ink-muted);margin-top:0">
+    <span style="color:var(--series-od)">&#9679;</span> OD &nbsp; <span style="color:var(--series-os)">&#9679;</span> OS &nbsp; dashed line: 21 mmHg reference
   </p>
   {% endif %}
   <div class="table-responsive">

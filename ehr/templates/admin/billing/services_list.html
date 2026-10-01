@@ -21,7 +21,7 @@
   {% set ns = namespace(last_category=None) %}
   {% for s in services %}
     {% if s.category != ns.last_category %}
-    <tr><td colspan="7" style="background:#f1f5f9;font-weight:600;padding-top:0.6rem">{{ s.category }}</td></tr>
+    <tr><td colspan="7" style="background:var(--surface-sunken);font-weight:600;padding-top:0.6rem">{{ s.category }}</td></tr>
     {% set ns.last_category = s.category %}
     {% endif %}
     <tr>
@@ -38,10 +38,10 @@
         </form>
       </td>
     </tr>
-  {% else %}<tr><td colspan="7" style="text-align:center;color:#64748b">No services found.</td></tr>
+  {% else %}<tr><td colspan="7" style="text-align:center;color:var(--ink-muted)">No services found.</td></tr>
   {% endfor %}
   </tbody></table>
-  <p style="font-size:0.8rem;color:#64748b;margin-top:0.75rem">
+  <p style="font-size:0.8rem;color:var(--ink-muted);margin-top:0.75rem">
     This is the practice's own fee schedule for staff reference -- this app has no billing/claims infrastructure,
     and nothing here is ever transmitted, submitted, or billed to a payer. Deactivating a service does not remove
     it from any past record; it only hides it from being added to a new visit.

@@ -28,10 +28,10 @@
         </form>
       </td>
     </tr>
-  {% else %}<tr><td colspan="4" style="text-align:center;color:#64748b">No corrections found.</td></tr>
+  {% else %}<tr><td colspan="4" style="text-align:center;color:var(--ink-muted)">No corrections found.</td></tr>
   {% endfor %}
   </tbody></table>
-  <p style="font-size:0.8rem;color:#64748b;margin-top:0.75rem">
+  <p style="font-size:0.8rem;color:var(--ink-muted);margin-top:0.75rem">
     Voice Scribe's client-side speech-to-text model can't be trained or fine-tuned; this table is a
     find/replace correction applied to dictated text before it lands in a field, matched
     case-insensitively as a whole word or phrase. Add an entry whenever dictation reliably mis-hears

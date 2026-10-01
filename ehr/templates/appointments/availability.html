@@ -20,10 +20,10 @@
 </div>
 
 {% if error %}
-<div class="card"><p style="color:#b91c1c">{{ error }}</p></div>
+<div class="card"><p style="color:var(--danger-text)">{{ error }}</p></div>
 {% elif not (provider_id and appointment_type_version_id and relationship) %}
 <div class="card">
-  <p style="color:#64748b;font-size:0.875rem">
+  <p style="color:var(--ink-muted);font-size:0.875rem">
     Choose a provider, appointment type, and patient relationship above to search for open slots on
     {{ target_date.strftime('%B %d, %Y') }}.
   </p>
@@ -38,12 +38,12 @@
     <a href="/appointments/new?date={{ target_date.isoformat() }}" class="btn btn-secondary btn-sm">{{ slot.strftime('%I:%M %p') }}</a>
     {% endfor %}
   </div>
-  <p style="font-size:0.8rem;color:#64748b;margin-top:1rem">
+  <p style="font-size:0.8rem;color:var(--ink-muted);margin-top:1rem">
     Each time links to the new-appointment form for {{ target_date.strftime('%B %d, %Y') }} -- select this provider,
     type, and the exact time shown here when booking (the form does not yet pre-fill provider/type/time, only the date).
   </p>
   {% else %}
-  <p style="color:#64748b">No open slots for this provider on this date &mdash; fully booked, outside working hours, or the practice is closed.</p>
+  <p style="color:var(--ink-muted)">No open slots for this provider on this date &mdash; fully booked, outside working hours, or the practice is closed.</p>
   {% endif %}
 </div>
 {% endif %}

@@ -3478,3 +3478,35 @@ def test_voice_scribe_vocabulary_admin_requires_admin_role(live_server, page):
 
     resp = page.goto(live_server + "/admin/voice-scribe/corrections.json")
     assert resp.status == 200
+
+
+def test_theme_toggle_switches_persists_and_themes_the_page(logged_in_page, live_server):
+    """Whole-app light/dark theme (user request, "Launchpad" look): the topbar
+    toggle flips html[data-theme], the choice survives a reload (saved in
+    localStorage and applied by an inline <head> script before first paint,
+    so there is no light flash), and the dark palette really reaches the
+    page -- proven by the computed page background and a pure-token surface
+    (.card) changing, not just the attribute appearing. Light stays the
+    default for anyone who has never toggled."""
+    page = logged_in_page
+    page.goto(live_server + "/")
+    toggle = page.locator("#themeToggle")
+    assert page.evaluate("document.documentElement.getAttribute('data-theme')") is None
+    assert toggle.get_attribute("aria-pressed") == "false"
+    light_bg = page.evaluate("getComputedStyle(document.body).backgroundColor")
+
+    toggle.click()
+    assert page.evaluate("document.documentElement.getAttribute('data-theme')") == "dark"
+    assert toggle.get_attribute("aria-pressed") == "true"
+    dark_bg = page.evaluate("getComputedStyle(document.body).backgroundColor")
+    assert dark_bg != light_bg
+    assert dark_bg == "rgb(24, 35, 30)"  # --canvas in the dark palette
+
+    page.reload()
+    assert page.evaluate("document.documentElement.getAttribute('data-theme')") == "dark"
+    assert page.evaluate("getComputedStyle(document.body).backgroundColor") == "rgb(24, 35, 30)"
+
+    page.locator("#themeToggle").click()
+    assert page.evaluate("document.documentElement.getAttribute('data-theme')") is None
+    assert page.evaluate("localStorage.getItem('npv-theme')") == "light"
+    assert page.evaluate("getComputedStyle(document.body).backgroundColor") == light_bg

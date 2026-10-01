@@ -23,11 +23,11 @@
         <option value="Medical Established (Intermediate)">Medical Established (Intermediate)</option>
         <option value="Emergent/Urgent Medical">Emergent/Urgent Medical</option>
       </select></label>
-      <div id="exam_type_suggestion_note" style="font-size:0.75rem;color:#64748b;margin-top:0.25rem"></div>
+      <div id="exam_type_suggestion_note" style="font-size:0.75rem;color:var(--ink-muted);margin-top:0.25rem"></div>
       <input type="hidden" name="suggested_exam_type" id="suggested_exam_type">
     </div>
     <div class="vf-sticky">
-    <div class="section-title" style="margin-top:0">Visit Focus <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; choose which assessment area(s) apply to this visit; more than one can apply</span></div>
+    <div class="section-title" style="margin-top:0">Visit Focus <span style="font-weight:normal;color:var(--ink-muted);font-size:0.8rem">&mdash; choose which assessment area(s) apply to this visit; more than one can apply</span></div>
     <div class="test-chip-list">
       <label class="test-chip" data-chip-wrap="focus-refractive"><input type="checkbox" class="focus-toggle" data-target="focus-refractive" checked> Comprehensive / Refractive <span class="vf-dot" data-dot-chip="focus-refractive"></span></label>
       <label class="test-chip" data-chip-wrap="focus-anterior"><input type="checkbox" class="focus-toggle" data-target="focus-anterior"> Anterior Segment <span class="vf-dot" data-dot-chip="focus-anterior"></span></label>
@@ -50,7 +50,7 @@
         ('man', 'Manifest Refraction', 'Subjective refinement'),
         ('cyc', 'Cycloplegic Refraction', 'Post-dilation'),
       ] %}
-    <div class="section-title">{{ label }} <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; {{ hint }}</span></div>
+    <div class="section-title">{{ label }} <span style="font-weight:normal;color:var(--ink-muted);font-size:0.8rem">&mdash; {{ hint }}</span></div>
     <div class="table-responsive">
     <table class="exam-table">
       <tr><th></th><th>Sphere</th><th>Cylinder</th><th>Axis</th><th>Add</th><th>VA</th></tr>
@@ -447,27 +447,27 @@
       </div>
     </div>
     {% if active_problems %}
-    <div class="section-title">Problems Addressed <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; check any chronic problem touched at this visit to append a dated follow-up note to its Problem List entry</span></div>
+    <div class="section-title">Problems Addressed <span style="font-weight:normal;color:var(--ink-muted);font-size:0.8rem">&mdash; check any chronic problem touched at this visit to append a dated follow-up note to its Problem List entry</span></div>
     {% for problem in active_problems %}
     <div class="form-row cols-2" style="align-items:end">
       <div class="form-group">
-        <label class="test-chip"><input type="checkbox" name="problems_addressed" value="{{ problem.id }}"> {{ problem.diagnosis_name }}{% if problem.laterality %} {{ problem.laterality }}{% endif %}{% if problem.icd10_code %} <span class="mono-data" style="color:#64748b">({{ problem.icd10_code }})</span>{% endif %}</label>
+        <label class="test-chip"><input type="checkbox" name="problems_addressed" value="{{ problem.id }}"> {{ problem.diagnosis_name }}{% if problem.laterality %} {{ problem.laterality }}{% endif %}{% if problem.icd10_code %} <span class="mono-data" style="color:var(--ink-muted)">({{ problem.icd10_code }})</span>{% endif %}</label>
       </div>
       <div class="form-group"><label>Follow-up Note <input name="problem_note_{{ problem.id }}" placeholder="Addressed at this visit."></label></div>
     </div>
     {% endfor %}
     {% endif %}
-    <div class="section-title">Assessment &amp; Plan <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; auto-filled from the structured fields above as you fill them in; edit freely</span></div>
+    <div class="section-title">Assessment &amp; Plan <span style="font-weight:normal;color:var(--ink-muted);font-size:0.8rem">&mdash; auto-filled from the structured fields above as you fill them in; edit freely</span></div>
     <div class="form-group" style="max-width:260px">
       <label>Note Style <select id="ap_note_style"><option value="abbreviated">Abbreviated (bulleted fragments)</option><option value="narrative">Narrative (sentences)</option></select></label>
     </div>
-    <div id="ap_validation_issues" style="display:none;margin-bottom:var(--space-2);font-size:0.85rem;color:#b45309"></div>
+    <div id="ap_validation_issues" style="display:none;margin-bottom:var(--space-2);font-size:0.85rem;color:var(--caution-note)"></div>
     <div class="form-row cols-2">
       <div class="form-group voice-scribe-field"><label>Assessment <textarea name="assessment" id="assessment"></textarea></label><button type="button" class="voice-scribe-btn" data-target="assessment" title="Voice dictation" aria-label="Voice dictation">&#127908;</button></div>
       <div class="form-group voice-scribe-field"><label>Plan <textarea name="plan" id="plan"></textarea></label><button type="button" class="voice-scribe-btn" data-target="plan" title="Voice dictation" aria-label="Voice dictation">&#127908;</button></div>
     </div>
     <div class="form-group"><label>Diagnosis Codes (ICD-10) <input name="diagnosis_codes" id="diagnosis_codes" placeholder="H52.13, H52.219"></label></div>
-    <div class="form-group"><label>Tests Ordered/Reviewed This Visit <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; feeds the E/M-level suggestion below only; not itself saved to the chart</span></label></div>
+    <div class="form-group"><label>Tests Ordered/Reviewed This Visit <span style="font-weight:normal;color:var(--ink-muted);font-size:0.8rem">&mdash; feeds the E/M-level suggestion below only; not itself saved to the chart</span></label></div>
     <div class="test-chip-list">
       {% for t in ['OCT', 'Visual Field', 'Fundus Photos', 'Topography'] %}
       <label class="test-chip"><input type="checkbox" name="em_tests_reviewed" value="{{ t }}"> {{ t }}</label>
@@ -481,13 +481,13 @@
           <option value="99213">99213 &mdash; Low</option>
           <option value="99214">99214 &mdash; Moderate</option>
         </select></label>
-        <div id="em_suggestion_note" style="font-size:0.75rem;color:#64748b;margin-top:0.25rem"></div>
+        <div id="em_suggestion_note" style="font-size:0.75rem;color:var(--ink-muted);margin-top:0.25rem"></div>
         <input type="hidden" name="suggested_em_code" id="suggested_em_code">
         <input type="hidden" name="suggested_em_rationale" id="suggested_em_rationale">
       </div>
     </div>
 
-    <div class="section-title">Return Visit Planning <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; what happens at the patient's next visit, not this one; up to two independent return visits can be recommended</span></div>
+    <div class="section-title">Return Visit Planning <span style="font-weight:normal;color:var(--ink-muted);font-size:0.8rem">&mdash; what happens at the patient's next visit, not this one; up to two independent return visits can be recommended</span></div>
     <div id="return-visit-block-1">
       <div class="form-group" style="max-width:260px"><label>Follow-up Interval</label>
         <div style="display:flex;gap:0.5rem">
@@ -500,7 +500,7 @@
           </select>
         </div>
       </div>
-      <div class="form-group"><label>Recommended Follow-Up Tests <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; creates a real tracked order and carries forward to the booking form and next-visit alerts (distinct from "Tests Ordered/Reviewed This Visit" above, which is E/M scoring only)</span></label></div>
+      <div class="form-group"><label>Recommended Follow-Up Tests <span style="font-weight:normal;color:var(--ink-muted);font-size:0.8rem">&mdash; creates a real tracked order and carries forward to the booking form and next-visit alerts (distinct from "Tests Ordered/Reviewed This Visit" above, which is E/M scoring only)</span></label></div>
       <div class="test-chip-list">
         {% for t in tests %}
         <label class="test-chip"><input type="checkbox" name="return_visit_diagnostic_orders" value="{{ t.code }}" data-cpt="{{ t.cpt_code or '' }}" onchange="checkFollowUpNcciWarnings('')"> {{ t.calendar_abbreviation }}</label>
@@ -513,8 +513,8 @@
         <div class="form-group"><label>Billing Override Reason <input name="followup_billing_override_reason" id="followup_billing_override_reason"></label></div>
       </div>
       {% endif %}
-      <div id="followup_validation_issue" style="display:none;margin-bottom:var(--space-2);font-size:0.85rem;color:#b45309"></div>
-      <div class="form-group voice-scribe-field"><label>Reason for Follow-up <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; required whenever a return interval or a follow-up test above is set; shown to whoever books the next appointment</span>
+      <div id="followup_validation_issue" style="display:none;margin-bottom:var(--space-2);font-size:0.85rem;color:var(--caution-note)"></div>
+      <div class="form-group voice-scribe-field"><label>Reason for Follow-up <span style="font-weight:normal;color:var(--ink-muted);font-size:0.8rem">&mdash; required whenever a return interval or a follow-up test above is set; shown to whoever books the next appointment</span>
         <textarea name="follow_up_reason" id="follow_up_reason"></textarea></label>
         <button type="button" class="voice-scribe-btn" data-target="follow_up_reason" title="Voice dictation" aria-label="Voice dictation">&#127908;</button>
       </div>
@@ -547,8 +547,8 @@
         <div class="form-group"><label>Billing Override Reason <input name="followup_billing_override_reason_2" id="followup_billing_override_reason_2"></label></div>
       </div>
       {% endif %}
-      <div id="followup_validation_issue_2" style="display:none;margin-bottom:var(--space-2);font-size:0.85rem;color:#b45309"></div>
-      <div class="form-group voice-scribe-field"><label>Reason for Follow-up <span style="font-weight:normal;color:#64748b;font-size:0.8rem">&mdash; required whenever a return interval or a follow-up test above is set</span>
+      <div id="followup_validation_issue_2" style="display:none;margin-bottom:var(--space-2);font-size:0.85rem;color:var(--caution-note)"></div>
+      <div class="form-group voice-scribe-field"><label>Reason for Follow-up <span style="font-weight:normal;color:var(--ink-muted);font-size:0.8rem">&mdash; required whenever a return interval or a follow-up test above is set</span>
         <textarea name="follow_up_reason_2" id="follow_up_reason_2"></textarea></label>
         <button type="button" class="voice-scribe-btn" data-target="follow_up_reason_2" title="Voice dictation" aria-label="Voice dictation">&#127908;</button>
       </div>

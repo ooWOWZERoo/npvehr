@@ -21,7 +21,7 @@
         <td>{{ e.new_value if e.new_value is not none else '—' }}</td>
         <td>{% if e.changed_by_user_id and users_by_id.get(e.changed_by_user_id) %}{{ users_by_id[e.changed_by_user_id].first_name }} {{ users_by_id[e.changed_by_user_id].last_name }}{% else %}—{% endif %}</td>
       </tr>
-    {% else %}<tr><td colspan="6" style="text-align:center;color:#64748b">No field changes recorded yet.</td></tr>
+    {% else %}<tr><td colspan="6" style="text-align:center;color:var(--ink-muted)">No field changes recorded yet.</td></tr>
     {% endfor %}
     </tbody>
   </table>
