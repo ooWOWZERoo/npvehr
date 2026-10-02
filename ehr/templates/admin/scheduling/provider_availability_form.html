@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Edit Working Hours &mdash; Admin{% endblock %}
+{% block content %}
+<div class="page-header"><div><span class="page-eyebrow">Administration</span><h1>Edit Working Hours</h1></div>
+  <a href="/admin/scheduling/provider-availability" class="btn btn-secondary">Cancel</a></div>
+{% include "admin/scheduling/_nav.html" %}
+<div class="card form-card">
+  {% if error %}<div class="alert alert-error" style="margin-bottom:1rem">{{ error }}</div>{% endif %}
+  <form method="post" action="/admin/scheduling/provider-availability/{{ t.id }}/edit">
+    <div class="form-row cols-4">
+      <div class="form-group"><label>Provider* <select name="provider_id" required>{% for p in providers %}<option value="{{ p.id }}" {{ 'selected' if p.id == t.provider_id }}>Dr. {{ p.last_name }}</option>{% endfor %}</select></label></div>
+      <div class="form-group"><label>Day of Week* <select name="day_of_week" required>{% for name in day_names %}<option value="{{ loop.index0 }}" {{ 'selected' if loop.index0 == t.day_of_week }}>{{ name }}</option>{% endfor %}</select></label></div>
+      <div class="form-group"><label>Start Time* <input name="start_time" type="time" required value="{{ t.start_time }}"></label></div>
+      <div class="form-group"><label>End Time* <input name="end_time" type="time" required value="{{ t.end_time }}"></label></div>
+    </div>
+    <p style="font-size:0.8rem;color:var(--ink-muted)">
+      These hours drive the open-slot search, so changes apply to new availability searches straight away; appointments
+      already booked are not moved. Active/inactive is managed from the
+      <a href="/admin/scheduling/provider-availability">Provider Availability list</a>.
+    </p>
+    <div class="form-actions"><button type="submit" class="btn btn-primary">Save Changes</button></div>
+  </form>
+</div>
+{% endblock %}
