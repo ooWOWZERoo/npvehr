@@ -23,7 +23,8 @@
     <tr>
       <td>{{ c.closure_date }}</td><td>{{ c.label }}</td><td>{{ c.notes or '—' }}</td>
       <td>{{ c.created_at.strftime('%m/%d/%Y') if c.created_at else '—' }}</td>
-      <td>
+      <td style="display:flex;gap:0.5rem">
+        <a href="/admin/scheduling/holidays/{{ c.id }}/edit" class="btn btn-sm btn-secondary">Edit</a>
         <form method="post" action="/admin/scheduling/holidays/{{ c.id }}/delete" style="display:inline" onsubmit="return confirm('Remove this closure?');">
           <button type="submit" class="btn btn-sm btn-secondary">Delete</button>
         </form>

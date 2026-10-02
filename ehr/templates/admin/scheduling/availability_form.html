@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Edit Availability Template &mdash; Admin{% endblock %}
+{% block content %}
+<div class="page-header"><div><span class="page-eyebrow">Administration</span><h1>Edit Availability Template</h1></div>
+  <a href="/admin/scheduling/availability" class="btn btn-secondary">Cancel</a></div>
+{% include "admin/scheduling/_nav.html" %}
+<div class="card form-card">
+  {% if error %}<div class="alert alert-error" style="margin-bottom:1rem">{{ error }}</div>{% endif %}
+  <form method="post" action="/admin/scheduling/availability/{{ t.id }}/edit">
+    <div class="form-row cols-4">
+      <div class="form-group"><label>Resource* <select name="resource_id" required>{% for r in resources %}<option value="{{ r.id }}" {{ 'selected' if r.id == t.resource_id }}>{{ r.display_name }}</option>{% endfor %}</select></label></div>
+      <div class="form-group"><label>Day of Week* <select name="day_of_week" required>{% for name in day_names %}<option value="{{ loop.index0 }}" {{ 'selected' if loop.index0 == t.day_of_week }}>{{ name }}</option>{% endfor %}</select></label></div>
+      <div class="form-group"><label>Start Time* <input name="start_time" type="time" required value="{{ t.start_time }}"></label></div>
+      <div class="form-group"><label>End Time* <input name="end_time" type="time" required value="{{ t.end_time }}"></label></div>
+    </div>
+    <div class="form-row cols-4">
+      <div class="form-group"><label>Effective From <input name="effective_from" type="date" value="{{ t.effective_from or '' }}"></label></div>
+      <div class="form-group"><label>Effective Through <input name="effective_through" type="date" value="{{ t.effective_through or '' }}"></label></div>
+    </div>
+    <div class="form-actions"><button type="submit" class="btn btn-primary">Save Changes</button></div>
+  </form>
+</div>
+{% endblock %}

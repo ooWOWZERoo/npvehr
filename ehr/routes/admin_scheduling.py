@@ -23,6 +23,9 @@ templates.env.globals["ROLE_LABELS"] = ROLE_LABELS
 # Per-record field-change audit trail (spec §37.1/§37.6 follow-up).
 PROVIDER_AUDITED_FIELDS = ["first_name", "last_name", "license_number", "npi", "specialty"]
 RESOURCE_AUDITED_FIELDS = ["display_name", "resource_class", "exclusive", "active"]
+AVAILABILITY_AUDITED_FIELDS = ["resource_id", "day_of_week", "start_time", "end_time", "effective_from", "effective_through"]
+CLOSURE_AUDITED_FIELDS = ["closure_date", "label", "notes"]
+DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 RESOURCE_CLASSES = ["provider", "technician", "exam_lane", "room", "device", "other"]
 TEST_AUDITED_FIELDS = ["display_name", "calendar_abbreviation", "counts_toward_color", "default_duration_minutes", "display_order", "active"]
 
@@ -438,7 +441,50 @@ def list_availability(request: Request, db: Session = Depends(get_db)):
     templates_ = db.query(AvailabilityTemplate).order_by(AvailabilityTemplate.resource_id, AvailabilityTemplate.day_of_week).all()
     return templates.TemplateResponse(request, "admin/scheduling/availability.html",
         {"templates_": templates_, "resources": db.query(Resource).all(),
-         "day_names": ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"]})
+         "day_names": DAY_NAMES, "resource_names": {r.id: r.display_name for r in db.query(Resource).all()}})
+
+
+@router.get("/availability/{template_id}/edit", response_class=HTMLResponse, dependencies=[Depends(require_role(*ADMIN_SCHEDULING_EDIT))])
+def edit_availability_form(request: Request, template_id: int, db: Session = Depends(get_db)):
+    t = db.query(AvailabilityTemplate).filter(AvailabilityTemplate.id == template_id).first()
+    if not t:
+        return HTMLResponse("Not found", status_code=404)
+    return templates.TemplateResponse(request, "admin/scheduling/availability_form.html",
+        {"t": t, "resources": db.query(Resource).order_by(Resource.display_name).all(), "day_names": DAY_NAMES, "error": None})
+
+
+@router.post("/availability/{template_id}/edit", dependencies=[Depends(require_role(*ADMIN_SCHEDULING_EDIT))])
+def update_availability(request: Request, template_id: int, resource_id: int = Form(...), day_of_week: int = Form(...),
+    start_time: str = Form(...), end_time: str = Form(...), effective_from: str = Form(""), effective_through: str = Form(""),
+    csrf_token: str = Form(""), db: Session = Depends(get_db), user=Depends(get_current_user)):
+    csrf.verify_or_403(request.state.csrf_token, csrf_token)
+    t = db.query(AvailabilityTemplate).filter(AvailabilityTemplate.id == template_id).first()
+    if not t:
+        return HTMLResponse("Not found", status_code=404)
+    error = None
+    if not db.query(Resource).filter(Resource.id == resource_id).first():
+        error = "Unknown resource."
+    elif not 0 <= day_of_week <= 6:
+        error = "Day of week must be Monday-Sunday."
+    elif end_time <= start_time:
+        error = "End time must be after start time."
+    elif effective_from and effective_through and effective_through < effective_from:
+        error = "'Effective through' must not be before 'Effective from'."
+    if error:
+        return templates.TemplateResponse(request, "admin/scheduling/availability_form.html",
+            {"t": t, "resources": db.query(Resource).order_by(Resource.display_name).all(), "day_names": DAY_NAMES, "error": error},
+            status_code=400)
+    before = {f: getattr(t, f) for f in AVAILABILITY_AUDITED_FIELDS}
+    t.resource_id = resource_id
+    t.day_of_week = day_of_week
+    t.start_time = start_time
+    t.end_time = end_time
+    t.effective_from = effective_from or None
+    t.effective_through = effective_through or None
+    after = {f: getattr(t, f) for f in AVAILABILITY_AUDITED_FIELDS}
+    field_audit.record_field_changes(db, "availability_templates", template_id, before, after, user.id)
+    db.commit()
+    return RedirectResponse("/admin/scheduling/availability", status_code=303)
 
 
 @router.post("/availability/new", dependencies=[Depends(require_role(*ADMIN_SCHEDULING_EDIT))])
@@ -618,6 +664,35 @@ def create_holiday(request: Request, closure_date: str = Form(...), label: str =
     if db.query(PracticeClosure).filter(PracticeClosure.closure_date == closure_date).first():
         return HTMLResponse(f"A closure already exists for {closure_date}.", status_code=400)
     db.add(PracticeClosure(closure_date=closure_date, label=label, notes=notes or None))
+    db.commit()
+    return RedirectResponse("/admin/scheduling/holidays", status_code=303)
+
+
+@router.get("/holidays/{closure_id}/edit", response_class=HTMLResponse, dependencies=[Depends(require_role(*ADMIN_SCHEDULING_EDIT))])
+def edit_holiday_form(request: Request, closure_id: int, db: Session = Depends(get_db)):
+    c = db.query(PracticeClosure).filter(PracticeClosure.id == closure_id).first()
+    if not c:
+        return HTMLResponse("Not found", status_code=404)
+    return templates.TemplateResponse(request, "admin/scheduling/holiday_form.html", {"c": c, "error": None})
+
+
+@router.post("/holidays/{closure_id}/edit", dependencies=[Depends(require_role(*ADMIN_SCHEDULING_EDIT))])
+def update_holiday(request: Request, closure_id: int, closure_date: str = Form(...), label: str = Form(...), notes: str = Form(""),
+    csrf_token: str = Form(""), db: Session = Depends(get_db), user=Depends(get_current_user)):
+    csrf.verify_or_403(request.state.csrf_token, csrf_token)
+    c = db.query(PracticeClosure).filter(PracticeClosure.id == closure_id).first()
+    if not c:
+        return HTMLResponse("Not found", status_code=404)
+    clash = db.query(PracticeClosure).filter(PracticeClosure.closure_date == closure_date, PracticeClosure.id != closure_id).first()
+    if clash:
+        return templates.TemplateResponse(request, "admin/scheduling/holiday_form.html",
+            {"c": c, "error": f"A closure already exists for {closure_date}."}, status_code=400)
+    before = {f: getattr(c, f) for f in CLOSURE_AUDITED_FIELDS}
+    c.closure_date = closure_date
+    c.label = label.strip()
+    c.notes = notes.strip() or None
+    after = {f: getattr(c, f) for f in CLOSURE_AUDITED_FIELDS}
+    field_audit.record_field_changes(db, "practice_closures", closure_id, before, after, user.id)
     db.commit()
     return RedirectResponse("/admin/scheduling/holidays", status_code=303)
 
