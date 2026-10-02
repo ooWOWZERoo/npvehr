@@ -1611,3 +1611,5 @@ def get_db():
 
 # Registers the ROS decision-support tables (ehr/models/ros.py) on Base so create_all() builds them.
 from ehr.models import ros as _ros  # noqa: E402,F401
+
+from ehr.models import safety as _safety  # noqa: E402,F401  (registers the safety-flag tables on Base)

@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Edit Safety Rule &mdash; Admin{% endblock %}
+{% block content %}
+<div class="page-header"><div><span class="page-eyebrow">Administration</span><h1>Edit Warning Rule</h1></div><a href="/admin/safety" class="btn btn-secondary">Cancel</a></div>
+<div class="card form-card">
+  {% if error %}<div class="alert alert-error" style="margin-bottom:1rem">{{ error }}</div>{% endif %}
+  <form method="post" action="/admin/safety/rules/{{ r.id }}/edit">
+    <div class="form-row cols-3">
+      <div class="form-group"><label>When this flag is yes* <select name="flag_type_id" required>{% for t in types %}<option value="{{ t.id }}" {{ 'selected' if t.id == r.flag_type_id }}>{{ t.label }}</option>{% endfor %}</select></label></div>
+      <div class="form-group"><label>&hellip;and the exam mentions (optional) <input name="keyword" maxlength="80" value="{{ r.keyword or '' }}"></label></div>
+    </div>
+    <div class="form-group"><label>Warning shown to the clinician* <textarea name="warning_text" required rows="3" maxlength="500">{{ r.warning_text }}</textarea></label></div>
+    {% if r.reviewed %}<div class="alert alert-warning" style="margin-bottom:1rem">This warning is currently <strong>reviewed</strong>. Changing the flag, keyword or wording withdraws that sign-off.</div>{% endif %}
+    <div class="form-actions"><button type="submit" class="btn btn-primary">Save Changes</button></div>
+  </form>
+</div>
+{% endblock %}

@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from typing import List
 from fastapi import APIRouter, Depends, Request, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
@@ -19,6 +20,7 @@ from ehr.services import authz
 from ehr.services import billing_override
 from ehr.services import billing_ledger
 from ehr.services import ros_responses
+from ehr.services import safety as safety_svc
 
 router = APIRouter(prefix="/exams", tags=["exams"])
 templates = Jinja2Templates(directory="ehr/templates")
@@ -337,11 +339,14 @@ def exam_detail(request: Request, exam_id: int, db: Session = Depends(get_db)):
     cpt_summary = cpt_mapper.compute_cpt_summary(db, e)
     return templates.TemplateResponse(request, "exams/detail.html",
         {"exam": e, "context_patient": patient_context(e.patient, db), "problem_addenda": problem_addenda,
-         "cpt_summary": cpt_summary, "ros_findings": ros_responses.findings_for_exam(db, exam_id)})
+         "cpt_summary": cpt_summary, "ros_findings": ros_responses.findings_for_exam(db, exam_id),
+         "safety_fired": safety_svc.evaluate(db, e.patient_id, safety_svc.exam_text(e)),
+         "safety_acks": safety_svc.acknowledgements_for_exam(db, exam_id),
+         "safety_ack_required": request.query_params.get("safety_ack_required") == "1"})
 
 
 @router.post("/{exam_id}/sign", dependencies=[Depends(require_role(*EXAM_SIGN))])
-def sign_exam(request: Request, exam_id: int, csrf_token: str = Form(""),
+def sign_exam(request: Request, exam_id: int, csrf_token: str = Form(""), ack_safety_rule: List[str] = Form([]),
               db: Session = Depends(get_db), user=Depends(get_current_user)):
     """Clinical Record Sign/Lock/Amend Lifecycle: an electronic attestation
     ("I personally reviewed and stand behind this record"), matching the
@@ -355,6 +360,11 @@ def sign_exam(request: Request, exam_id: int, csrf_token: str = Form(""),
     if not e: return HTMLResponse("Not found", status_code=404)
     if e.signed_at:
         return HTMLResponse("This visit is already signed.", status_code=400)
+    # Clinical safety warnings (ROS plan stage 5): every warning that currently applies to this patient and exam
+    # must be acknowledged by the signer. Saving the exam is never blocked -- only the sign-off waits.
+    if safety_svc.unacknowledged(db, e, ack_safety_rule):
+        return RedirectResponse(f"/exams/{exam_id}?safety_ack_required=1", status_code=303)
+    safety_svc.record_acknowledgements(db, e, ack_safety_rule, user.id)
     e.signed_at = datetime.utcnow()
     e.signed_by_user_id = user.id
     db.commit()

@@ -3888,6 +3888,110 @@ def test_ros_findings_are_saved_with_the_exam_and_shown_on_the_detail_page(logge
     assert page.locator("dt", has_text="Endocrine").count() >= 1 and page.locator("dt", has_text="Cardiovascular").count() >= 1
 
 
+def test_clinical_safety_warnings_end_to_end(logged_in_page, live_server):
+    """ROS stage 5: a patient safety flag + a clinician-authored warning rule. A rule is silent until reviewed with
+    a citation; once reviewed it shows on the exam form (keyword rules only while the exam text mentions the word),
+    the signer must acknowledge it before the visit can be signed (saving is never blocked), and the acknowledgement
+    is recorded with who/when and a snapshot of the wording. Non-clinical roles can see but not change flags."""
+    page = logged_in_page
+    warning = "TEST WARNING: avoid dilating drops - patient is pregnant"
+    page.goto(live_server + "/admin/safety")
+    assert "Pregnant" in page.locator("body").inner_text()
+    form = page.locator('form[action$="/rules/new"]')
+    form.locator('select[name="flag_type_id"]').select_option(label="Pregnant")
+    form.locator('input[name="keyword"]').fill("dilat")
+    form.locator('textarea[name="warning_text"]').fill(warning)
+    form.locator('button[type="submit"]').click()
+    rule = page.locator("tr", has_text=warning)
+    assert "unreviewed" in rule.inner_text().lower() and "silent" in rule.inner_text().lower()
+
+    # Record the flag on a patient's chart.
+    page.goto(live_server + "/patients/")
+    page.locator("table a.patient-name-cell").first.click()
+    page.wait_for_load_state()
+    patient_id = re.search(r"/patients/(\d+)", page.url).group(1)
+    card = page.locator("#safetyFlagsCard")
+    card.locator("label", has_text="Pregnant").locator("select").select_option("yes")
+    card.locator("button", has_text="Save flags").click()
+    page.wait_for_load_state()
+    assert page.locator("#safetyFlagsCard label", has_text="Pregnant").locator("select").input_value() == "yes"
+
+    # Unreviewed => silent on the exam form even with the keyword typed.
+    page.goto(live_server + f"/exams/new?patient_id={patient_id}")
+    page.fill('textarea[name="plan"]', "Dilate with tropicamide")
+    page.wait_for_timeout(500)
+    assert page.locator("#safetyBanner").is_hidden()
+
+    # Review it (citation required), then the banner follows the keyword.
+    page.goto(live_server + "/admin/safety")
+    page.locator("tr", has_text=warning).locator('input[name="source_citation"]').fill("  ")
+    page.once("dialog", lambda d: d.accept())
+    page.locator("tr", has_text=warning).locator("button", has_text="Mark reviewed").click()
+    assert "unreviewed" in page.locator("tr", has_text=warning).inner_text().lower()
+    page.locator("tr", has_text=warning).locator('input[name="source_citation"]').fill("Test clinical policy 1.0")
+    page.locator("tr", has_text=warning).locator("button", has_text="Mark reviewed").click()
+    assert "Test clinical policy 1.0" in page.locator("tr", has_text=warning).inner_text()
+
+    page.goto(live_server + f"/exams/new?patient_id={patient_id}")
+    page.wait_for_timeout(400)
+    assert page.locator("#safetyBanner").is_hidden()                       # keyword not mentioned yet
+    page.fill('textarea[name="plan"]', "Dilate with tropicamide")
+    page.locator("#safetyBanner").wait_for(state="visible")
+    assert warning in page.locator("#safetyBanner").inner_text()
+    page.select_option('select[name="patient_id"]', patient_id)
+    page.locator('button[type="submit"]', has_text="Save Exam").click()      # saving is never blocked
+    page.wait_for_url(re.compile(r"/exams/\d+$"))
+    exam_url = page.url
+
+    # Signing needs the acknowledgement: strip the browser-side 'required' to prove the server enforces it too.
+    assert warning in page.locator("body").inner_text()
+    page.once("dialog", lambda d: d.accept())
+    page.evaluate("document.querySelectorAll('input[name=ack_safety_rule]').forEach(i => i.required = false)")
+    page.locator("button", has_text="Sign & Lock This Visit").click()
+    page.wait_for_load_state()
+    assert "must be acknowledged before it can be signed" in page.locator("body").inner_text()
+    assert page.locator("button", has_text="Sign & Lock This Visit").count() == 1       # still unsigned
+
+    page.locator('input[name="ack_safety_rule"]').check()
+    page.once("dialog", lambda d: d.accept())
+    page.locator("button", has_text="Sign & Lock This Visit").click()
+    page.wait_for_load_state()
+    body = page.locator("body").inner_text()
+    assert page.locator("button", has_text="Sign & Lock This Visit").count() == 0
+    assert "Safety warnings acknowledged" in body and warning in body and "Ada Admin" in body
+
+    # An exam that does not mention the keyword needs no acknowledgement.
+    page.goto(live_server + f"/exams/new?patient_id={patient_id}")
+    page.select_option('select[name="patient_id"]', patient_id)
+    page.fill('textarea[name="plan"]', "Refraction only")
+    page.locator('button[type="submit"]', has_text="Save Exam").click()
+    page.wait_for_url(re.compile(r"/exams/\d+$"))
+    assert page.locator('input[name="ack_safety_rule"]').count() == 0
+
+    # Withdrawing the sign-off silences it again.
+    page.goto(live_server + "/admin/safety")
+    page.once("dialog", lambda d: d.accept())
+    page.locator("tr", has_text=warning).locator("button", has_text="Withdraw review").click()
+    assert page.request.get(live_server + f"/safety/patients/{patient_id}/warnings.json").json()["warnings"] == []
+    page.goto(live_server + "/admin/field-audit")
+    assert "patient_safety_flags #" in page.locator("body").inner_text() or "safety_rules #" in page.locator("body").inner_text()
+
+    # A non-clinical role can see the flags but not change them, and can't reach the admin screen.
+    fd_ctx = page.context.browser.new_context()
+    fd = fd_ctx.new_page()
+    fd.goto(live_server + "/login")
+    fd.fill("#email", "frontdesk@newpathvision.example")
+    fd.fill("#password", "ChangeMe123!")
+    fd.click("button[type=submit]")
+    fd.wait_for_url(f"{live_server}/")
+    fd.goto(live_server + f"/patients/{patient_id}")
+    assert "don't have privileges to change a patient's safety flags" in fd.locator("body").inner_text()
+    assert fd.locator("#safetyFlagsCard select[disabled]").count() >= 1
+    assert fd.goto(live_server + "/admin/safety").status == 403
+    assert "don't have privileges" in fd.locator("body").inner_text()
+    fd_ctx.close()
+
+
 def test_rx_room_type_cards_rail_and_submit(logged_in_page, live_server):
     """New Rx page uses the exam-room layout: Glasses/Contact-lens cards drive
     the same rx_type select the server reads, the step rail marks sections

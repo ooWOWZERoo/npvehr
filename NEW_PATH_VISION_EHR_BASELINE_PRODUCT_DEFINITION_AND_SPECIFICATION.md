@@ -5114,3 +5114,39 @@ Compliance advisories on reviewed rules, the clinical hard-stops (stage 5), and 
 | Exam detail | "ROS Findings (catalog)" card by body system. |
 | Exam form | Ticked findings count as step-rail progress; panel text updated. |
 
+## 112. Clinical Safety Flags and Warnings (ROS stage 5) (v2.85)
+
+### 112.1 Origin and decisions
+
+The ROS reference listed "hard-stop" safety checks (pregnancy and dilating drops, blood thinners, narrow-angle risk). Auditing the app showed it held none of the data those checks need (no pregnancy field, no medication list, no anticoagulant record -- only free-text allergies), and the app's convention is advisory banners, never blocking. Three decisions were taken with the practice before building: **(1)** data lives in a **new append-only table**, not in existing tables; **(2)** a firing warning is a **prominent banner plus an acknowledgement the clinician must give before signing** -- it never blocks saving; **(3)** the practice's clinicians **write and sign off the rules**; this build ships none.
+
+### 112.2 What was added
+
+Four new tables (`ehr/models/safety.py`, SQLAlchemy 2.x `Mapped` on the app's Base; no existing table altered): `safety_flag_types` (the patient-status questions), `patient_safety_flags` (a patient's current yes/no per question, unique per patient and type, with who/when; no row = unknown), `safety_rules` ("when flag X is yes, and optionally the exam text mentions keyword K, warn with text T"), and `exam_safety_acknowledgements` (who acknowledged which rule on which exam, when, with a snapshot of the wording). Migration 056 seeds **only** four neutral questions (Pregnant; Nursing; Takes a blood thinner; Narrow angles / angle-closure risk) and **no rules**.
+
+* **Admin** (`/admin/safety`, Administration > Clinical Decision Support): flag types (add, edit, deactivate) and rules (add, edit, deactivate; flag, keyword, warning text). A rule is **silent until reviewed**, and reviewing requires a source citation (reviewer and time recorded); editing a reviewed rule's flag, keyword or wording **withdraws the sign-off**. Flag types and rules are deactivated, never deleted (patient answers and acknowledgements reference them). System/Practice Administrators edit and review; the Read-Only Auditor sees a view-only notice; other roles get the friendly no-privileges page.
+* **Patient chart**: a "Safety flags" card on the Overview (Unknown / Yes / No per active flag; "Unknown" never triggers anything). Technicians, Optometrists and Administrators can change flags (those who can edit exams); other roles see it disabled with a notice. Changes are written to the field-change audit log.
+* **Exam form**: a prominent banner under the page heading lists the warnings that apply to the selected patient -- flag is yes, rule active and reviewed; a keyword rule shows only while that word appears in the chief complaint, ROS notes, assessment or plan. It follows the patient selector and the text as the clinician types, never blocks saving, and stays hidden if its feed fails.
+* **Sign step**: the exam detail page shows each firing warning with a checkbox inside the sign form, and the server refuses to sign until every warning that applies has been acknowledged (re-evaluated server-side from the saved exam text and the patient's flags). Acknowledgements are recorded with the signer and time, and shown afterwards in a "Safety warnings acknowledged" card using the wording as it stood at the time.
+
+### 112.3 Verified
+
+`tests/test_safety.py` (a rule fires only when flag is yes, rule active and reviewed; unknown/no are silent; keyword matching; audited flag changes and clearing; acknowledgements cover only firing rules and keep a text snapshot), a migration test (seed has no rules, idempotent), and `test_clinical_safety_warnings_end_to_end` (unreviewed rule silent; citation required to review; banner follows the keyword; saving not blocked; signing refused server-side without acknowledgement, allowed with it; acknowledgement recorded with the signer; a non-matching exam needs none; withdrawing review silences the feed; non-clinical role view-only). Full suite green.
+
+### 112.4 Limits and follow-ups
+
+* **No rule content is supplied and none can fire until a clinician authors and signs one off.** The reference's examples (e.g. phenylephrine 10% in pregnancy) are for the practice's clinicians to decide, word and cite; the tool only enforces the mechanism.
+* Keyword matching is simple text matching on the exam's own words; it does not understand drug classes, brand/generic names, or negation ("no dilation"). A medication list would be the proper source for drug-based rules and does not exist yet.
+* Patient flags are manual. Nothing infers pregnancy or anticoagulant use from other data.
+* Acknowledgement happens at signing, as the signer; there is no per-clinician pre-acknowledgement on the exam form.
+* Stage 1 (a coder/compliance review of the ROS rules) is still open.
+
+**Version 2.85 change log (relative to v2.84):**
+
+| Area | Change |
+| --- | --- |
+| Schema | Four new tables (safety flag types, patient flags, rules, exam acknowledgements); migration 056 seeds four neutral questions, no rules. |
+| Admin | /admin/safety: flags and clinician-authored warning rules with citation-gated sign-off. |
+| Chart | Safety flags card on the patient Overview (audited). |
+| Exam | Warning banner on the exam form; signing requires acknowledging every warning that applies (recorded with who/when). |
+

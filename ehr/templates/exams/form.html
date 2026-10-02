@@ -32,6 +32,8 @@
     {% if lookback_alerts %}<section class="exam-before" aria-label="Before you start"><span class="eyebrow">Before you start</span>{% include "patients/_lookback_alerts.html" %}</section>{% endif %}
     {% endif %}
 
+    <div class="safety-banner" id="safetyBanner" role="alert" hidden></div>
+
     <form method="post" action="/exams/new" class="exam-form" id="examForm">
     {% if appointment_id %}<input type="hidden" name="appointment_id" value="{{ appointment_id }}">{% endif %}
 
@@ -1453,5 +1455,6 @@ function removeReturnVisit2() {
 </script>
 <script src="/static/js/exam_room.js"></script>
 <script src="/static/js/ros_assist.js"></script>
+<script src="/static/js/safety_banner.js"></script>
 <script src="/static/js/voice_scribe.js"></script>
 {% endblock %}

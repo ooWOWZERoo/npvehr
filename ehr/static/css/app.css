@@ -909,3 +909,9 @@ a.tile:hover { text-decoration: none; }
 .ros-suggest-row { display: grid; gap: 2px; padding: 0.35rem 0; border-top: 1px solid var(--border); font-size: 0.85rem; }
 .ros-suggest-row:first-of-type { border-top: 0; }
 .ros-suggest-row .badge { justify-self: start; }
+
+/* --- clinical safety warnings (exam form banner + exam detail card) --- */
+.safety-banner { background: var(--danger-soft); border: 1px solid var(--danger-border); border-left: 5px solid var(--danger-text); border-radius: 12px; padding: var(--space-4) var(--space-5); color: var(--ink); }
+.safety-banner[hidden] { display: none; }
+.safety-banner ul { margin: var(--space-2) 0; padding-left: 1.2rem; }
+.exam-main .safety-banner { position: sticky; top: var(--space-2); z-index: 8; box-shadow: 0 6px 18px var(--shadow-pop); }

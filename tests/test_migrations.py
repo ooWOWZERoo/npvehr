@@ -276,3 +276,17 @@ def test_ros_catalog_seed_is_idempotent_and_starter_rules_are_unreviewed(fresh_e
     with fresh_engine.connect() as conn:
         assert conn.execute(text("SELECT COUNT(*) FROM ros_master")).scalar() == n_items
         assert conn.execute(text("SELECT COUNT(*) FROM ros_icd10_test_mapping")).scalar() == n_rules
+
+
+def test_safety_flag_type_seed_has_no_rules_and_is_idempotent(fresh_engine):
+    """Migration 056 seeds only the neutral patient-status questions. It must not ship a single warning rule
+    (the practice's clinicians write and sign those off), and re-running it must not duplicate anything."""
+    _run_all_migrations(fresh_engine)
+    with fresh_engine.connect() as conn:
+        codes = {r[0] for r in conn.execute(text("SELECT code FROM safety_flag_types")).fetchall()}
+        assert codes == {"pregnant", "nursing", "blood_thinner", "narrow_angle"}
+        assert conn.execute(text("SELECT COUNT(*) FROM safety_rules")).scalar() == 0
+    with fresh_engine.begin() as conn:
+        mig.migration_056_seed_safety_flag_types(conn)
+    with fresh_engine.connect() as conn:
+        assert conn.execute(text("SELECT COUNT(*) FROM safety_flag_types")).scalar() == 4

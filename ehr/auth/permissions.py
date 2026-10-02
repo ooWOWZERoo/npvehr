@@ -57,6 +57,7 @@ EXAM_EDIT = {SYSTEM_ADMINISTRATOR, PRACTICE_ADMINISTRATOR, TECHNICIAN, OPTOMETRI
 # do it. Technician and Practice Administrator can enter/edit exam data but
 # never sign one themselves.
 EXAM_SIGN = {SYSTEM_ADMINISTRATOR, OPTOMETRIST_PROVIDER}
+PATIENT_SAFETY_EDIT = EXAM_EDIT
 
 # User request: an NCCI billing-rule conflict (ehr.services.ncci_edits) can
 # only be overridden by "the OD(s) or General Manager" -- this app has no
@@ -104,6 +105,14 @@ VOICE_SCRIBE_VOCAB_EDIT = {SYSTEM_ADMINISTRATOR, PRACTICE_ADMINISTRATOR}
 ROS_CATALOG_EDIT = {SYSTEM_ADMINISTRATOR, PRACTICE_ADMINISTRATOR}
 ROS_CATALOG_REVIEW = {SYSTEM_ADMINISTRATOR, PRACTICE_ADMINISTRATOR}
 ROS_CATALOG_VIEW = ROS_CATALOG_EDIT | {READ_ONLY_AUDITOR}
+
+# Clinical safety flags / warning rules (ROS plan stage 5). Defining and signing off the RULES is a
+# practice-wide configuration + compliance responsibility (same people as the ROS catalog); recording a
+# PATIENT'S flags (pregnant, takes a blood thinner, ...) is clinical, so it follows who may edit exams.
+SAFETY_RULES_EDIT = {SYSTEM_ADMINISTRATOR, PRACTICE_ADMINISTRATOR}
+SAFETY_RULES_REVIEW = {SYSTEM_ADMINISTRATOR, PRACTICE_ADMINISTRATOR}
+SAFETY_RULES_VIEW = SAFETY_RULES_EDIT | {READ_ONLY_AUDITOR}
+# (PATIENT_SAFETY_EDIT is defined after EXAM_EDIT below.)
 
 # All 5 Claim Management sections are currently GET-only placeholders/views in
 # this codebase (no create/edit routes exist yet), so only a VIEW group is needed.
