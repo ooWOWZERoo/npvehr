@@ -4955,3 +4955,42 @@ No per-page re-layout of the admin screens; they are dense CRUD tables where the
 | --- | --- |
 | Admin / store ops / placeholder | Eyebrow headers on 25 pages. |
 
+## 104. Redesign P6: Patient Portal (v2.77)
+
+### 104.1 What changed
+
+Final phase of the app-wide "Launchpad" extension (§99-§103); the portal, intentionally left light in §96, now shares the look and the theme. The portal shell (`portal/_base.html`) gets the no-flash theme script, the same `#themeToggle` as the staff topbar (same `npv-theme` key, so the choice carries across), a pill-style nav that marks the current section, a tinted canvas, and tighter phone padding. The sign-in, create-account and check-email pages get the theme script, the themed canvas and a bordered 20px card. Every portal page gets an eyebrow label above its heading. Remaining hard-coded hex colors on portal pages were replaced with tokens so dark mode reads correctly.
+
+### 104.2 Preserved
+
+Routes, field names, ids (`#email` etc.), the magic-link flow, CSRF meta tag, and all page content are unchanged.
+
+### 104.3 Verified
+
+New `test_portal_has_theme_toggle_and_active_nav` signs in as a seeded patient, checks the active nav item, toggles dark (computed body background), and confirms the choice persists to another portal page. Full suite green.
+
+**Version 2.77 change log (relative to v2.76) -- Redesign P6:**
+
+| Area | Change |
+| --- | --- |
+| Portal shell | Theme toggle + no-flash script, pill nav with active state, themed canvas. |
+| Portal pages | Eyebrow headers; auth pages themed; hex colors tokenized. |
+
+## 105. Admin Resources/Tests Edit + Deactivate, and the "Rx Room" (v2.78)
+
+### 105.1 Admin edit / deactivate
+
+User request: "add edit and delete (or deactivate, whichever is more appropriate) buttons to admin resources". The Scheduling Administration **Resources** page could only add. Each resource row now has **Edit** (display name, class, exclusive; the code is shown but fixed because appointment-type requirements and availability reference it) and **Deactivate / Reactivate** (with a confirm prompt). **Deactivate was chosen over delete**: requirements, availability templates and reservations reference a resource by id, so deleting would orphan live bookings; inactive resources already drop out of booking pickers (`Resource.active` filter) while staying in history. The **Diagnostic Tests** page already had Activate/Deactivate and gains **Edit** (name, abbreviation, duration, order, counts-toward-color; code fixed). Both write to the field-change audit log (`resources`, `diagnostic_tests`), and the Field Change Audit page links those rows to the edit forms. Existing edit/deactivate pages (providers, services, users, voice-scribe corrections, appointment types) were already in place; availability templates, provider availability and holidays were not changed.
+
+### 105.2 Rx Room
+
+The New Prescription page now uses the exam-room layout: step rail (Patient & type, Rx values, Contact lens, Lens design & follow-up, Notes) with scrollspy and "started" marks, patient card, a large "What are we prescribing?" intake, Glasses / Contact-lens type cards (a radiogroup over the unchanged `rx_type` select, kept off-screen), side-by-side OD/OS cards for Rx values and contact-lens parameters (de-emphasised, not hidden, for a glasses Rx), chips for treatments and education, and a sticky Save bar. Behaviour is in `static/js/rx_room.js`. Every field name is unchanged, so the create route, detail/print pages and existing tests are untouched.
+
+**Version 2.78 change log (relative to v2.77):**
+
+| Area | Change |
+| --- | --- |
+| Admin resources | Edit + Deactivate/Reactivate (audited). |
+| Admin tests | Edit (audited). |
+| New Rx | Exam-room layout, type cards, OD/OS cards, step rail, sticky save. |
+

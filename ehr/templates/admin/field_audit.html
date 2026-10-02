@@ -15,6 +15,8 @@
         <td>
           {% if e.table_name == 'patients' %}<a href="/patients/{{ e.record_id }}">Patient #{{ e.record_id }}</a>
           {% elif e.table_name == 'providers' %}<a href="/admin/scheduling/providers/{{ e.record_id }}/edit">Provider #{{ e.record_id }}</a>
+          {% elif e.table_name == 'resources' %}<a href="/admin/scheduling/resources/{{ e.record_id }}/edit">Resource #{{ e.record_id }}</a>
+          {% elif e.table_name == 'diagnostic_tests' %}<a href="/admin/scheduling/tests/{{ e.record_id }}/edit">Test #{{ e.record_id }}</a>
           {% else %}{{ e.table_name }} #{{ e.record_id }}{% endif %}
         </td>
         <td class="mono-data">{{ e.field_name }}</td>

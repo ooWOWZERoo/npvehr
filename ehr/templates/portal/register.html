@@ -3,6 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script>
+    /* Apply the saved theme before first paint (shared with the staff app; key set by the toggle). */
+    try { if (localStorage.getItem("npv-theme") === "dark") document.documentElement.setAttribute("data-theme", "dark"); } catch (e) {}
+  </script>
   <title>Create Account &mdash; New Path Vision EHR</title>
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -13,14 +17,14 @@
   <style>
     body.login-body {
       min-height: 100vh; display: flex; align-items: center; justify-content: center;
-      background: linear-gradient(160deg, var(--primary-strong), var(--primary) 60%, var(--primary-soft));
+      background: radial-gradient(1200px 600px at 15% -10%, var(--primary-soft), transparent 60%), var(--canvas);
       padding: var(--space-6) 0;
     }
     .login-card {
-      background: var(--surface); border-radius: 14px; box-shadow: 0 20px 50px rgba(19,36,32,0.25);
+      background: var(--surface); border: 1px solid var(--border); border-radius: 20px; box-shadow: 0 20px 50px var(--shadow-pop);
       padding: var(--space-7) var(--space-6); width: 100%; max-width: 460px;
     }
-    .login-brand-text { font-family: var(--font-display); font-size: 1.2rem; font-weight: 700; color: var(--primary-strong); margin-bottom: var(--space-6); display: block; }
+    .login-brand-text { font-family: var(--font-display); font-size: 1.2rem; font-weight: 700; color: var(--ink-strong); margin-bottom: var(--space-6); display: block; }
     .login-card h1 { font-size: 1.3rem; margin-bottom: var(--space-2); }
     .login-card p.login-sub { color: var(--ink-muted); margin: 0 0 var(--space-5); font-size: 0.85rem; }
     .login-card .btn-primary { width: 100%; justify-content: center; padding: 0.6rem; font-size: 0.9rem; }

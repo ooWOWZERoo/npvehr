@@ -22,6 +22,9 @@ templates.env.globals["ROLE_LABELS"] = ROLE_LABELS
 
 # Per-record field-change audit trail (spec §37.1/§37.6 follow-up).
 PROVIDER_AUDITED_FIELDS = ["first_name", "last_name", "license_number", "npi", "specialty"]
+RESOURCE_AUDITED_FIELDS = ["display_name", "resource_class", "exclusive", "active"]
+RESOURCE_CLASSES = ["provider", "technician", "exam_lane", "room", "device", "other"]
+TEST_AUDITED_FIELDS = ["display_name", "calendar_abbreviation", "counts_toward_color", "default_duration_minutes", "display_order", "active"]
 
 # Every route below now requires either ADMIN_SCHEDULING_VIEW (System/Practice
 # Administrator, Read-only/Auditor) or ADMIN_SCHEDULING_EDIT (System/Practice
@@ -337,6 +340,34 @@ def toggle_test(request: Request, test_id: int, csrf_token: str = Form(""), db: 
     return RedirectResponse("/admin/scheduling/tests", status_code=303)
 
 
+@router.get("/tests/{test_id}/edit", response_class=HTMLResponse, dependencies=[Depends(require_role(*ADMIN_SCHEDULING_EDIT))])
+def edit_test_form(request: Request, test_id: int, db: Session = Depends(get_db)):
+    test = db.query(DiagnosticTest).filter(DiagnosticTest.id == test_id).first()
+    if not test:
+        return HTMLResponse("Not found", status_code=404)
+    return templates.TemplateResponse(request, "admin/scheduling/test_form.html", {"test": test})
+
+
+@router.post("/tests/{test_id}/edit", dependencies=[Depends(require_role(*ADMIN_SCHEDULING_EDIT))])
+def update_test(request: Request, test_id: int, display_name: str = Form(...), calendar_abbreviation: str = Form(...),
+    counts_toward_color: bool = Form(False), default_duration_minutes: str = Form(""),
+    display_order: int = Form(0), csrf_token: str = Form(""), db: Session = Depends(get_db), user=Depends(get_current_user)):
+    csrf.verify_or_403(request.state.csrf_token, csrf_token)
+    test = db.query(DiagnosticTest).filter(DiagnosticTest.id == test_id).first()
+    if not test:
+        return HTMLResponse("Not found", status_code=404)
+    before = {f: getattr(test, f) for f in TEST_AUDITED_FIELDS}
+    test.display_name = display_name.strip()
+    test.calendar_abbreviation = calendar_abbreviation.strip()
+    test.counts_toward_color = counts_toward_color
+    test.default_duration_minutes = int(default_duration_minutes) if default_duration_minutes.strip() else None
+    test.display_order = display_order
+    after = {f: getattr(test, f) for f in TEST_AUDITED_FIELDS}
+    field_audit.record_field_changes(db, "diagnostic_tests", test_id, before, after, user.id)
+    db.commit()
+    return RedirectResponse("/admin/scheduling/tests", status_code=303)
+
+
 @router.get("/resources", response_class=HTMLResponse, dependencies=[Depends(require_role(*ADMIN_SCHEDULING_VIEW))])
 def list_resources(request: Request, db: Session = Depends(get_db)):
     resources = db.query(Resource).order_by(Resource.resource_class, Resource.display_name).all()
@@ -351,6 +382,53 @@ def create_resource(request: Request, code: str = Form(...), display_name: str =
     if db.query(Resource).filter(Resource.code == code).first():
         return HTMLResponse(f"Resource code '{code}' already exists.", status_code=400)
     db.add(Resource(code=code, display_name=display_name, resource_class=resource_class, exclusive=exclusive, active=True))
+    db.commit()
+    return RedirectResponse("/admin/scheduling/resources", status_code=303)
+
+
+@router.get("/resources/{resource_id}/edit", response_class=HTMLResponse, dependencies=[Depends(require_role(*ADMIN_SCHEDULING_EDIT))])
+def edit_resource_form(request: Request, resource_id: int, db: Session = Depends(get_db)):
+    resource = db.query(Resource).filter(Resource.id == resource_id).first()
+    if not resource:
+        return HTMLResponse("Not found", status_code=404)
+    return templates.TemplateResponse(request, "admin/scheduling/resource_form.html",
+        {"resource": resource, "classes": RESOURCE_CLASSES})
+
+
+@router.post("/resources/{resource_id}/edit", dependencies=[Depends(require_role(*ADMIN_SCHEDULING_EDIT))])
+def update_resource(request: Request, resource_id: int, display_name: str = Form(...), resource_class: str = Form(...),
+    exclusive: bool = Form(False), csrf_token: str = Form(""), db: Session = Depends(get_db), user=Depends(get_current_user)):
+    csrf.verify_or_403(request.state.csrf_token, csrf_token)
+    resource = db.query(Resource).filter(Resource.id == resource_id).first()
+    if not resource:
+        return HTMLResponse("Not found", status_code=404)
+    if resource_class not in RESOURCE_CLASSES:
+        return HTMLResponse("Unknown resource class.", status_code=400)
+    before = {f: getattr(resource, f) for f in RESOURCE_AUDITED_FIELDS}
+    resource.display_name = display_name.strip()
+    resource.resource_class = resource_class
+    resource.exclusive = exclusive
+    after = {f: getattr(resource, f) for f in RESOURCE_AUDITED_FIELDS}
+    field_audit.record_field_changes(db, "resources", resource_id, before, after, user.id)
+    db.commit()
+    return RedirectResponse("/admin/scheduling/resources", status_code=303)
+
+
+@router.post("/resources/{resource_id}/toggle-active", dependencies=[Depends(require_role(*ADMIN_SCHEDULING_EDIT))])
+def toggle_resource_active(request: Request, resource_id: int, csrf_token: str = Form(""),
+    db: Session = Depends(get_db), user=Depends(get_current_user)):
+    """Deactivate rather than delete: appointment-type requirements, availability
+    templates and reservations all reference a resource by id, so removing the
+    row would orphan live bookings. Inactive resources drop out of booking
+    pickers (appointments.py filters on Resource.active) but stay in history."""
+    csrf.verify_or_403(request.state.csrf_token, csrf_token)
+    resource = db.query(Resource).filter(Resource.id == resource_id).first()
+    if not resource:
+        return HTMLResponse("Not found", status_code=404)
+    before_active = resource.active
+    resource.active = not resource.active
+    field_audit.record_field_changes(db, "resources", resource_id,
+        {"active": before_active}, {"active": resource.active}, user.id)
     db.commit()
     return RedirectResponse("/admin/scheduling/resources", status_code=303)
 

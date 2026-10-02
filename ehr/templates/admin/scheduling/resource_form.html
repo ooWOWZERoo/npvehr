@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Edit Resource &mdash; Admin{% endblock %}
+{% block content %}
+<div class="page-header"><div><span class="page-eyebrow">Administration</span><h1>Edit Resource: {{ resource.display_name }}</h1></div>
+  <a href="/admin/scheduling/resources" class="btn btn-secondary">Cancel</a></div>
+{% include "admin/scheduling/_nav.html" %}
+<div class="card form-card">
+  <form method="post" action="/admin/scheduling/resources/{{ resource.id }}/edit">
+    <div class="form-row cols-4">
+      <div class="form-group"><label>Code <input value="{{ resource.code }}" disabled></label></div>
+      <div class="form-group"><label>Display Name* <input name="display_name" required value="{{ resource.display_name }}"></label></div>
+      <div class="form-group"><label>Class* <select name="resource_class" required>
+          {% for c in classes %}<option value="{{ c }}" {{ 'selected' if resource.resource_class == c }}>{{ c }}</option>{% endfor %}
+        </select></label>
+      </div>
+      <div class="form-group checkbox-row" style="align-items:flex-end;padding-bottom:0.5rem"><input type="checkbox" name="exclusive" value="true" id="ex" {{ 'checked' if resource.exclusive }}><label for="ex">Exclusive</label></div>
+    </div>
+    <p style="font-size:0.8rem;color:var(--ink-muted)">
+      The code is fixed because appointment types and availability reference it. Active/inactive status is managed from the
+      <a href="/admin/scheduling/resources">Resources list</a>.
+    </p>
+    <div class="form-actions"><button type="submit" class="btn btn-primary">Save Changes</button></div>
+  </form>
+</div>
+{% endblock %}
