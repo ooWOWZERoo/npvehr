@@ -1,0 +1,25 @@
+{# Patient safety flags (ROS plan stage 5). `safety_flags` = [(flag_type, status|None, row|None)] from ehr.services.safety. #}
+{% if safety_flags %}
+{% set can_edit_flags = request.state.user.role in ('system_administrator', 'practice_administrator', 'technician', 'optometrist_provider') %}
+<div class="card" style="margin-top:1rem" id="safetyFlagsCard">
+  <span class="page-eyebrow">Clinical safety</span>
+  <h3 style="margin-top:2px">Safety flags</h3>
+  <form method="post" action="/safety/patients/{{ patient.id }}/flags">
+    <div class="field-grid cols-2">
+      {% for ftype, status, row in safety_flags %}
+      <label class="fld">{{ ftype.label }}
+        <select name="flag_{{ ftype.id }}" {{ '' if can_edit_flags else 'disabled' }}>
+          <option value="" {{ 'selected' if status is none }}>Unknown</option>
+          <option value="yes" {{ 'selected' if status == 'yes' }}>Yes</option>
+          <option value="no" {{ 'selected' if status == 'no' }}>No</option>
+        </select>
+        {% if row and row.recorded_at %}<span class="muted" style="font-weight:400;font-size:0.72rem">Recorded {{ row.recorded_at.strftime('%m/%d/%Y') }}</span>{% endif %}
+      </label>
+      {% endfor %}
+    </div>
+    {% if can_edit_flags %}<button type="submit" class="btn btn-secondary btn-sm" style="margin-top:var(--space-3)">Save flags</button>
+    {% else %}<p class="muted" style="font-size:0.8rem;margin-top:var(--space-3)">View-only: you don't have privileges to change a patient's safety flags.</p>{% endif %}
+  </form>
+  <p class="muted" style="font-size:0.78rem;margin-top:var(--space-3)">Used to show the practice's clinician-approved warnings on this patient's exams. &ldquo;Unknown&rdquo; never triggers a warning.</p>
+</div>
+{% endif %}

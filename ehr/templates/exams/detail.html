@@ -176,6 +176,14 @@
   </dl>
 </div>
 {% endif %}
+{% if safety_ack_required %}<div class="alert alert-error" style="margin-top:1rem">This visit has safety warnings that must be acknowledged before it can be signed. Tick each warning below, then sign.</div>{% endif %}
+{% if safety_acks %}
+<div class="card" style="margin-top:1rem"><h3>Safety warnings acknowledged</h3>
+  <ul style="margin:0;padding-left:1.2rem">
+  {% for a, who in safety_acks %}<li>{{ a.warning_text_snapshot }} <span class="muted">&mdash; acknowledged {{ a.acknowledged_at.strftime('%m/%d/%Y %I:%M %p') }}{% if who %} by {{ who }}{% endif %}</span></li>{% endfor %}
+  </ul>
+</div>
+{% endif %}
 {% if ros_findings %}
 <div class="card" style="margin-top:1rem"><h3>ROS Findings (catalog)</h3>
   <p class="muted" style="margin-top:-0.5rem;font-size:0.85rem">Positive findings ticked on the exam form. Recorded with the exam and locked once it is signed.</p>
@@ -400,6 +408,17 @@
     (see Addenda below) and cannot be un-signed.</p>
   {% if current_user and current_user.role in ('system_administrator', 'optometrist_provider') %}
   <form method="post" action="/exams/{{ exam.id }}/sign" onsubmit="return confirm('Sign and lock this visit? This cannot be undone.');">
+    {% if safety_fired %}
+    <div class="safety-banner" style="margin-bottom:var(--space-3)">
+      <strong>Safety warnings &mdash; acknowledge to sign</strong>
+      {% for w in safety_fired %}
+      <label style="display:flex;gap:0.5rem;align-items:flex-start;margin-top:var(--space-2)">
+        <input type="checkbox" name="ack_safety_rule" value="{{ w.id }}" required>
+        <span>{{ w.warning }} <span class="muted">({{ w.flag }})</span></span>
+      </label>
+      {% endfor %}
+    </div>
+    {% endif %}
     <button type="submit" class="btn btn-primary btn-sm">Sign &amp; Lock This Visit</button>
   </form>
   {% endif %}

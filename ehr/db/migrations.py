@@ -1778,6 +1778,26 @@ def migration_055_seed_ros_catalog(conn):
                               "VALUES (:i, :c, :p, :t, :n, :r)"), {"i": item_id, "c": icd, "p": pattern, "t": cpt, "n": note, "r": False})
 
 
+def migration_056_seed_safety_flag_types(conn):
+    """Clinical safety flags (ROS plan stage 5; tables in ehr/models/safety.py, created by create_all()).
+    Seeds ONLY the neutral patient-status questions the clinical reference mentions -- no warning rules.
+    Rules are authored and signed off by the practice's clinicians in /admin/safety; none exist (so none can
+    fire) until then. Idempotent: a flag type is inserted only when its code is absent."""
+    if not _table_exists(conn, "safety_flag_types"):
+        return
+    existing = {r[0] for r in conn.execute(text("SELECT code FROM safety_flag_types")).fetchall()}
+    types = [
+        ("pregnant", "Pregnant", "Patient is currently pregnant."),
+        ("nursing", "Nursing / breastfeeding", "Patient is currently nursing."),
+        ("blood_thinner", "Takes a blood thinner", "Anticoagulant or antiplatelet medication."),
+        ("narrow_angle", "Narrow angles / angle-closure risk", "Known narrow anterior chamber angles."),
+    ]
+    for i, (code, label, desc) in enumerate(types):
+        if code not in existing:
+            conn.execute(text("INSERT INTO safety_flag_types (code, label, description, sort_order, is_active) VALUES (:c, :l, :d, :o, :a)"),
+                         {"c": code, "l": label, "d": desc, "o": (i + 1) * 10, "a": True})
+
+
 POST_CREATE_ALL_MIGRATIONS = [
     ("002_seed_appointment_types", migration_002_seed_appointment_types),
     ("003_seed_diagnostic_tests", migration_003_seed_diagnostic_tests),
@@ -1793,6 +1813,7 @@ POST_CREATE_ALL_MIGRATIONS = [
     ("053_seed_services", migration_053_seed_services),
     ("054_seed_voice_scribe_corrections", migration_054_seed_voice_scribe_corrections),
     ("055_seed_ros_catalog", migration_055_seed_ros_catalog),
+    ("056_seed_safety_flag_types", migration_056_seed_safety_flag_types),
 ]
 
 # ---------------------------------------------------------------------------

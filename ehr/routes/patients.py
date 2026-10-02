@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from ehr.models.database import (get_db, Patient, Appointment, EyeExam, Prescription, AppointmentStatus,
     PatientDocument, Problem, ProblemAddendum, WaitlistEntry, AppointmentTypeVersion, AppointmentType,
     PatientInsurancePlan, DiagnosticOrder, DiagnosticTest, EyeExamFollowUp, Service, VisitCharge)
+from ehr.services import safety as safety_svc
 from ehr.services import diagnostic_orders as diag_orders
 from ehr.services import lookback_alerts
 from ehr.services import followup_recommendations
@@ -341,6 +342,7 @@ def patient_detail(request: Request, patient_id: int, db: Session = Depends(get_
         "active_services": db.query(Service).filter(Service.active == True)  # noqa: E712
             .order_by(Service.category, Service.display_order).all(),
     })
+    ctx["safety_flags"] = safety_svc.flags_for_patient(db, patient_id)
     return templates.TemplateResponse(request, "patients/overview.html", ctx)
 
 @router.get("/{patient_id}/photo")
