@@ -17,6 +17,8 @@
           {% elif e.table_name == 'providers' %}<a href="/admin/scheduling/providers/{{ e.record_id }}/edit">Provider #{{ e.record_id }}</a>
           {% elif e.table_name == 'resources' %}<a href="/admin/scheduling/resources/{{ e.record_id }}/edit">Resource #{{ e.record_id }}</a>
           {% elif e.table_name == 'diagnostic_tests' %}<a href="/admin/scheduling/tests/{{ e.record_id }}/edit">Test #{{ e.record_id }}</a>
+          {% elif e.table_name == 'availability_templates' %}<a href="/admin/scheduling/availability/{{ e.record_id }}/edit">Availability template #{{ e.record_id }}</a>
+          {% elif e.table_name == 'practice_closures' %}<a href="/admin/scheduling/holidays/{{ e.record_id }}/edit">Closure #{{ e.record_id }}</a>
           {% else %}{{ e.table_name }} #{{ e.record_id }}{% endif %}
         </td>
         <td class="mono-data">{{ e.field_name }}</td>

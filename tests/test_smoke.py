@@ -3589,6 +3589,52 @@ def test_admin_resources_and_tests_can_be_edited_and_resources_deactivated(logge
     assert page.locator("tr", has_text="Edited Test Name").count() == 1
 
 
+def test_availability_templates_and_holidays_can_be_edited(logged_in_page, live_server):
+    """Availability Templates and Holidays/Closures could only add (and delete,
+    for closures). Both now have Edit, validated server-side (end after start;
+    no duplicate closure date) and written to the field-change audit log."""
+    page = logged_in_page
+    page.goto(live_server + "/admin/scheduling/availability")
+    page.select_option('select[name="resource_id"]', label="Lane 1")
+    page.select_option('select[name="day_of_week"]', "2")
+    page.fill('input[name="start_time"]', "09:00")
+    page.fill('input[name="end_time"]', "12:00")
+    page.locator('button[type="submit"]', has_text="Add Template").click()
+    row = page.locator("tr", has_text="Wednesday").filter(has_text="09:00").first
+    assert "Lane 1" in row.inner_text()
+    row.locator("a", has_text="Edit").click()
+
+    page.fill('input[name="end_time"]', "08:00")
+    page.locator('button[type="submit"]', has_text="Save Changes").click()
+    assert "End time must be after start time" in page.locator("body").inner_text()
+    page.fill('input[name="end_time"]', "13:30")
+    page.select_option('select[name="day_of_week"]', "3")
+    page.locator('button[type="submit"]', has_text="Save Changes").click()
+    row = page.locator("tr", has_text="13:30")
+    assert "Thursday" in row.first.inner_text()
+
+    d1, d2 = "2031-11-27", "2031-11-28"
+    page.goto(live_server + "/admin/scheduling/holidays")
+    for d, label in [(d1, "Edit Test Holiday"), (d2, "Other Holiday")]:
+        page.fill('input[name="closure_date"]', d)
+        page.fill('input[name="label"]', label)
+        page.locator('button[type="submit"]', has_text="Add Closure").click()
+    page.locator("tr", has_text="Edit Test Holiday").locator("a", has_text="Edit").click()
+    page.fill('input[name="closure_date"]', d2)
+    page.locator('button[type="submit"]', has_text="Save Changes").click()
+    assert "A closure already exists" in page.locator("body").inner_text()
+    page.fill('input[name="closure_date"]', d1)
+    page.fill('input[name="label"]', "Edit Test Holiday Renamed")
+    page.fill('input[name="notes"]', "closed for test")
+    page.locator('button[type="submit"]', has_text="Save Changes").click()
+    row = page.locator("tr", has_text="Edit Test Holiday Renamed")
+    assert "closed for test" in row.inner_text()
+
+    page.goto(live_server + "/admin/field-audit")
+    body = page.locator("body").inner_text()
+    assert "Availability template #" in body and "Closure #" in body
+
+
 def test_rx_room_type_cards_rail_and_submit(logged_in_page, live_server):
     """New Rx page uses the exam-room layout: Glasses/Contact-lens cards drive
     the same rx_type select the server reads, the step rail marks sections

@@ -5004,3 +5004,16 @@ User report (screenshot of the New Rx page): step 5 (Notes) never became active 
 | --- | --- |
 | Step rail | Last step activates at page bottom (Rx and Exam). |
 
+## 107. Edit for Availability Templates and Holidays/Closures (v2.80)
+
+User request: "add edit to availability templates and holidays". The Scheduling Administration **Availability Templates** page (the resource-scoped weekly template) could only add; **Holidays / Closures** could add and delete. Each row now has **Edit**: templates edit resource, day, start/end time and effective-from/through dates (server-side: the resource must exist, end after start, "through" not before "from"); closures edit date, label and notes (a date already used by another closure is rejected). Validation errors re-render the form with a message and a 400. Both write to the field-change audit log (`availability_templates`, `practice_closures`) and the audit page links those rows to the edit forms. The templates table now shows the resource name instead of its numeric id. Editing a closure's date does not move or cancel appointments already booked, and the form says so.
+
+Not changed: **Provider Availability** (the provider-scoped template that the slot search actually reads) still has no edit; the resource-scoped template is stored but, per its page note, is not yet consulted by the slot search.
+
+**Version 2.80 change log (relative to v2.79):**
+
+| Area | Change |
+| --- | --- |
+| Availability templates | Edit (validated, audited); resource name shown. |
+| Holidays / closures | Edit (duplicate-date check, audited). |
+
