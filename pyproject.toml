@@ -10,6 +10,7 @@ dependencies = [
     "python-multipart>=0.0.9",
     "psycopg[binary]>=3.1.0",
     "cloudinary>=1.36.0",
+    "xlrd>=2.0.1",
 ]
 
 [tool.vercel]

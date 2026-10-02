@@ -3992,6 +3992,87 @@ def test_clinical_safety_warnings_end_to_end(logged_in_page, live_server):
     fd_ctx.close()
 
 
+def test_recall_report_import_preview_attestation_recalls_tab_and_undo(logged_in_page, live_server):
+    """Recall-report import (fabricated sample file): upload shows a preview with no patient names, the import needs the
+    test-data attestation + reason, patients and recalls land with every column mapped, the Recalls tab shows them,
+    re-importing the same file adds nothing (and the .xls path reads identically), and Undo removes what was created.
+    Only a System Administrator can reach the screen."""
+    from pathlib import Path
+    fx = Path(__file__).parent / "fixtures"
+    page = logged_in_page
+    page.goto(live_server + "/admin/imports")
+    page.set_input_files('input[type="file"]', str(fx / "recall_sample.csv"))
+    page.locator("button", has_text="Upload & preview").click()
+    page.wait_for_url(re.compile(r"/admin/imports/\d+$"))
+    body = page.locator("body").inner_text()
+    assert "Samplesmith" not in body and "SAMPLESMITH" not in body                       # preview shows counts, never names
+    tiles = page.locator(".stat-tile").all_inner_texts()
+    assert any("NEW PATIENTS" in t.upper() and "3" in t for t in tiles) and any("NEW RECALLS" in t.upper() and "4" in t for t in tiles)
+    assert "Skipped rows (2)" in body and "unreadable date of birth" in body and "missing first or last name" in body
+    batch_url = page.url
+
+    # The attestation and a reason are required -- the server enforces it even if the browser's checks are bypassed.
+    page.evaluate("document.querySelectorAll('#attest, input[name=reason]').forEach(e => { e.required = false; e.removeAttribute('minlength'); })")
+    page.fill('input[name="reason"]', "ok")
+    page.locator("button", has_text="Import now").click()
+    page.wait_for_load_state()
+    assert "Tick the confirmation and give a reason" in page.locator("body").inner_text()
+    assert page.locator("button", has_text="Import now").count() == 1                    # nothing was imported
+    page.check("#attest")
+    page.fill('input[name="reason"]', "Fabricated sample for automated test")
+    page.locator("button", has_text="Import now").click()
+    page.wait_for_load_state()
+    body = page.locator("body").inner_text()
+    assert "Imported" in body and "Fabricated sample for automated test" in body
+    assert page.locator("button", has_text="Undo this import").count() == 1
+
+    # Patients and the Recalls tab.
+    page.goto(live_server + "/patients/?last_name=Samplesmith")
+    page.locator("table a.patient-name-cell").first.click()
+    page.wait_for_load_state()
+    assert "(610) 555-0101" in page.locator("body").inner_text()
+    page.locator('.pw-subnav a[href$="/recalls"]').click()
+    page.wait_for_load_state()
+    recalls = page.locator("body").inner_text()
+    assert "12 Month Adult" in recalls and "Appt Time" in recalls and "03/21/2026" in recalls and "10/10/2025" in recalls
+    assert any(w in recalls.lower() for w in ("overdue", "due in", "due today"))
+    page.goto(live_server + "/patients/?last_name=McDonald")
+    page.locator("table a.patient-name-cell").first.click()
+    page.wait_for_load_state()
+    page.locator('.pw-subnav a[href$="/recalls"]').click()
+    assert "Never" in page.locator("body").inner_text()
+
+    # The same file again (as .xls) adds nothing.
+    page.goto(live_server + "/admin/imports")
+    page.set_input_files('input[type="file"]', str(fx / "recall_sample.xls"))
+    page.locator("button", has_text="Upload & preview").click()
+    page.wait_for_url(re.compile(r"/admin/imports/\d+$"))
+    tiles = " ".join(page.locator(".stat-tile").all_inner_texts()).upper().replace("\n", " ")
+    assert "NEW PATIENTS 0" in tiles and "ALREADY IN SYSTEM 3" in tiles and "NEW RECALLS 0" in tiles
+    page.locator("button", has_text="Discard this upload").click()
+    page.wait_for_url(re.compile(r"/admin/imports$"))
+
+    # Undo removes what the first import created.
+    page.goto(batch_url)
+    page.once("dialog", lambda d: d.accept())
+    page.locator("button", has_text="Undo this import").click()
+    page.wait_for_load_state()
+    assert "Undone" in page.locator("body").inner_text() and "3 patients removed" in page.locator("body").inner_text()
+    page.goto(live_server + "/patients/?last_name=Samplesmith")
+    assert page.locator("table a.patient-name-cell").count() == 0
+
+    # Not for other roles.
+    other = page.context.browser.new_context()
+    fd = other.new_page()
+    fd.goto(live_server + "/login")
+    fd.fill("#email", "frontdesk@newpathvision.example")
+    fd.fill("#password", "ChangeMe123!")
+    fd.click("button[type=submit]")
+    fd.wait_for_url(f"{live_server}/")
+    assert fd.goto(live_server + "/admin/imports").status == 403
+    other.close()
+
+
 def test_rx_room_type_cards_rail_and_submit(logged_in_page, live_server):
     """New Rx page uses the exam-room layout: Glasses/Contact-lens cards drive
     the same rx_type select the server reads, the step rail marks sections

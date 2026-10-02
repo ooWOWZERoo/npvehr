@@ -1,0 +1,10 @@
+Scheduled Recall Date,Next Appt Date,Last Exam Date,LastName,FirstName,DOB, Sex,Phone#,Address 1,Address 2,City,Zip,State,Email
+Recall Type:, 12 Month Adult,,,,,,,,,,,,
+3/21/2026,3/19/2024,6/15/2023,SAMPLESMITH,Pat,3/7/1958,F,(610) 555-0101,1 Test Road,Apt 2,TESTVILLE,19400,PA,Pat.Sample@Example.com
+3/3/2026,,Never,MCDONALD,SAM,11/20/1974,M,610-555-0102,2 Test Road,,Testville,19400,PA,
+Recall Type:, Appt Time,,,,,,,,,,,,
+10/10/2025,3/19/2024,6/15/2023,Samplesmith,Pat,3/7/1958,F,(610) 555-0101,1 Test Road,Apt 2,Testville,19400,PA,pat.sample@example.com
+Recall Type:, 6 Months Child,,,,,,,,,,,,
+1/6/2026,,Never,O'NEIL,KIM,7/13/2015,U,5551234,3 Test Road,,Testville,194,PA,not-an-email
+2/2/2026,,Never,,Nofirstname,1/1/1980,F,(610) 555-0103,4 Test Road,,Testville,19400,PA,
+2/2/2026,,Never,Baddob,Zed,13/45/2020,F,(610) 555-0104,5 Test Road,,Testville,19400,PA,
