@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}ROS Rules &mdash; Admin{% endblock %}
+{% block content %}
+{% set role = request.state.user.role %}
+{% set can_edit = role in ('system_administrator', 'practice_administrator') %}
+<div class="page-header"><div><span class="page-eyebrow">{{ item.body_system }}</span><h1>{{ item.prompt_text }}</h1></div>
+  <a href="/admin/ros" class="btn btn-secondary">Back to catalog</a></div>
+{% if error %}<div class="alert alert-error" style="margin-bottom:1rem">{{ error }}</div>{% endif %}
+{% if can_edit %}
+<div class="card form-card"><h3>Add Rule</h3>
+  <form method="post" action="/admin/ros/items/{{ item.id }}/mappings/new">
+    <div class="form-row cols-4">
+      <div class="form-group"><label>Suggested ICD-10* <input name="suggested_icd10" required maxlength="10" placeholder="E11.9"></label></div>
+      <div class="form-group"><label>Supporting family <input name="icd10_pattern" maxlength="10" placeholder="E11 (optional)"></label></div>
+      <div class="form-group"><label>Recommended CPT* <input name="recommended_cpt" required maxlength="5" placeholder="92250"></label></div>
+    </div>
+    <div class="form-group"><label>Provider-facing note <textarea name="compliance_rule" rows="2" maxlength="1000"></textarea></label></div>
+    <button type="submit" class="btn btn-primary">Add Rule</button>
+    <p style="font-size:0.8rem;color:var(--ink-muted);margin-top:0.75rem">
+      New rules start <strong>unreviewed</strong> (suggestion only). The supporting family is the ICD-10 prefix that counts as medical
+      necessity for the CPT &mdash; e.g. <code>E11</code> accepts any E11.x diagnosis; leave blank to require the suggested code exactly.
+    </p>
+  </form>
+</div>
+{% endif %}
+<div class="card" style="margin-top:1rem">
+  <div class="table-responsive"><table><thead><tr><th>ICD-10</th><th>Family</th><th>CPT</th><th>Note</th><th>Review</th><th></th></tr></thead><tbody>
+  {% for m in mappings %}
+    <tr>
+      <td class="mono-data">{{ m.suggested_icd10 }}</td>
+      <td class="mono-data">{{ m.icd10_pattern or '—' }}</td>
+      <td class="mono-data">{{ m.recommended_cpt }}</td>
+      <td>{{ m.compliance_rule or '—' }}</td>
+      <td>
+        {% if m.reviewed %}<span class="badge badge-completed">Reviewed</span>
+          <div class="muted" style="font-size:0.78rem">{{ m.source_citation }}{% if m.reviewed_at %} &middot; {{ m.reviewed_at.strftime('%m/%d/%Y') }}{% endif %}</div>
+        {% else %}<span class="badge badge-cancelled">Unreviewed</span>
+          <div class="muted" style="font-size:0.78rem">Suggestion only</div>{% endif %}
+      </td>
+      <td>
+        {% if can_edit %}<div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+          <a href="/admin/ros/mappings/{{ m.id }}/edit" class="btn btn-sm btn-secondary">Edit</a>
+          <form method="post" action="/admin/ros/mappings/{{ m.id }}/delete" onsubmit="return confirm('Delete this rule permanently?');">
+            <button type="submit" class="btn btn-sm btn-secondary">Delete</button></form>
+        </div>{% endif %}
+        {% if role in ('system_administrator', 'practice_administrator') %}
+          {% if m.reviewed %}
+          <form method="post" action="/admin/ros/mappings/{{ m.id }}/unreview" style="margin-top:0.4rem" onsubmit="return confirm('Withdraw the compliance sign-off for this rule?');">
+            <button type="submit" class="btn btn-sm btn-secondary">Withdraw review</button></form>
+          {% else %}
+          <form method="post" action="/admin/ros/mappings/{{ m.id }}/review" style="margin-top:0.4rem;display:flex;gap:0.4rem">
+            <input name="source_citation" required maxlength="255" placeholder="Source (LCD / policy)" aria-label="Source citation" style="min-width:12rem">
+            <button type="submit" class="btn btn-sm btn-primary">Mark reviewed</button></form>
+          {% endif %}
+        {% endif %}
+      </td>
+    </tr>
+  {% else %}<tr><td colspan="6"><div class="empty-state" style="border:0"><strong>No rules yet</strong>This prompt does not suggest any diagnosis or test.</div></td></tr>
+  {% endfor %}
+  </tbody></table></div>
+  <p style="font-size:0.8rem;color:var(--ink-muted);margin-top:0.75rem">
+    Marking a rule reviewed records who signed it off and when, and requires a source citation. Editing a reviewed rule's codes or note
+    withdraws the sign-off, because the content changed after it was approved.
+  </p>
+</div>
+{% endblock %}

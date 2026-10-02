@@ -1608,3 +1608,6 @@ def get_db():
         yield db
     finally:
         db.close()
+
+# Registers the ROS decision-support tables (ehr/models/ros.py) on Base so create_all() builds them.
+from ehr.models import ros as _ros  # noqa: E402,F401

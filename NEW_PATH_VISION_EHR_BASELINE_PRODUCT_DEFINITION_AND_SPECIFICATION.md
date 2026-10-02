@@ -5029,3 +5029,30 @@ User request: "add edit to provider availability too". Provider Availability hol
 | --- | --- |
 | Provider availability | Edit (validated, audited) and Deactivate/Reactivate; verified against the slot search. |
 
+## 109. ROS Decision-Support Catalog -- Tables and Admin Screen (v2.82)
+
+### 109.1 Origin and decision
+
+The practice supplied a "13 Core Body Systems in an Optometric ROS" reference and a logic-mapping spec, with a proposed three-table design and sample code. The draft code was reviewed against this codebase (it could not be adopted as written: MySQL DDL, a second Base/engine, a compliance check that never ran without a ticked ROS box, no endpoint that wrote responses, no auth/CSRF) and a staged plan was agreed. **This is stage 2: the tables and the admin screen only. Nothing changes for clinicians yet.**
+
+### 109.2 What was added
+
+Three new tables in `ehr/models/ros.py` (SQLAlchemy 2.x `Mapped`/`mapped_column` on the app's own Base, created by `create_all()`; no existing table was altered): `ros_master` (prompts per body system), `ros_icd10_test_mapping` (a ROS prompt -> suggested ICD-10, supporting ICD-10 family, and recommended CPT, with a provider-facing note, a source citation and a review flag), and `encounter_ros_responses` (per-exam answers, keyed to `eye_exams`, unique per exam and prompt; empty until a later stage writes it). Status is a plain string with a CHECK constraint, not a database ENUM. Migration 055 seeds the 13-system prompt list and four starter rules.
+
+**Admin screen** (`/admin/ros`, sidebar: Administration > Clinical Decision Support): prompts grouped by body system with add, edit and deactivate; a per-prompt page listing its rules with add, edit and delete. ICD-10 and CPT inputs are validated and normalised (case, shape). Permissions are new named sets `ROS_CATALOG_EDIT` and `ROS_CATALOG_REVIEW` (System/Practice Administrator) and `ROS_CATALOG_VIEW` (those plus the Read-Only Auditor); other roles get 403.
+
+**Compliance sign-off.** A rule is only usable for compliance advisories once **reviewed**, and marking it reviewed requires a source citation (the LCD or policy it comes from); the reviewer and time are recorded. **Editing a reviewed rule's codes or note withdraws the sign-off.** All four seeded starter rules are unreviewed (suggestion only), including corrected codes (flashes/floaters, migraine) that still need a coder's confirmation. Prompt and rule changes are written to the field-change audit log. Prompts are deactivated, never deleted (recorded answers restrict deletion); rules, which have nothing downstream, can be deleted.
+
+### 109.3 Not done (later stages)
+
+No clinician-facing behaviour: the exam form, its 8 existing `ros_*` fields, the ICD-10 composer, billing preview and NCCI advisories are untouched. Still to do: advisory banners on the exam form (stage 3), storing granular answers when an exam is saved and locking them on sign (stage 4), and the clinical hard-stop rules (pregnancy, anticoagulants, narrow-angle medications), which need data the app does not capture and a clinician-led design (stage 5). The clinical and coding content of every rule needs review by a coder or compliance expert before any rule is marked reviewed.
+
+**Version 2.82 change log (relative to v2.81):**
+
+| Area | Change |
+| --- | --- |
+| Schema | Three new tables (ros_master, ros_icd10_test_mapping, encounter_ros_responses); no existing table changed. |
+| Admin | ROS Catalog screen: prompts and rules, validated, audited, with citation-gated compliance sign-off. |
+| Permissions | ROS_CATALOG_EDIT / REVIEW / VIEW. |
+| Seed | Migration 055: 13 systems of prompts, four unreviewed starter rules. |
+

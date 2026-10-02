@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}ROS Catalog &mdash; Admin{% endblock %}
+{% block content %}
+{% set can_edit = request.state.user.role in ('system_administrator', 'practice_administrator') %}
+<div class="page-header"><div><span class="page-eyebrow">Administration</span><h1>Review of Systems Catalog</h1>
+  <p class="page-lede">The ROS prompts per body system, and the curated rules that suggest a diagnosis and test when a finding is positive.</p></div></div>
+<div class="alert alert-info" style="margin-bottom:var(--space-4)">
+  Decision support for staff only &mdash; nothing here is submitted or billed. A rule only raises compliance advisories once it has been
+  <strong>reviewed</strong> with a source citation; until then it can only suggest.
+</div>
+{% if can_edit %}
+<div class="card form-card"><h3>Add Prompt</h3>
+  <form method="post" action="/admin/ros/items/new">
+    <div class="form-row cols-3">
+      <div class="form-group"><label>Body System* <select name="body_system" required>{% for s in systems %}<option>{{ s }}</option>{% endfor %}</select></label></div>
+      <div class="form-group" style="grid-column: span 2"><label>Prompt* <input name="prompt_text" required maxlength="255" placeholder="e.g. History of diabetes"></label></div>
+    </div>
+    <button type="submit" class="btn btn-primary">Add Prompt</button>
+  </form>
+</div>
+{% endif %}
+{% for system, items in grouped %}
+<div class="card" style="margin-top:1rem">
+  <h3>{{ system }}</h3>
+  <div class="table-responsive"><table><thead><tr><th>Prompt</th><th>Rules</th><th>Status</th><th></th></tr></thead><tbody>
+  {% for it in items %}
+    <tr>
+      <td>{{ it.prompt_text }}</td>
+      <td>{{ counts.get(it.id, 0) }}{% if counts.get(it.id, 0) %} <span class="muted">({{ reviewed_counts.get(it.id, 0) }} reviewed)</span>{% endif %}</td>
+      <td><span class="badge {{ 'badge-completed' if it.is_active else 'badge-cancelled' }}">{{ 'Active' if it.is_active else 'Inactive' }}</span></td>
+      <td style="display:flex;gap:0.5rem">
+        <a href="/admin/ros/items/{{ it.id }}" class="btn btn-sm btn-secondary">Rules</a>
+        {% if can_edit %}
+        <a href="/admin/ros/items/{{ it.id }}/edit" class="btn btn-sm btn-secondary">Edit</a>
+        <form method="post" action="/admin/ros/items/{{ it.id }}/toggle-active" onsubmit="return confirm('{{ 'Deactivate' if it.is_active else 'Reactivate' }} this prompt?');">
+          <button type="submit" class="btn btn-sm btn-secondary">{{ 'Deactivate' if it.is_active else 'Reactivate' }}</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody></table></div>
+</div>
+{% else %}
+<div class="empty-state" style="margin-top:1rem"><strong>No prompts yet</strong>Add the first one above.</div>
+{% endfor %}
+<p style="font-size:0.8rem;color:var(--ink-muted);margin-top:0.75rem">
+  Prompts are deactivated rather than deleted: answers recorded against a prompt on an exam would otherwise lose their meaning.
+</p>
+{% endblock %}

@@ -3695,6 +3695,92 @@ def test_provider_working_hours_can_be_edited_and_deactivated_and_drive_slot_sea
     assert "Working hours #" in page.locator("body").inner_text()
 
 
+def test_ros_catalog_admin_crud_review_signoff_and_permissions(logged_in_page, live_server):
+    """ROS decision-support catalog (stage 2): seeded 13-system prompt list, add/edit/
+    deactivate prompts, add/edit/delete rules with code validation, and the compliance
+    sign-off -- a rule is reviewed only with a source citation (reviewer recorded),
+    editing a reviewed rule's codes withdraws the sign-off, everything is audited, and
+    a role without ROS_CATALOG_VIEW is refused."""
+    page = logged_in_page
+    page.goto(live_server + "/admin/ros")
+    body = page.locator("body").inner_text()
+    for system in ("Constitutional", "Endocrine", "Hematologic / Lymphatic", "Allergic / Immunologic"):
+        assert system in body
+    assert page.locator("tr", has_text="History of diabetes").count() == 1
+
+    name = "ROS test prompt " + str(int(time.time()) % 100000)
+    page.select_option('select[name="body_system"]', "Endocrine")
+    page.fill('input[name="prompt_text"]', name)
+    page.locator('button[type="submit"]', has_text="Add Prompt").click()
+    row = page.locator("tr", has_text=name)
+    assert row.count() == 1
+    row.locator("a", has_text="Edit").click()
+    page.fill('input[name="prompt_text"]', name + " renamed")
+    page.locator('button[type="submit"]', has_text="Save Changes").click()
+    row = page.locator("tr", has_text=name + " renamed")
+    assert row.count() == 1
+    row.locator("a", has_text="Rules").click()
+
+    add = page.locator('form[action$="/mappings/new"]')
+    add.locator('input[name="suggested_icd10"]').fill("not-a-code")
+    add.locator('input[name="recommended_cpt"]').fill("92250")
+    add.locator('button[type="submit"]').click()
+    assert "not a valid ICD-10-CM code shape" in page.locator("body").inner_text()
+    add = page.locator('form[action$="/mappings/new"]')
+    add.locator('input[name="suggested_icd10"]').fill("e11.319")
+    add.locator('input[name="icd10_pattern"]').fill("e11")
+    add.locator('input[name="recommended_cpt"]').fill("92134")
+    add.locator('button[type="submit"]').click()
+    rule = page.locator("tr", has_text="E11.319")
+    assert "unreviewed" in rule.inner_text().lower()
+    assert "92134" in rule.inner_text()
+
+    rule.locator('input[name="source_citation"]').fill("   ")
+    page.once("dialog", lambda d: d.accept())
+    rule.locator('button', has_text="Mark reviewed").click()
+    assert "unreviewed" in page.locator("tr", has_text="E11.319").inner_text().lower()
+    page.locator("tr", has_text="E11.319").locator('input[name="source_citation"]').fill("Test MAC LCD L00000")
+    page.locator("tr", has_text="E11.319").locator('button', has_text="Mark reviewed").click()
+    reviewed_text = page.locator("tr", has_text="E11.319").inner_text()
+    assert "Test MAC LCD L00000" in reviewed_text and "unreviewed" not in reviewed_text.lower()
+
+    page.locator("tr", has_text="E11.319").locator("a", has_text="Edit").click()
+    page.fill('input[name="recommended_cpt"]', "92250")
+    page.locator('button[type="submit"]', has_text="Save Changes").click()
+    assert "unreviewed" in page.locator("tr", has_text="E11.319").inner_text().lower()   # sign-off withdrawn
+
+    page.once("dialog", lambda d: d.accept())
+    page.locator("tr", has_text="E11.319").locator("button", has_text="Delete").click()
+    assert page.locator("tr", has_text="E11.319").count() == 0
+
+    page.goto(live_server + "/admin/ros")
+    page.once("dialog", lambda d: d.accept())
+    page.locator("tr", has_text=name + " renamed").locator("button", has_text="Deactivate").click()
+    assert "inactive" in page.locator("tr", has_text=name + " renamed").inner_text().lower()
+
+    page.goto(live_server + "/admin/field-audit")
+    audit_text = page.locator("body").inner_text()
+    assert "ros_master #" in audit_text and "ros_icd10_test_mapping #" in audit_text
+
+    page.goto(live_server + "/admin/users/new")
+    page.fill("#first_name", "Ros")
+    page.fill("#last_name", "Tech")
+    page.fill("#email", "ros.tech@newpathvision.example")
+    page.select_option("#role", "technician")
+    page.fill("#password", "ChangeMe123!")
+    page.locator('button[type="submit"]', has_text="Create User").click()
+    page.wait_for_load_state("networkidle")
+    tech_ctx = page.context.browser.new_context()
+    tech = tech_ctx.new_page()
+    tech.goto(live_server + "/login")
+    tech.fill("#email", "ros.tech@newpathvision.example")
+    tech.fill("#password", "ChangeMe123!")
+    tech.click("button[type=submit]")
+    tech.wait_for_url(f"{live_server}/")
+    assert tech.goto(live_server + "/admin/ros").status == 403
+    tech_ctx.close()
+
+
 def test_rx_room_type_cards_rail_and_submit(logged_in_page, live_server):
     """New Rx page uses the exam-room layout: Glasses/Contact-lens cards drive
     the same rx_type select the server reads, the step rail marks sections
