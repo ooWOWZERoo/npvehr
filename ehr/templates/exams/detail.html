@@ -176,6 +176,14 @@
   </dl>
 </div>
 {% endif %}
+{% if ros_findings %}
+<div class="card" style="margin-top:1rem"><h3>ROS Findings (catalog)</h3>
+  <p class="muted" style="margin-top:-0.5rem;font-size:0.85rem">Positive findings ticked on the exam form. Recorded with the exam and locked once it is signed.</p>
+  <dl class="dl-grid">
+    {% for system, prompts in ros_findings %}<dt>{{ system }}</dt><dd>{{ prompts | join('; ') }}</dd>{% endfor %}
+  </dl>
+</div>
+{% endif %}
 {% if exam.anterior_segment_assessments %}
 {% set ant = exam.anterior_segment_assessments[0] %}
 <div class="card" style="margin-top:1rem"><h3>Anterior Segment Assessment</h3>

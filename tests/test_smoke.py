@@ -3818,10 +3818,10 @@ def test_ros_catalog_admin_crud_review_signoff_and_permissions(logged_in_page, l
 def test_exam_form_ros_suggestions_are_advisory_only_and_never_block_the_form(logged_in_page, live_server):
     """ROS stage 3: the exam form's ROS step lists the catalog's prompts per body system, opens
     a system when the matching Yes/No answer is Yes, and shows the suggested ICD-10/test for any
-    ticked prompt, labelled Unreviewed until a compliance reviewer signs the rule off. It is
-    decision support only: the helper checkboxes have no name (never submitted), ticking one does
-    not count as exam progress, nothing is written into the note, and if the catalog can't load
-    the panel stays hidden and the form is unaffected."""
+    ticked prompt, labelled Unreviewed until a compliance reviewer signs the rule off. The
+    suggestions are decision support only (nothing is written into the note); the ticked finding
+    itself is exam data (submitted as ros_finding, counts as progress -- see the persistence test
+    below). If the catalog can't load the panel stays hidden and the form is unaffected."""
     page = logged_in_page
     page.goto(live_server + "/exams/new")
     assist = page.locator("#rosAssist")
@@ -3843,13 +3843,11 @@ def test_exam_form_ros_suggestions_are_advisory_only_and_never_block_the_form(lo
     sug.wait_for(state="visible")
     text = sug.inner_text()
     assert "E11.9" in text and "92250" in text and "unreviewed" in text.lower()
-    page.wait_for_timeout(300)
-    assert "is-done" not in (page.locator("[data-step-link=systems]").get_attribute("class") or "")   # helper ticks aren't exam progress
+    page.wait_for_function("document.querySelector('[data-step-link=systems]').classList.contains('is-done')")   # a ticked finding is exam data
     assert page.locator("textarea[name='assessment']").input_value().count("E11.9") == 0              # never written into the note
 
     names = page.evaluate("Array.from(new FormData(document.getElementById('examForm')).keys())")
-    assert not any("ros_assist" in n for n in names)
-    assert page.locator("input[data-ros-assist][name]").count() == 0
+    assert names.count("ros_finding") == 1
 
     endocrine.locator("label", has_text="History of diabetes").locator("input").uncheck()
     assert sug.is_hidden()
@@ -3862,6 +3860,32 @@ def test_exam_form_ros_suggestions_are_advisory_only_and_never_block_the_form(lo
     page.select_option('select[name="patient_id"]', index=0)
     page.locator('button[type="submit"]', has_text="Save Exam").click()
     page.wait_for_url(re.compile(r"/exams/\d+"))
+
+
+def test_ros_findings_are_saved_with_the_exam_and_shown_on_the_detail_page(logged_in_page, live_server):
+    """ROS stage 4: ticked catalog findings are stored with the exam (encounter_ros_responses, positive
+    only) in the same save, shown on the exam detail page grouped by body system, and forged / unknown /
+    garbled ids are ignored without breaking the save. Exams have no edit route, so the findings are
+    locked from the moment the exam exists."""
+    page = logged_in_page
+    page.goto(live_server + "/exams/new")
+    page.locator("#rosAssist").wait_for(state="visible")
+    page.locator("[data-ros-wrap] > summary").click()
+    for system, prompt in [("Endocrine", "History of diabetes"), ("Cardiovascular", "High blood pressure")]:
+        sysbox = page.locator("details.ros-system", has_text=system)
+        if sysbox.get_attribute("open") is None:
+            sysbox.locator("summary").click()
+        sysbox.locator("label", has_text=prompt).locator("input").check()
+    page.select_option('select[name="patient_id"]', index=0)
+    page.evaluate("""() => { const f = document.getElementById('examForm');
+        for (const v of ['999999', 'abc', '-3']) { const i = document.createElement('input'); i.type = 'hidden'; i.name = 'ros_finding'; i.value = v; f.appendChild(i); } }""")
+    page.locator('button[type="submit"]', has_text="Save Exam").click()
+    page.wait_for_url(re.compile(r"/exams/\d+$"))
+    body = page.locator("body").inner_text()
+    assert "ROS Findings (catalog)" in body
+    assert "History of diabetes" in body and "High blood pressure" in body
+    assert "999999" not in body
+    assert page.locator("dt", has_text="Endocrine").count() >= 1 and page.locator("dt", has_text="Cardiovascular").count() >= 1
 
 
 def test_rx_room_type_cards_rail_and_submit(logged_in_page, live_server):

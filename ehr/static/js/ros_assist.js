@@ -1,10 +1,11 @@
-// ROS-based suggestions on the New Exam page -- decision support only (stage 3 of the ROS plan).
+// ROS findings + suggestions on the New Exam page (stages 3 and 4 of the ROS plan).
 // Reads /admin/ros/catalog.json and, for the body systems the clinician has answered "Yes" to
-// (or any system they open), lists that system's catalog prompts. Ticking a prompt shows the
-// suggested ICD-10 code(s) and test(s) for it. Nothing here is saved, submitted, billed, or
-// written into the note: the helper checkboxes have no `name`, so they never join the form post,
-// and they are excluded from the step rail's "started" progress. If the catalog can't be
-// loaded the panel simply stays hidden -- this must never get in the way of entering an exam.
+// (or any system they open), lists that system's catalog prompts. A ticked prompt is a positive
+// finding: it is submitted with the exam as `ros_finding` (the server stores it with the exam)
+// and counts as exam progress. Ticking also shows the suggested ICD-10 code(s) and test(s) --
+// decision support only: nothing is written into the note and nothing is billed or sent. If the
+// catalog can't be loaded the panel simply stays hidden -- this must never get in the way of
+// entering an exam.
 (function () {
   "use strict";
   var host = document.getElementById("rosAssist");
@@ -53,8 +54,8 @@
         var li = el("li"), label = el("label", "ros-prompt");
         var cb = document.createElement("input");
         cb.type = "checkbox"; cb.value = String(p.id);
-        cb.setAttribute("data-ros-assist", "");                    // no name => never submitted
-        cb.setAttribute("data-no-progress", "");
+        cb.name = "ros_finding";                                   // submitted with the exam (stage 4)
+        cb.setAttribute("data-ros-assist", "");
         label.appendChild(cb);
         label.appendChild(document.createTextNode(" " + p.prompt));
         if (p.rules.length) label.appendChild(el("span", "ros-rule-count", p.rules.length + (p.rules.length === 1 ? " suggestion" : " suggestions")));
