@@ -124,6 +124,10 @@
     sections.forEach(function (section) {
       if (section.getBoundingClientRect().top <= probe) current = section;
     });
+    // At the very bottom of the page the last (short) section can never reach
+    // the probe line, so its step would never light up -- pick it explicitly.
+    var doc = document.documentElement;
+    if (window.innerHeight + window.pageYOffset >= doc.scrollHeight - 2) current = sections[sections.length - 1];
     var id = current.getAttribute("data-step");
     if (id === activeId) return;
     activeId = id;
