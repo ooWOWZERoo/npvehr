@@ -5,6 +5,7 @@ regression before it reaches a real deployment.
 """
 import json
 import re
+import time
 from datetime import datetime, timedelta
 
 DEMO_EMAIL = "admin@newpathvision.example"
@@ -3542,6 +3543,78 @@ def test_portal_has_theme_toggle_and_active_nav(live_server, page):
     assert page.locator(".portal-nav a.active").inner_text() == "My Records"
     page.locator("#themeToggle").click()
     assert page.evaluate("localStorage.getItem('npv-theme')") == "light"
+
+
+def test_admin_resources_and_tests_can_be_edited_and_resources_deactivated(logged_in_page, live_server):
+    """Admin Resources page had Add only. Resources now have Edit (name, class,
+    exclusive; code is fixed because requirements/availability reference it)
+    and Deactivate/Reactivate -- deactivate rather than delete, since bookings
+    and appointment-type requirements point at a resource by id. Diagnostic
+    Tests, which already toggled active, gain Edit. Both changes are written
+    to the field-change audit log."""
+    page = logged_in_page
+    code = "RM" + str(int(time.time()) % 100000)
+    page.goto(live_server + "/admin/scheduling/resources")
+    page.fill('input[name="code"]', code)
+    page.fill('input[name="display_name"]', "Exam Room Test")
+    page.locator('button[type="submit"]', has_text="Add Resource").click()
+    row = page.locator("tr", has_text=code)
+    assert row.count() == 1
+
+    row.locator("a", has_text="Edit").click()
+    assert page.locator('input[disabled]').first.input_value() == code
+    page.fill('input[name="display_name"]', "Exam Room Renamed")
+    page.select_option('select[name="resource_class"]', "room")
+    page.locator('button[type="submit"]', has_text="Save Changes").click()
+    row = page.locator("tr", has_text=code)
+    assert "Exam Room Renamed" in row.inner_text()
+    assert "room" in row.inner_text()
+
+    page.once("dialog", lambda d: d.accept())
+    row.locator("button", has_text="Deactivate").click()
+    row = page.locator("tr", has_text=code)
+    assert "inactive" in row.inner_text().lower()
+    page.once("dialog", lambda d: d.accept())
+    row.locator("button", has_text="Reactivate").click()
+    assert "inactive" not in page.locator("tr", has_text=code).inner_text().lower()
+
+    page.goto(live_server + "/admin/field-audit")
+    assert "Resource #" in page.locator("body").inner_text()
+
+    page.goto(live_server + "/admin/scheduling/tests")
+    first_row = page.locator("tbody tr").first
+    first_row.locator("a", has_text="Edit").click()
+    page.fill('input[name="display_name"]', "Edited Test Name")
+    page.locator('button[type="submit"]', has_text="Save Changes").click()
+    assert page.locator("tr", has_text="Edited Test Name").count() == 1
+
+
+def test_rx_room_type_cards_rail_and_submit(logged_in_page, live_server):
+    """New Rx page uses the exam-room layout: Glasses/Contact-lens cards drive
+    the same rx_type select the server reads, the step rail marks sections
+    started, the patient card follows the patient select, and one sticky Save
+    still submits every value (incl. contact-lens parameters) to the detail page."""
+    page = logged_in_page
+    page.goto(live_server + "/prescriptions/new")
+    assert page.locator("#rxTypeCards .type-card[aria-checked='true']").inner_text().startswith("Glasses")
+    page.locator("#rxTypeCards .type-card", has_text="Contact lenses").click()
+    assert page.locator("#rx_type").input_value() == "contacts"
+    assert page.locator("#step-contacts.is-muted").count() == 0
+    page.locator("#rxTypeCards .type-card", has_text="Glasses").click()
+    assert page.locator("#step-contacts.is-muted").count() == 1
+    page.locator("#rxTypeCards .type-card", has_text="Contact lenses").click()
+
+    page.select_option('select[name="patient_id"]', index=0)
+    assert page.locator("#railPatientName").inner_text() != "—"
+    page.fill('input[name="od_sphere"]', "-1.25")
+    page.fill('input[name="od_bc"]', "8.6")
+    page.wait_for_function("document.querySelector('[data-step-link=values]').classList.contains('is-done')")
+    page.wait_for_function("document.querySelector('[data-step-link=contacts]').classList.contains('is-done')")
+    assert page.locator('button[type="submit"]', has_text="Save Prescription").count() == 1
+    page.locator('button[type="submit"]', has_text="Save Prescription").click()
+    page.wait_for_url(re.compile(r"/prescriptions/\d+"))
+    body = page.locator("body").inner_text()
+    assert "-1.25" in body and "8.6" in body
 
 
 def test_exam_room_exam_type_cards_follow_suggestion_and_manual_pick(logged_in_page, live_server):

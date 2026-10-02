@@ -4976,3 +4976,21 @@ New `test_portal_has_theme_toggle_and_active_nav` signs in as a seeded patient, 
 | Portal shell | Theme toggle + no-flash script, pill nav with active state, themed canvas. |
 | Portal pages | Eyebrow headers; auth pages themed; hex colors tokenized. |
 
+## 105. Admin Resources/Tests Edit + Deactivate, and the "Rx Room" (v2.78)
+
+### 105.1 Admin edit / deactivate
+
+User request: "add edit and delete (or deactivate, whichever is more appropriate) buttons to admin resources". The Scheduling Administration **Resources** page could only add. Each resource row now has **Edit** (display name, class, exclusive; the code is shown but fixed because appointment-type requirements and availability reference it) and **Deactivate / Reactivate** (with a confirm prompt). **Deactivate was chosen over delete**: requirements, availability templates and reservations reference a resource by id, so deleting would orphan live bookings; inactive resources already drop out of booking pickers (`Resource.active` filter) while staying in history. The **Diagnostic Tests** page already had Activate/Deactivate and gains **Edit** (name, abbreviation, duration, order, counts-toward-color; code fixed). Both write to the field-change audit log (`resources`, `diagnostic_tests`), and the Field Change Audit page links those rows to the edit forms. Existing edit/deactivate pages (providers, services, users, voice-scribe corrections, appointment types) were already in place; availability templates, provider availability and holidays were not changed.
+
+### 105.2 Rx Room
+
+The New Prescription page now uses the exam-room layout: step rail (Patient & type, Rx values, Contact lens, Lens design & follow-up, Notes) with scrollspy and "started" marks, patient card, a large "What are we prescribing?" intake, Glasses / Contact-lens type cards (a radiogroup over the unchanged `rx_type` select, kept off-screen), side-by-side OD/OS cards for Rx values and contact-lens parameters (de-emphasised, not hidden, for a glasses Rx), chips for treatments and education, and a sticky Save bar. Behaviour is in `static/js/rx_room.js`. Every field name is unchanged, so the create route, detail/print pages and existing tests are untouched.
+
+**Version 2.78 change log (relative to v2.77):**
+
+| Area | Change |
+| --- | --- |
+| Admin resources | Edit + Deactivate/Reactivate (audited). |
+| Admin tests | Edit (audited). |
+| New Rx | Exam-room layout, type cards, OD/OS cards, step rail, sticky save. |
+

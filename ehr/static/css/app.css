@@ -883,3 +883,11 @@ a.tile:hover { text-decoration: none; }
 
 /* --- P4: prescriptions / orders / exam detail --- */
 .page-header h1 .badge { font-size: 0.7rem; letter-spacing: 0.08em; }
+
+/* --- Rx room: reuses the exam-room layout --- */
+.rx-room .exam-section.is-muted .eye-card { opacity: 0.6; }
+.rx-room .exam-section.is-muted .eye-card:focus-within { opacity: 1; }
+.rx-type-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.rx-intake { margin-bottom: var(--space-2); }
+@media (max-width: 900px) { .rx-intake { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 600px) { .rx-intake, .rx-type-cards { grid-template-columns: minmax(0, 1fr); } .rx-room .field-grid.cols-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
