@@ -147,6 +147,7 @@
     var started = false;
     section.querySelectorAll("input, select, textarea").forEach(function (f) {
       if (started || f.type === "hidden" || f.type === "submit" || f.type === "button") return;
+      if (f.hasAttribute("data-no-progress")) return;       // helper-only inputs (e.g. ROS suggestions) aren't exam data
       var now = fieldKey(f);
       if (now === initial.get(f)) return;
       if (f.type === "checkbox" || f.type === "radio") started = !!now;

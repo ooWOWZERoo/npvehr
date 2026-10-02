@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}No access &mdash; New Path Vision EHR{% endblock %}
+{% block content %}
+<div class="empty-state" style="max-width:640px;margin:var(--space-7) auto">
+  <span class="page-eyebrow">Access restricted</span>
+  <h1 style="margin-top:var(--space-2)">You don't have privileges to view this page</h1>
+  <p>{{ detail }}</p>
+  <p style="color:var(--ink-muted)">If you think you should have access, ask a <strong>System Administrator</strong> or <strong>Practice Administrator</strong> to review your role.</p>
+  <div style="display:flex;gap:var(--space-2);justify-content:center;margin-top:var(--space-4)">
+    <a href="/" class="btn btn-primary">Go to dashboard</a>
+    <a href="javascript:history.back()" class="btn btn-secondary">Go back</a>
+  </div>
+</div>
+{% endblock %}

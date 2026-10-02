@@ -5056,3 +5056,31 @@ No clinician-facing behaviour: the exam form, its 8 existing `ros_*` fields, the
 | Permissions | ROS_CATALOG_EDIT / REVIEW / VIEW. |
 | Seed | Migration 055: 13 systems of prompts, four unreviewed starter rules. |
 
+## 110. Friendly "no privileges" message; ROS Suggestions on the Exam Form (v2.83)
+
+### 110.1 Clear message when a role lacks access
+
+User request: for the ROS catalog, tell a user who is not a System or Practice Administrator that they don't have privileges, rather than just refusing. Role denials (`require_role`) used to reach the browser as a raw JSON body. A page request that is refused now shows an in-app page ("You don't have privileges to view this page"), naming the user's role and pointing them to a System or Practice Administrator; it is still an HTTP 403 and is still written to the access-denied audit log. This applies to every role-gated page, not just ROS. CSRF failures, 404s and non-HTML (fetch/JSON) callers keep the default behaviour. A role that may *view* but not edit the ROS catalog (the Read-Only Auditor) sees a "View-only access" banner on the catalog pages and no edit controls.
+
+### 110.2 ROS suggestions on the New Exam page (stage 3, suggestions only)
+
+The Review of Systems step now has a "ROS suggestions" panel. It lists the practice's active catalog prompts by body system (served by `GET /admin/ros/catalog.json`, readable by any logged-in role, like the Voice Scribe corrections feed). A system opens automatically when its matching Yes/No answer is Yes (the form's eight dropdowns map onto the catalog's systems; the other five systems can be opened by hand). Ticking a prompt shows the rules set up for it: the suggested ICD-10 code, the test to consider with its description, the provider-facing note, and a badge -- **Reviewed** (hover shows the source citation) or **Unreviewed -- suggestion only**.
+
+It is decision support only and deliberately inert: the helper checkboxes have no `name`, so they are never submitted; ticking one does not count as exam progress on the step rail; nothing is written into the assessment or plan; nothing is saved, billed or sent. No compliance advisory or conflict check runs in this stage (that waits for reviewed content). If the catalog cannot be loaded the panel stays hidden and the form is unaffected. All text from the catalog is rendered as text, never markup.
+
+### 110.3 Verified
+
+Tests cover: the refusal page for a Technician and for the auditor on an edit page, the auditor's view-only banner with no edit controls, the feed being readable by a Technician and excluding inactive prompts, the panel opening on a Yes answer, suggestions labelled Unreviewed, the helper inputs unnamed/not in progress/not in the note, and the form still saving when the feed is blocked. Full suite green.
+
+### 110.4 Not done
+
+Storing granular ROS answers with the exam (stage 4), compliance advisories on reviewed rules, the clinical hard-stops (stage 5), and the content review of every rule (stage 1, needs a coder or compliance reviewer).
+
+**Version 2.83 change log (relative to v2.82):**
+
+| Area | Change |
+| --- | --- |
+| Access denial | Friendly in-app "no privileges" page for any role-gated page (still 403, still audited). |
+| ROS catalog | View-only banner for roles that can read but not edit. |
+| Exam form | ROS suggestions panel (advisory, unsaved) fed by /admin/ros/catalog.json. |
+

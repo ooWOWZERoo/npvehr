@@ -5,6 +5,7 @@
 {% set can_edit = role in ('system_administrator', 'practice_administrator') %}
 <div class="page-header"><div><span class="page-eyebrow">{{ item.body_system }}</span><h1>{{ item.prompt_text }}</h1></div>
   <a href="/admin/ros" class="btn btn-secondary">Back to catalog</a></div>
+{% if not can_edit %}<div class="alert alert-info" style="margin-bottom:var(--space-4)"><strong>View-only access.</strong> You don't have privileges to change this catalog &mdash; only a System Administrator or Practice Administrator can add, edit or review prompts and rules.</div>{% endif %}
 {% if error %}<div class="alert alert-error" style="margin-bottom:1rem">{{ error }}</div>{% endif %}
 {% if can_edit %}
 <div class="card form-card"><h3>Add Rule</h3>

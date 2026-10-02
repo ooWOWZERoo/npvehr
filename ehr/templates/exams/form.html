@@ -220,6 +220,14 @@
         {% endfor %}
       </div>
       <div class="form-group voice-scribe-field"><label>ROS Notes <textarea name="ros_notes"></textarea></label><button type="button" class="voice-scribe-btn" data-target="ros_notes" title="Voice dictation" aria-label="Voice dictation">&#127908;</button></div>
+      <div class="ros-assist" id="rosAssist" hidden>
+        <details class="ros-assist-wrap" data-ros-wrap>
+          <summary class="eyebrow">ROS suggestions</summary>
+          <p class="ros-assist-intro">Tick a finding to see what the practice's ROS catalog suggests. Decision support only &mdash; this is not saved with the exam, not added to the note, and nothing is submitted or billed.</p>
+          <div data-ros-systems></div>
+          <div class="ros-suggestions" data-ros-suggestions aria-live="polite" hidden></div>
+        </details>
+      </div>
     </section>
 
     <section class="exam-section" id="step-areas" data-step="areas">
@@ -1444,5 +1452,6 @@ function removeReturnVisit2() {
 {"imports": {"onnxruntime-web/webgpu": "/static/js/vendor/onnxruntime-web/ort.webgpu.bundle.min.1.30.0.mjs", "onnxruntime-common": "/static/js/vendor/onnxruntime-common/index.js"}}
 </script>
 <script src="/static/js/exam_room.js"></script>
+<script src="/static/js/ros_assist.js"></script>
 <script src="/static/js/voice_scribe.js"></script>
 {% endblock %}
