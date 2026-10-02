@@ -2,11 +2,11 @@
 {% block title %}My Appointments &mdash; Patient Portal{% endblock %}
 {% block portal_content %}
 <div class="page-header">
-  <h1>My Appointments</h1>
+  <div><span class="page-eyebrow">Visits</span><h1>My Appointments</h1></div>
   <a href="/portal/book" class="btn btn-primary btn-sm">+ Book an Appointment</a>
 </div>
 {% if booked %}<div class="alert alert-info" style="margin-bottom:1rem">Your appointment is booked.</div>{% endif %}
-{% if request.query_params.get('cancelled') %}<div class="alert" style="margin-bottom:1rem;background:#f1f5f9">Appointment cancelled.</div>{% endif %}
+{% if request.query_params.get('cancelled') %}<div class="alert" style="margin-bottom:1rem;background:var(--surface-sunken)">Appointment cancelled.</div>{% endif %}
 {% if request.query_params.get('rescheduled') %}<div class="alert alert-info" style="margin-bottom:1rem">Appointment rescheduled.</div>{% endif %}
 <div class="card">
   {% if not appointments %}

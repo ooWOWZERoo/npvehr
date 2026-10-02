@@ -3516,6 +3516,34 @@ def test_theme_toggle_switches_persists_and_themes_the_page(logged_in_page, live
     assert page.evaluate("getComputedStyle(document.body).backgroundColor") == light_bg
 
 
+def test_portal_has_theme_toggle_and_active_nav(live_server, page):
+    """Patient portal adopts the app-wide theme (redesign P6): the portal
+    pages share the staff toggle (same `npv-theme` key, so a patient who
+    picks dark keeps it across reloads), the dark palette really reaches the
+    portal body, and the nav marks the current section."""
+    page.goto(live_server + "/portal/login")
+    page.fill("#email", "carol@example.com")
+    page.click("button[type=submit]")
+    page.wait_for_load_state("networkidle")
+    login_link = page.locator("a", has_text="Sign in as Carol Davis")
+    login_link.wait_for(state="visible")
+    page.goto(login_link.get_attribute("href"))
+    page.wait_for_url(re.compile(r"/portal/$"))
+
+    assert page.locator(".portal-nav a.active").inner_text() == "Home"
+    light_bg = page.evaluate("getComputedStyle(document.body).backgroundColor")
+    page.locator("#themeToggle").click()
+    assert page.evaluate("document.documentElement.getAttribute('data-theme')") == "dark"
+    assert page.evaluate("getComputedStyle(document.body).backgroundColor") == "rgb(24, 35, 30)"
+    assert light_bg != "rgb(24, 35, 30)"
+
+    page.goto(live_server + "/portal/records")
+    assert page.evaluate("document.documentElement.getAttribute('data-theme')") == "dark"
+    assert page.locator(".portal-nav a.active").inner_text() == "My Records"
+    page.locator("#themeToggle").click()
+    assert page.evaluate("localStorage.getItem('npv-theme')") == "light"
+
+
 def test_exam_room_exam_type_cards_follow_suggestion_and_manual_pick(logged_in_page, live_server):
     """New Exam "exam room" redesign: the four exam-type cards are the visible
     control over the (now off-screen) #exam_type_confirmed select that the

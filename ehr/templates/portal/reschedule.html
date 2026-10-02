@@ -2,7 +2,7 @@
 {% block title %}Reschedule Appointment &mdash; Patient Portal{% endblock %}
 {% block portal_content %}
 <div class="page-header">
-  <h1>Reschedule Appointment</h1>
+  <div><span class="page-eyebrow">Visits</span><h1>Reschedule Appointment</h1></div>
   <a href="/portal/appointments" class="btn btn-secondary btn-sm">Back</a>
 </div>
 <div class="card">
@@ -22,7 +22,7 @@
 </div>
 
 {% if error %}
-<div class="card"><p style="color:#b91c1c">{{ error }}</p></div>
+<div class="card"><p style="color:var(--danger-text)">{{ error }}</p></div>
 {% endif %}
 <div class="card">
   <h3>Available Times &mdash; {{ target_date.strftime('%B %-d, %Y') }}</h3>

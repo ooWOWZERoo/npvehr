@@ -3,6 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script>
+    /* Apply the saved theme before first paint (shared with the staff app; key set by the toggle). */
+    try { if (localStorage.getItem("npv-theme") === "dark") document.documentElement.setAttribute("data-theme", "dark"); } catch (e) {}
+  </script>
   <title>Check Your Email &mdash; New Path Vision EHR</title>
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -13,13 +17,13 @@
   <style>
     body.login-body {
       min-height: 100vh; display: flex; align-items: center; justify-content: center;
-      background: linear-gradient(160deg, var(--primary-strong), var(--primary) 60%, var(--primary-soft));
+      background: radial-gradient(1200px 600px at 15% -10%, var(--primary-soft), transparent 60%), var(--canvas);
     }
     .login-card {
-      background: var(--surface); border-radius: 14px; box-shadow: 0 20px 50px rgba(19,36,32,0.25);
+      background: var(--surface); border: 1px solid var(--border); border-radius: 20px; box-shadow: 0 20px 50px var(--shadow-pop);
       padding: var(--space-7) var(--space-6); width: 100%; max-width: 420px;
     }
-    .login-brand-text { font-family: var(--font-display); font-size: 1.2rem; font-weight: 700; color: var(--primary-strong); margin-bottom: var(--space-6); display: block; }
+    .login-brand-text { font-family: var(--font-display); font-size: 1.2rem; font-weight: 700; color: var(--ink-strong); margin-bottom: var(--space-6); display: block; }
   </style>
 </head>
 <body class="login-body">
@@ -32,7 +36,7 @@
     <p style="color:var(--ink-muted);font-size:0.85rem">If that email matches a patient on file, we've sent a one-time sign-in link. It expires in 15 minutes.</p>
     {% endif %}
     {% if dev_links %}
-    <div class="alert" style="margin-top:1rem;background:#fffbeb;border:1px solid #fde68a;color:#92400e;font-size:0.8rem">
+    <div class="alert" style="margin-top:1rem;background:var(--caution-bg);border:1px solid var(--caution-border);color:var(--caution-ink);font-size:0.8rem">
       <strong>Dev/test environment only</strong> &mdash; no real email vendor is connected yet, so the link(s) that would have been emailed are shown here directly:
       <ul style="margin:0.5rem 0 0;padding-left:1.2rem">
         {% for dl in dev_links %}

@@ -4955,3 +4955,24 @@ No per-page re-layout of the admin screens; they are dense CRUD tables where the
 | --- | --- |
 | Admin / store ops / placeholder | Eyebrow headers on 25 pages. |
 
+## 104. Redesign P6: Patient Portal (v2.77)
+
+### 104.1 What changed
+
+Final phase of the app-wide "Launchpad" extension (§99-§103); the portal, intentionally left light in §96, now shares the look and the theme. The portal shell (`portal/_base.html`) gets the no-flash theme script, the same `#themeToggle` as the staff topbar (same `npv-theme` key, so the choice carries across), a pill-style nav that marks the current section, a tinted canvas, and tighter phone padding. The sign-in, create-account and check-email pages get the theme script, the themed canvas and a bordered 20px card. Every portal page gets an eyebrow label above its heading. Remaining hard-coded hex colors on portal pages were replaced with tokens so dark mode reads correctly.
+
+### 104.2 Preserved
+
+Routes, field names, ids (`#email` etc.), the magic-link flow, CSRF meta tag, and all page content are unchanged.
+
+### 104.3 Verified
+
+New `test_portal_has_theme_toggle_and_active_nav` signs in as a seeded patient, checks the active nav item, toggles dark (computed body background), and confirms the choice persists to another portal page. Full suite green.
+
+**Version 2.77 change log (relative to v2.76) -- Redesign P6:**
+
+| Area | Change |
+| --- | --- |
+| Portal shell | Theme toggle + no-flash script, pill nav with active state, themed canvas. |
+| Portal pages | Eyebrow headers; auth pages themed; hex colors tokenized. |
+
