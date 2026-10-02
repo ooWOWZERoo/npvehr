@@ -96,6 +96,15 @@ SERVICE_CATALOG_EDIT = {SYSTEM_ADMINISTRATOR, PRACTICE_ADMINISTRATOR, BILLING_AN
 # Claims for a reason that doesn't apply here).
 VOICE_SCRIBE_VOCAB_EDIT = {SYSTEM_ADMINISTRATOR, PRACTICE_ADMINISTRATOR}
 
+# Review-of-Systems decision-support catalog (ros_master / ros_icd10_test_mapping).
+# EDIT maintains prompts and rules; REVIEW is the compliance sign-off that lets a
+# rule raise advisories -- a separate named set so it can be tightened to a
+# narrower role without touching the edit set. System/Practice Administrator only,
+# like the other practice-wide configuration screens; the auditor can view.
+ROS_CATALOG_EDIT = {SYSTEM_ADMINISTRATOR, PRACTICE_ADMINISTRATOR}
+ROS_CATALOG_REVIEW = {SYSTEM_ADMINISTRATOR, PRACTICE_ADMINISTRATOR}
+ROS_CATALOG_VIEW = ROS_CATALOG_EDIT | {READ_ONLY_AUDITOR}
+
 # All 5 Claim Management sections are currently GET-only placeholders/views in
 # this codebase (no create/edit routes exist yet), so only a VIEW group is needed.
 CLAIMS_VIEW = set(STORE_OPS_VIEW)

@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Edit ROS Rule &mdash; Admin{% endblock %}
+{% block content %}
+<div class="page-header"><div><span class="page-eyebrow">{{ m.ros_item.body_system }}</span><h1>Edit Rule: {{ m.ros_item.prompt_text }}</h1></div>
+  <a href="/admin/ros/items/{{ m.ros_item_id }}" class="btn btn-secondary">Cancel</a></div>
+<div class="card form-card">
+  {% if error %}<div class="alert alert-error" style="margin-bottom:1rem">{{ error }}</div>{% endif %}
+  <form method="post" action="/admin/ros/mappings/{{ m.id }}/edit">
+    <div class="form-row cols-4">
+      <div class="form-group"><label>Suggested ICD-10* <input name="suggested_icd10" required maxlength="10" value="{{ m.suggested_icd10 }}"></label></div>
+      <div class="form-group"><label>Supporting family <input name="icd10_pattern" maxlength="10" value="{{ m.icd10_pattern or '' }}"></label></div>
+      <div class="form-group"><label>Recommended CPT* <input name="recommended_cpt" required maxlength="5" value="{{ m.recommended_cpt }}"></label></div>
+    </div>
+    <div class="form-group"><label>Provider-facing note <textarea name="compliance_rule" rows="3" maxlength="1000">{{ m.compliance_rule or '' }}</textarea></label></div>
+    {% if m.reviewed %}<div class="alert alert-warning" style="margin-bottom:1rem">This rule is currently <strong>reviewed</strong>. Changing its codes or note withdraws that sign-off.</div>{% endif %}
+    <div class="form-actions"><button type="submit" class="btn btn-primary">Save Changes</button></div>
+  </form>
+</div>
+{% endblock %}

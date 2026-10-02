@@ -107,7 +107,7 @@
         </div>
 
         <div class="sidebar-section-heading">Administration</div>
-        <div class="sidebar-group{% if request.url.path.startswith('/admin/scheduling') or request.url.path.startswith('/admin/billing') or request.url.path.startswith('/admin/voice-scribe') %} open{% endif %}">
+        <div class="sidebar-group{% if request.url.path.startswith('/admin/scheduling') or request.url.path.startswith('/admin/billing') or request.url.path.startswith('/admin/voice-scribe') or request.url.path.startswith('/admin/ros') %} open{% endif %}">
           <button type="button" class="sidebar-expand-toggle" data-group>
             <span class="sidebar-icon">&#9881;&#65039;</span><span class="sidebar-label">Administration</span><span class="sidebar-caret">&#9656;</span>
           </button>
@@ -125,6 +125,10 @@
             {% if current_user and current_user.role in ('system_administrator', 'practice_administrator') %}
             <div class="sidebar-subnav-heading">Voice Scribe</div>
             <a href="/admin/voice-scribe/corrections">Vocabulary Corrections</a>
+            {% endif %}
+            {% if current_user and current_user.role in ('system_administrator', 'practice_administrator', 'read_only_auditor') %}
+            <div class="sidebar-subnav-heading">Clinical Decision Support</div>
+            <a href="/admin/ros">ROS Catalog</a>
             {% endif %}
             {% if current_user and current_user.role in ('system_administrator', 'read_only_auditor') %}
             <div class="sidebar-subnav-heading">Authentication</div>

@@ -255,3 +255,24 @@ def test_followup_per_visit_backfill_migrates_active_recommendation_only(fresh_e
     assert followup_count == 1  # exam B never got a row
     assert (eye_exam_id, weeks, reason, status) == (exam_a_id, 6, "Recheck VF", "pending")
     assert order_followup_id == followup_id
+
+
+def test_ros_catalog_seed_is_idempotent_and_starter_rules_are_unreviewed(fresh_engine):
+    """Migration 055 seeds the 13-system ROS prompt catalog and four starter rules.
+    Every starter rule must be UNREVIEWED (suggestion only -- none may ever raise a
+    compliance advisory without an administrator's sign-off), and re-running the
+    seed must not duplicate anything."""
+    _run_all_migrations(fresh_engine)
+    with fresh_engine.connect() as conn:
+        systems = {r[0] for r in conn.execute(text("SELECT DISTINCT body_system FROM ros_master")).fetchall()}
+        n_items = conn.execute(text("SELECT COUNT(*) FROM ros_master")).scalar()
+        n_rules = conn.execute(text("SELECT COUNT(*) FROM ros_icd10_test_mapping")).scalar()
+        reviewed = conn.execute(text("SELECT COUNT(*) FROM ros_icd10_test_mapping WHERE reviewed = 1")).scalar()
+    assert len(systems) == 13
+    assert n_rules == 4 and reviewed == 0
+
+    with fresh_engine.begin() as conn:
+        mig.migration_055_seed_ros_catalog(conn)       # direct re-run, bypassing the applied-ids ledger
+    with fresh_engine.connect() as conn:
+        assert conn.execute(text("SELECT COUNT(*) FROM ros_master")).scalar() == n_items
+        assert conn.execute(text("SELECT COUNT(*) FROM ros_icd10_test_mapping")).scalar() == n_rules

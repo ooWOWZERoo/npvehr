@@ -1728,6 +1728,56 @@ COLUMN_MIGRATIONS = [
     ("047_vitreous_and_cd_ratio", migration_047_vitreous_and_cd_ratio),
     ("048_ros_and_social_history", migration_048_ros_and_social_history),
 ]
+def migration_055_seed_ros_catalog(conn):
+    """Review-of-Systems decision-support catalog (ros_master / ros_icd10_test_mapping
+    / encounter_ros_responses -- see ehr/models/ros.py; the tables themselves are
+    created by Base.metadata.create_all(), no CREATE TABLE here). Seeds the
+    13-system prompt list from the clinical ROS reference the practice supplied,
+    plus four starter rules that are deliberately UNREVIEWED: they suggest only and
+    cannot raise a compliance advisory until an administrator marks them reviewed
+    with a source citation in /admin/ros. Idempotent: prompts and rules are only
+    inserted when their natural key is absent."""
+    if not _table_exists(conn, "ros_master") or not _table_exists(conn, "ros_icd10_test_mapping"):
+        return
+    catalog = [
+        ("Constitutional", ["Fatigue", "Unexplained weight loss or gain", "Chronic fever", "Night sweats"]),
+        ("Ocular", ["Flashes or floaters", "Sudden vision loss", "Severe eye pain", "Double vision (diplopia)", "Temporary vision loss (amaurosis fugax)", "Redness or discharge"]),
+        ("Cardiovascular", ["High blood pressure", "Chest pain", "Palpitations", "History of stroke or TIA"]),
+        ("Respiratory", ["Shortness of breath", "Chronic cough", "Sleep apnea"]),
+        ("Gastrointestinal", ["Chronic diarrhea", "Abdominal pain", "Crohn's disease or ulcerative colitis"]),
+        ("Genitourinary", ["Painful urination", "History of STI (syphilis, chlamydia, HIV)", "Pregnancy"]),
+        ("Musculoskeletal", ["Joint pain", "Severe morning stiffness", "Muscle aches"]),
+        ("Integumentary", ["Chronic rash", "Facial flushing or rosacea", "History of shingles"]),
+        ("Neurological", ["Chronic headaches or migraines", "Numbness or tingling", "Dizziness", "History of multiple sclerosis"]),
+        ("Psychiatric", ["Anxiety", "Depression", "Psychiatric medication use"]),
+        ("Endocrine", ["History of diabetes", "Excessive thirst or urination", "Heat or cold intolerance", "History of thyroid disease"]),
+        ("Hematologic / Lymphatic", ["Easy bruising or prolonged bleeding", "History of anemia or leukemia", "Blood thinner use"]),
+        ("Allergic / Immunologic", ["Seasonal allergies", "History of lupus", "History of Sjogren's syndrome"]),
+    ]
+    existing = {(r[0], r[1]) for r in conn.execute(text("SELECT body_system, prompt_text FROM ros_master")).fetchall()}
+    for system, prompts in catalog:
+        for i, prompt in enumerate(prompts):
+            if (system, prompt) not in existing:
+                conn.execute(text("INSERT INTO ros_master (body_system, prompt_text, sort_order, is_active) VALUES (:s, :p, :o, :a)"),
+                             {"s": system, "p": prompt, "o": (i + 1) * 10, "a": True})
+    ids = {(r[0], r[1]): r[2] for r in conn.execute(text("SELECT body_system, prompt_text, id FROM ros_master")).fetchall()}
+    starter = [
+        ("Endocrine", "History of diabetes", "E11.9", "E11", "92250", "Diabetes: whether fundus photography or OCT is supported depends on the payer's coverage policy."),
+        ("Cardiovascular", "High blood pressure", "I10", "I10", "92250", "Hypertensive changes: document fundus findings."),
+        ("Neurological", "Chronic headaches or migraines", "G43.909", "G43", "92083", "Extended visual field only when a field defect is suspected."),
+        ("Ocular", "Flashes or floaters", "H43.399", "H43", "92225", "Flashes or floaters: extended ophthalmoscopy."),
+    ]
+    for system, prompt, icd, pattern, cpt, note in starter:
+        item_id = ids.get((system, prompt))
+        if item_id is None:
+            continue
+        found = conn.execute(text("SELECT 1 FROM ros_icd10_test_mapping WHERE ros_item_id = :i AND suggested_icd10 = :c AND recommended_cpt = :t"),
+                             {"i": item_id, "c": icd, "t": cpt}).fetchone()
+        if not found:
+            conn.execute(text("INSERT INTO ros_icd10_test_mapping (ros_item_id, suggested_icd10, icd10_pattern, recommended_cpt, compliance_rule, reviewed) "
+                              "VALUES (:i, :c, :p, :t, :n, :r)"), {"i": item_id, "c": icd, "p": pattern, "t": cpt, "n": note, "r": False})
+
+
 POST_CREATE_ALL_MIGRATIONS = [
     ("002_seed_appointment_types", migration_002_seed_appointment_types),
     ("003_seed_diagnostic_tests", migration_003_seed_diagnostic_tests),
@@ -1742,6 +1792,7 @@ POST_CREATE_ALL_MIGRATIONS = [
     ("052_followup_per_visit", migration_052_followup_per_visit),
     ("053_seed_services", migration_053_seed_services),
     ("054_seed_voice_scribe_corrections", migration_054_seed_voice_scribe_corrections),
+    ("055_seed_ros_catalog", migration_055_seed_ros_catalog),
 ]
 
 # ---------------------------------------------------------------------------
