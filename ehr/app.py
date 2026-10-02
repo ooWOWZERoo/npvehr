@@ -1,4 +1,5 @@
-from fastapi import FastAPI, Request, Depends
+from fastapi import FastAPI, Request, Depends, HTTPException
+from fastapi.exception_handlers import http_exception_handler
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -29,6 +30,19 @@ templates.env.globals["ROLE_LABELS"] = ROLE_LABELS
 @app.exception_handler(LoginRedirect)
 async def _login_redirect_handler(request: Request, exc: LoginRedirect):
     return exc.response
+
+@app.exception_handler(HTTPException)
+async def _http_exception_handler(request: Request, exc: HTTPException):
+    """Role denials (require_role) used to surface as a raw JSON body in the browser. For a
+    page request, show the app's own "you don't have privileges" page instead (still HTTP
+    403, so status-based checks and the audit log are unaffected). Every other HTTPException
+    -- CSRF failures, 404s, JSON/fetch callers that don't ask for HTML -- keeps FastAPI's
+    default behaviour."""
+    wants_html = "text/html" in request.headers.get("accept", "")
+    if (exc.status_code == 403 and wants_html and str(exc.detail).startswith("Your role")
+            and getattr(request.state, "user", None) is not None):
+        return templates.TemplateResponse(request, "errors/forbidden.html", {"detail": exc.detail}, status_code=403)
+    return await http_exception_handler(request, exc)
 
 @app.exception_handler(PortalLoginRedirect)
 async def _portal_login_redirect_handler(request: Request, exc: PortalLoginRedirect):

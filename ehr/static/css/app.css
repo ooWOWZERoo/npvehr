@@ -891,3 +891,21 @@ a.tile:hover { text-decoration: none; }
 .rx-intake { margin-bottom: var(--space-2); }
 @media (max-width: 900px) { .rx-intake { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 600px) { .rx-intake, .rx-type-cards { grid-template-columns: minmax(0, 1fr); } .rx-room .field-grid.cols-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* --- ROS suggestions (exam form, stage 3): decision support, not exam data --- */
+.ros-assist { margin-top: var(--space-4); padding: var(--space-4); border: 1px dashed var(--border); border-radius: 14px; background: var(--surface-sunken); }
+.ros-assist-wrap > summary { cursor: pointer; list-style-position: inside; }
+.ros-assist-intro { margin: var(--space-1) 0 var(--space-3); color: var(--ink-muted); font-size: 0.85rem; }
+.ros-system { border: 1px solid var(--border); border-radius: 10px; background: var(--surface); margin-bottom: var(--space-2); }
+.ros-system > summary { cursor: pointer; padding: 0.55rem 0.8rem; display: flex; align-items: center; gap: var(--space-2); font-weight: 600; color: var(--ink); list-style-position: inside; }
+.ros-system-tag { font-size: 0.68rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-strong); background: var(--primary-soft); border-radius: 999px; padding: 0.1rem 0.5rem; }
+.ros-prompts { list-style: none; margin: 0; padding: 0 0.8rem 0.6rem; display: grid; gap: 0.25rem; }
+.ros-prompt { display: flex; align-items: center; gap: 0.4rem; font-size: 0.88rem; color: var(--ink); cursor: pointer; }
+.ros-rule-count { margin-left: auto; font-size: 0.72rem; color: var(--ink-muted); }
+.ros-suggestions { margin-top: var(--space-3); display: grid; gap: var(--space-2); }
+.ros-suggestions[hidden], .ros-system-tag[hidden] { display: none; }
+.ros-suggest { background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--primary); border-radius: 10px; padding: var(--space-3) var(--space-4); }
+.ros-suggest-title { font-weight: 700; margin-bottom: var(--space-1); color: var(--ink); }
+.ros-suggest-row { display: grid; gap: 2px; padding: 0.35rem 0; border-top: 1px solid var(--border); font-size: 0.85rem; }
+.ros-suggest-row:first-of-type { border-top: 0; }
+.ros-suggest-row .badge { justify-self: start; }

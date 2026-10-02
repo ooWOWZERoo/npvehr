@@ -19,7 +19,7 @@ import re
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, Form, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -29,7 +29,7 @@ from ehr.auth.deps import get_current_user
 from ehr.auth.permissions import (ROLE_LABELS, ROS_CATALOG_EDIT, ROS_CATALOG_REVIEW, ROS_CATALOG_VIEW,
                                   require_role)
 from ehr.env_info import EHR_ENV
-from ehr.models.database import get_db
+from ehr.models.database import CptCode, get_db
 from ehr.models.ros import ROS_SYSTEMS, RosIcd10TestMapping, RosMaster
 from ehr.services import field_audit
 
@@ -84,6 +84,31 @@ def list_items(request: Request, db: Session = Depends(get_db)):
     ordered = [(s, grouped.pop(s)) for s in ROS_SYSTEMS if s in grouped] + sorted(grouped.items())
     return templates.TemplateResponse(request, "admin/ros/items_list.html",
         {"grouped": ordered, "counts": counts, "reviewed_counts": reviewed_counts, "systems": ROS_SYSTEMS})
+
+
+@router.get("/catalog.json")
+def catalog_json(db: Session = Depends(get_db)):
+    """Read by the New Exam page (ros_assist.js) to show ROS-based suggestions, so -- like
+    voice-scribe/corrections.json -- it is NOT gated by a catalog permission: every
+    clinician's browser needs it, and it only requires being logged in (enforced at
+    router-inclusion time in ehr/app.py). Active prompts only; every rule is included with
+    its reviewed flag so the page can label unreviewed rules as suggestion-only. Two small
+    queries, short private cache."""
+    items = (db.query(RosMaster).filter(RosMaster.is_active.is_(True))
+             .order_by(RosMaster.sort_order, RosMaster.id).all())
+    rules = db.query(RosIcd10TestMapping).order_by(RosIcd10TestMapping.recommended_cpt, RosIcd10TestMapping.suggested_icd10).all()
+    cpt_desc = {c.code: c.description for c in db.query(CptCode).all()}
+    by_item = {}
+    for m in rules:
+        by_item.setdefault(m.ros_item_id, []).append({
+            "icd10": m.suggested_icd10, "cpt": m.recommended_cpt, "cpt_description": cpt_desc.get(m.recommended_cpt),
+            "note": m.compliance_rule, "reviewed": bool(m.reviewed), "citation": m.source_citation if m.reviewed else None})
+    systems = {}
+    for it in items:
+        systems.setdefault(it.body_system, []).append({"id": it.id, "prompt": it.prompt_text, "rules": by_item.get(it.id, [])})
+    ordered = [{"system": s, "prompts": systems.pop(s)} for s in ROS_SYSTEMS if s in systems]
+    ordered += [{"system": s, "prompts": p} for s, p in sorted(systems.items())]
+    return JSONResponse({"systems": ordered}, headers={"Cache-Control": "private, max-age=60"})
 
 
 @router.post("/items/new", dependencies=[Depends(require_role(*ROS_CATALOG_EDIT))])

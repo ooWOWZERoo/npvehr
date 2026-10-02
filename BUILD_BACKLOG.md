@@ -1,6 +1,6 @@
 # New Path Vision EHR — Master Build Backlog
 
-**Status:** Living tracking document. **Baseline as of:** spec v2.82 / research doc v2.24 (2026-09-30).
+**Status:** Living tracking document. **Baseline as of:** spec v2.83 / research doc v2.24 (2026-09-30).
 
 ## Purpose and how to use this document
 
@@ -241,5 +241,5 @@ A real visit-summary document export prompted a full component-by-component gap 
 ## Notes on stale items
 
 A few `§18.2`/`§18.3` items above (record linkage, provider management, prescription display fields) were written early in this project's spec history and may have been partially superseded by later work (the Appointment Scheduling Module, the v2.10 Lens Design fields) without the spec's own gap-list being re-audited against them — each is flagged above with a "re-verify" note rather than assumed still fully accurate. Confirm current truth before scoping work against them.
-- [~] **Review-of-Systems decision support (from the practice's 13-system ROS reference)** — staged. **Stage 2 done, v2.82:** three new tables plus the `/admin/ros` catalog screen with citation-gated compliance sign-off (baseline spec §109). Remaining: **stage 1** a coder/compliance review of every rule's clinical and coding content (nothing is marked reviewed yet); **stage 3** advisory banners on the exam form; **stage 4** store granular ROS answers when an exam is saved, lock on sign, decide the fate of the 8 existing `ros_*` columns; **stage 5** clinical hard-stops (pregnancy, anticoagulants, narrow-angle medications), needing new data and clinician design.
+- [~] **Review-of-Systems decision support (from the practice's 13-system ROS reference)** — staged. **Stage 3 done, v2.83** (suggestions-only panel on the exam form, spec §110), after **stage 2, v2.82:** three new tables plus the `/admin/ros` catalog screen with citation-gated compliance sign-off (baseline spec §109). Remaining: **stage 1** a coder/compliance review of every rule's clinical and coding content (nothing is marked reviewed yet); **stage 4** store granular ROS answers when an exam is saved, lock on sign, decide the fate of the 8 existing `ros_*` columns; **stage 5** clinical hard-stops (pregnancy, anticoagulants, narrow-angle medications), needing new data and clinician design.
 

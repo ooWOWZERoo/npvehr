@@ -3758,6 +3758,9 @@ def test_ros_catalog_admin_crud_review_signoff_and_permissions(logged_in_page, l
     page.locator("tr", has_text=name + " renamed").locator("button", has_text="Deactivate").click()
     assert "inactive" in page.locator("tr", has_text=name + " renamed").inner_text().lower()
 
+    catalog_text = page.request.get(live_server + "/admin/ros/catalog.json").text()
+    assert "History of diabetes" in catalog_text and (name + " renamed") not in catalog_text   # inactive prompts excluded
+
     page.goto(live_server + "/admin/field-audit")
     audit_text = page.locator("body").inner_text()
     assert "ros_master #" in audit_text and "ros_icd10_test_mapping #" in audit_text
@@ -3777,8 +3780,88 @@ def test_ros_catalog_admin_crud_review_signoff_and_permissions(logged_in_page, l
     tech.fill("#password", "ChangeMe123!")
     tech.click("button[type=submit]")
     tech.wait_for_url(f"{live_server}/")
-    assert tech.goto(live_server + "/admin/ros").status == 403
+    resp = tech.goto(live_server + "/admin/ros")
+    assert resp.status == 403
+    denied = tech.locator("body").inner_text()
+    assert "don't have privileges" in denied and "Technician" in denied and "Practice Administrator" in denied
+    assert tech.request.get(live_server + "/admin/ros/catalog.json").status == 200   # every clinician can read the suggestions feed
     tech_ctx.close()
+
+    # A view-only role (Read-Only Auditor) can read the catalog, is told it is view-only, sees no edit
+    # controls, and gets the same friendly refusal on an edit page.
+    page.goto(live_server + "/admin/users/new")
+    page.fill("#first_name", "Ros")
+    page.fill("#last_name", "Auditor")
+    page.fill("#email", "ros.auditor@newpathvision.example")
+    page.select_option("#role", "read_only_auditor")
+    page.fill("#password", "ChangeMe123!")
+    page.locator('button[type="submit"]', has_text="Create User").click()
+    page.wait_for_load_state("networkidle")
+    aud_ctx = page.context.browser.new_context()
+    aud = aud_ctx.new_page()
+    aud.goto(live_server + "/login")
+    aud.fill("#email", "ros.auditor@newpathvision.example")
+    aud.fill("#password", "ChangeMe123!")
+    aud.click("button[type=submit]")
+    aud.wait_for_url(f"{live_server}/")
+    assert aud.goto(live_server + "/admin/ros").status == 200
+    assert "View-only access" in aud.locator("body").inner_text()
+    assert aud.locator('a:has-text("Edit"), button:has-text("Add Prompt"), button:has-text("Deactivate")').count() == 0
+    aud.locator("a", has_text="Rules").first.click()
+    assert "View-only access" in aud.locator("body").inner_text()
+    assert aud.locator('button:has-text("Mark reviewed"), button:has-text("Add Rule")').count() == 0
+    assert aud.goto(live_server + "/admin/ros/items/1/edit").status == 403
+    assert "don't have privileges" in aud.locator("body").inner_text()
+    aud_ctx.close()
+
+
+def test_exam_form_ros_suggestions_are_advisory_only_and_never_block_the_form(logged_in_page, live_server):
+    """ROS stage 3: the exam form's ROS step lists the catalog's prompts per body system, opens
+    a system when the matching Yes/No answer is Yes, and shows the suggested ICD-10/test for any
+    ticked prompt, labelled Unreviewed until a compliance reviewer signs the rule off. It is
+    decision support only: the helper checkboxes have no name (never submitted), ticking one does
+    not count as exam progress, nothing is written into the note, and if the catalog can't load
+    the panel stays hidden and the form is unaffected."""
+    page = logged_in_page
+    page.goto(live_server + "/exams/new")
+    assist = page.locator("#rosAssist")
+    assist.wait_for(state="visible")
+    assert assist.locator("details.ros-system").count() >= 10
+    assert assist.locator("[data-ros-wrap]").get_attribute("open") is None        # collapsed until a Yes answer or a click
+
+    page.select_option('select[name="ros_endocrine"]', "Yes")
+    endocrine = assist.locator("details.ros-system", has_text="Endocrine")
+    assert endocrine.get_attribute("open") is not None
+    assert endocrine.locator(".ros-system-tag").is_visible()
+
+    page.select_option('select[name="ros_endocrine"]', "")
+    page.wait_for_function("document.querySelector('[data-step-link=systems]') && !document.querySelector('[data-step-link=systems]').classList.contains('is-done')")
+    assist.locator("[data-ros-wrap] > summary").click() if assist.locator("[data-ros-wrap]").get_attribute("open") is None else None
+    endocrine.locator("summary").click() if endocrine.get_attribute("open") is None else None
+    endocrine.locator("label", has_text="History of diabetes").locator("input").check()
+    sug = assist.locator("[data-ros-suggestions]")
+    sug.wait_for(state="visible")
+    text = sug.inner_text()
+    assert "E11.9" in text and "92250" in text and "unreviewed" in text.lower()
+    page.wait_for_timeout(300)
+    assert "is-done" not in (page.locator("[data-step-link=systems]").get_attribute("class") or "")   # helper ticks aren't exam progress
+    assert page.locator("textarea[name='assessment']").input_value().count("E11.9") == 0              # never written into the note
+
+    names = page.evaluate("Array.from(new FormData(document.getElementById('examForm')).keys())")
+    assert not any("ros_assist" in n for n in names)
+    assert page.locator("input[data-ros-assist][name]").count() == 0
+
+    endocrine.locator("label", has_text="History of diabetes").locator("input").uncheck()
+    assert sug.is_hidden()
+
+    # Catalog unavailable -> panel stays hidden, exam form still works.
+    page.route("**/admin/ros/catalog.json", lambda route: route.abort())
+    page.goto(live_server + "/exams/new")
+    page.wait_for_timeout(500)
+    assert page.locator("#rosAssist").is_hidden()
+    page.select_option('select[name="patient_id"]', index=0)
+    page.locator('button[type="submit"]', has_text="Save Exam").click()
+    page.wait_for_url(re.compile(r"/exams/\d+"))
 
 
 def test_rx_room_type_cards_rail_and_submit(logged_in_page, live_server):
