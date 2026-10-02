@@ -3617,6 +3617,18 @@ def test_rx_room_type_cards_rail_and_submit(logged_in_page, live_server):
     assert "-1.25" in body and "8.6" in body
 
 
+def test_rx_and_exam_rail_activate_last_step_at_page_bottom(logged_in_page, live_server):
+    """Scrollspy bug: the final section (Notes / Return visit) is short, so at
+    the bottom of the page it never reached the probe line and its rail step
+    never became active. Scrolling to the bottom must now activate it."""
+    page = logged_in_page
+    for url, last in [("/prescriptions/new", "notes"), ("/exams/new", "return")]:
+        page.goto(live_server + url)
+        page.evaluate("window.scrollTo(0, document.documentElement.scrollHeight)")
+        page.wait_for_function(
+            "(k) => document.querySelector('[data-step-link=' + k + ']').classList.contains('is-active')", arg=last)
+
+
 def test_exam_room_exam_type_cards_follow_suggestion_and_manual_pick(logged_in_page, live_server):
     """New Exam "exam room" redesign: the four exam-type cards are the visible
     control over the (now off-screen) #exam_type_confirmed select that the

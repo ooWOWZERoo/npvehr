@@ -1,6 +1,6 @@
 # New Path Vision EHR — Master Build Backlog
 
-**Status:** Living tracking document. **Baseline as of:** spec v2.78 / research doc v2.24 (2026-09-30).
+**Status:** Living tracking document. **Baseline as of:** spec v2.79 / research doc v2.24 (2026-09-30).
 
 ## Purpose and how to use this document
 

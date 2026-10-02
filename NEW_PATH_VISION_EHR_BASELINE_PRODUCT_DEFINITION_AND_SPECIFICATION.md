@@ -4994,3 +4994,13 @@ The New Prescription page now uses the exam-room layout: step rail (Patient & ty
 | Admin tests | Edit (audited). |
 | New Rx | Exam-room layout, type cards, OD/OS cards, step rail, sticky save. |
 
+## 106. Step-Rail Scrollspy Fix at Page Bottom (v2.79)
+
+User report (screenshot of the New Rx page): step 5 (Notes) never became active because the page stops scrolling before that short last section reaches the scrollspy probe line. Fixed in `rx_room.js` and `exam_room.js` (the New Exam rail had the same flaw for "Return visit"): when the page is scrolled to the bottom, the last step is marked active. New `test_rx_and_exam_rail_activate_last_step_at_page_bottom` fails without the fix and passes with it.
+
+**Version 2.79 change log (relative to v2.78):**
+
+| Area | Change |
+| --- | --- |
+| Step rail | Last step activates at page bottom (Rx and Exam). |
+
