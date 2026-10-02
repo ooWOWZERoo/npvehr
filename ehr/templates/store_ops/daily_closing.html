@@ -2,7 +2,7 @@
 {% from "_alert_banner.html" import alert_banner %}
 {% block title %}Daily Closing &mdash; New Path Vision EHR{% endblock %}
 {% block content %}
-<div class="page-header"><h1>Daily Closing</h1></div>
+<div class="page-header"><div><span class="page-eyebrow">Store operations</span><h1>Daily Closing</h1></div></div>
 
 {% if posting_date != today_iso %}
   {{ alert_banner("Posting date is not today's date. Close prior days before posting new transactions.", "warning") }}

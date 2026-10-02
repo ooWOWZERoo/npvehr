@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ type_.code }} &mdash; Admin{% endblock %}
 {% block content %}
-<div class="page-header"><h1>{{ version.display_name if version else type_.code }}</h1>
+<div class="page-header"><div><span class="page-eyebrow">Administration</span><h1>{{ version.display_name if version else type_.code }}</h1></div>
   <div style="display:flex;gap:0.5rem">
     <a href="/admin/scheduling/appointment-types/{{ type_.id }}/edit" class="btn btn-secondary btn-sm">Edit / Publish Version</a>
     <a href="/admin/scheduling/appointment-types/{{ type_.id }}/color-rules" class="btn btn-secondary btn-sm">Color Rules</a>
