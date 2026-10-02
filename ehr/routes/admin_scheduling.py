@@ -24,6 +24,7 @@ templates.env.globals["ROLE_LABELS"] = ROLE_LABELS
 PROVIDER_AUDITED_FIELDS = ["first_name", "last_name", "license_number", "npi", "specialty"]
 RESOURCE_AUDITED_FIELDS = ["display_name", "resource_class", "exclusive", "active"]
 AVAILABILITY_AUDITED_FIELDS = ["resource_id", "day_of_week", "start_time", "end_time", "effective_from", "effective_through"]
+PROVIDER_HOURS_AUDITED_FIELDS = ["provider_id", "day_of_week", "start_time", "end_time", "active"]
 CLOSURE_AUDITED_FIELDS = ["closure_date", "label", "notes"]
 DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 RESOURCE_CLASSES = ["provider", "technician", "exam_lane", "room", "device", "other"]
@@ -527,6 +528,65 @@ def list_provider_availability(request: Request, db: Session = Depends(get_db)):
         {"templates_": templates_, "providers": db.query(Provider).all(),
          "day_names": ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"],
          "scheduling_settings": _get_scheduling_settings(db), "granularity_choices": SLOT_GRANULARITY_CHOICES})
+
+
+def _provider_hours_form_ctx(db, t, error=None):
+    return {"t": t, "providers": db.query(Provider).order_by(Provider.last_name).all(),
+            "day_names": DAY_NAMES, "error": error}
+
+
+@router.get("/provider-availability/{template_id}/edit", response_class=HTMLResponse, dependencies=[Depends(require_role(*ADMIN_SCHEDULING_EDIT))])
+def edit_provider_availability_form(request: Request, template_id: int, db: Session = Depends(get_db)):
+    t = db.query(ProviderAvailabilityTemplate).filter(ProviderAvailabilityTemplate.id == template_id).first()
+    if not t:
+        return HTMLResponse("Not found", status_code=404)
+    return templates.TemplateResponse(request, "admin/scheduling/provider_availability_form.html", _provider_hours_form_ctx(db, t))
+
+
+@router.post("/provider-availability/{template_id}/edit", dependencies=[Depends(require_role(*ADMIN_SCHEDULING_EDIT))])
+def update_provider_availability(request: Request, template_id: int, provider_id: int = Form(...), day_of_week: int = Form(...),
+    start_time: str = Form(...), end_time: str = Form(...), csrf_token: str = Form(""),
+    db: Session = Depends(get_db), user=Depends(get_current_user)):
+    csrf.verify_or_403(request.state.csrf_token, csrf_token)
+    t = db.query(ProviderAvailabilityTemplate).filter(ProviderAvailabilityTemplate.id == template_id).first()
+    if not t:
+        return HTMLResponse("Not found", status_code=404)
+    error = None
+    if not db.query(Provider).filter(Provider.id == provider_id).first():
+        error = "Unknown provider."
+    elif not 0 <= day_of_week <= 6:
+        error = "Day of week must be Monday-Sunday."
+    elif end_time <= start_time:
+        error = "End time must be after start time."
+    if error:
+        return templates.TemplateResponse(request, "admin/scheduling/provider_availability_form.html",
+            _provider_hours_form_ctx(db, t, error), status_code=400)
+    before = {f: getattr(t, f) for f in PROVIDER_HOURS_AUDITED_FIELDS}
+    t.provider_id = provider_id
+    t.day_of_week = day_of_week
+    t.start_time = start_time
+    t.end_time = end_time
+    after = {f: getattr(t, f) for f in PROVIDER_HOURS_AUDITED_FIELDS}
+    field_audit.record_field_changes(db, "provider_availability_templates", template_id, before, after, user.id)
+    db.commit()
+    return RedirectResponse("/admin/scheduling/provider-availability", status_code=303)
+
+
+@router.post("/provider-availability/{template_id}/toggle-active", dependencies=[Depends(require_role(*ADMIN_SCHEDULING_EDIT))])
+def toggle_provider_availability_active(request: Request, template_id: int, csrf_token: str = Form(""),
+    db: Session = Depends(get_db), user=Depends(get_current_user)):
+    """These hours feed the live open-slot search (find_open_slots only reads
+    active rows), so Deactivate takes a row out of the search without losing it."""
+    csrf.verify_or_403(request.state.csrf_token, csrf_token)
+    t = db.query(ProviderAvailabilityTemplate).filter(ProviderAvailabilityTemplate.id == template_id).first()
+    if not t:
+        return HTMLResponse("Not found", status_code=404)
+    before_active = t.active
+    t.active = not t.active
+    field_audit.record_field_changes(db, "provider_availability_templates", template_id,
+        {"active": before_active}, {"active": t.active}, user.id)
+    db.commit()
+    return RedirectResponse("/admin/scheduling/provider-availability", status_code=303)
 
 
 @router.post("/provider-availability/new", dependencies=[Depends(require_role(*ADMIN_SCHEDULING_EDIT))])

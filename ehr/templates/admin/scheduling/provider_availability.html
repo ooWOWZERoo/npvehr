@@ -49,11 +49,17 @@
   </form>
 </div>
 <div class="card" style="margin-top:1rem">
-  <div class="table-responsive"><table><thead><tr><th>Provider</th><th>Day</th><th>Start</th><th>End</th><th>Active</th></tr></thead><tbody>
+  <div class="table-responsive"><table><thead><tr><th>Provider</th><th>Day</th><th>Start</th><th>End</th><th>Status</th><th></th></tr></thead><tbody>
   {% for t in templates_ %}
     {% set p = providers|selectattr('id', 'equalto', t.provider_id)|first %}
-    <tr><td>{{ 'Dr. ' + p.last_name if p else t.provider_id }}</td><td>{{ day_names[t.day_of_week] }}</td><td>{{ t.start_time }}</td><td>{{ t.end_time }}</td><td>{{ 'Yes' if t.active else 'No' }}</td></tr>
-  {% else %}<tr><td colspan="5" style="text-align:center;color:var(--ink-muted)">No working hours defined yet -- the availability search will show no open slots for any provider until hours are added here.</td></tr>
+    <tr><td>{{ 'Dr. ' + p.last_name if p else t.provider_id }}</td><td>{{ day_names[t.day_of_week] }}</td><td>{{ t.start_time }}</td><td>{{ t.end_time }}</td><td><span class="badge {{ 'badge-completed' if t.active else 'badge-cancelled' }}">{{ 'Active' if t.active else 'Inactive' }}</span></td>
+      <td style="display:flex;gap:0.5rem">
+        <a href="/admin/scheduling/provider-availability/{{ t.id }}/edit" class="btn btn-sm btn-secondary">Edit</a>
+        <form method="post" action="/admin/scheduling/provider-availability/{{ t.id }}/toggle-active" onsubmit="return confirm('{{ 'Deactivate' if t.active else 'Reactivate' }} these working hours? Inactive hours are ignored by the open-slot search.');">
+          <button type="submit" class="btn btn-sm btn-secondary">{{ 'Deactivate' if t.active else 'Reactivate' }}</button>
+        </form>
+      </td></tr>
+  {% else %}<tr><td colspan="6" style="text-align:center;color:var(--ink-muted)">No working hours defined yet -- the availability search will show no open slots for any provider until hours are added here.</td></tr>
   {% endfor %}
   </tbody></table></div>
 </div>

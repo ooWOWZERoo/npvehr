@@ -3635,6 +3635,66 @@ def test_availability_templates_and_holidays_can_be_edited(logged_in_page, live_
     assert "Availability template #" in body and "Closure #" in body
 
 
+def test_provider_working_hours_can_be_edited_and_deactivated_and_drive_slot_search(logged_in_page, live_server):
+    """Provider Availability is the table the open-slot search really reads, so
+    Edit and Deactivate/Reactivate must change what the search offers, not just
+    what the admin table shows. Uses Sunday (no seeded hours): adding Sunday
+    hours opens slots, editing them to another day closes Sunday, editing back
+    reopens it, and Deactivate closes it again. Validation and audit covered."""
+    from datetime import date, timedelta
+    page = logged_in_page
+    page.goto(live_server + "/appointments/new")
+    provider_id = page.locator('select[name="provider_id"] option').first.get_attribute("value")
+    type_id = page.locator('select[name="appointment_type_version_id"] option[value]:not([value=""])').first.get_attribute("value")
+    d = date.today() + timedelta(days=21)
+    sunday = d + timedelta(days=(6 - d.weekday()) % 7)
+
+    def sunday_slots():
+        page.goto(live_server + f"/appointments/availability?provider_id={provider_id}&appointment_type_version_id={type_id}"
+                  f"&relationship=established&date_str={sunday}")
+        return page.locator(".slot-grid a").count()
+
+    assert sunday_slots() == 0
+    page.goto(live_server + "/admin/scheduling/provider-availability")
+    page.locator('form[action$="/provider-availability/new"] select[name="provider_id"]').select_option(provider_id)
+    page.locator('form[action$="/provider-availability/new"] select[name="day_of_week"]').select_option("6")
+    page.locator('form[action$="/provider-availability/new"] input[name="start_time"]').fill("09:00")
+    page.locator('form[action$="/provider-availability/new"] input[name="end_time"]').fill("11:00")
+    page.locator('button[type="submit"]', has_text="Add Hours").click()
+    assert sunday_slots() > 0
+
+    def hours_row():
+        page.goto(live_server + "/admin/scheduling/provider-availability")
+        return page.locator("tr", has_text="Sunday").filter(has_text="09:00")
+
+    hours_row().locator("a", has_text="Edit").click()
+    page.fill('input[name="end_time"]', "08:00")
+    page.locator('button[type="submit"]', has_text="Save Changes").click()
+    assert "End time must be after start time" in page.locator("body").inner_text()
+    page.select_option('select[name="day_of_week"]', "5")
+    page.fill('input[name="end_time"]', "11:00")
+    page.locator('button[type="submit"]', has_text="Save Changes").click()
+    assert sunday_slots() == 0
+
+    page.goto(live_server + "/admin/scheduling/provider-availability")
+    page.locator("tr", has_text="Saturday").filter(has_text="09:00").filter(has_text="11:00").first.locator("a", has_text="Edit").click()
+    page.select_option('select[name="day_of_week"]', "6")
+    page.locator('button[type="submit"]', has_text="Save Changes").click()
+    assert sunday_slots() > 0
+
+    page.once("dialog", lambda dlg: dlg.accept())
+    hours_row().locator("button", has_text="Deactivate").click()
+    assert sunday_slots() == 0
+    page.goto(live_server + "/admin/scheduling/provider-availability")
+    assert "inactive" in page.locator("tr", has_text="Sunday").filter(has_text="09:00").inner_text().lower()
+    page.once("dialog", lambda dlg: dlg.accept())
+    page.locator("tr", has_text="Sunday").filter(has_text="09:00").locator("button", has_text="Reactivate").click()
+    assert sunday_slots() > 0
+
+    page.goto(live_server + "/admin/field-audit")
+    assert "Working hours #" in page.locator("body").inner_text()
+
+
 def test_rx_room_type_cards_rail_and_submit(logged_in_page, live_server):
     """New Rx page uses the exam-room layout: Glasses/Contact-lens cards drive
     the same rx_type select the server reads, the step rail marks sections

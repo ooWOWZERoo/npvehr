@@ -5017,3 +5017,15 @@ Not changed: **Provider Availability** (the provider-scoped template that the sl
 | Availability templates | Edit (validated, audited); resource name shown. |
 | Holidays / closures | Edit (duplicate-date check, audited). |
 
+## 108. Edit and Deactivate for Provider Availability (v2.81)
+
+User request: "add edit to provider availability too". Provider Availability holds the weekly working hours that the open-slot search (`find_open_slots`) actually reads, so unlike the resource-scoped template (§107) a change here changes what staff and patients are offered. Each hours row now has **Edit** (provider, day, start/end; validated server-side: provider exists, day 0-6, end after start; errors re-render the form with a 400) and **Deactivate / Reactivate** (with a confirm prompt; the search only reads active rows). Deactivate was added alongside Edit because there was otherwise no way to retire an hours row short of leaving it in force. Both write to the field-change audit log (`provider_availability_templates`) and the audit page links to the edit form. Already-booked appointments are never moved.
+
+`test_provider_working_hours_can_be_edited_and_deactivated_and_drive_slot_search` checks the live effect, not just the table: on a Sunday with no seeded hours, adding hours opens slots, editing the day closes them, editing back reopens them, Deactivate closes them, Reactivate reopens them.
+
+**Version 2.81 change log (relative to v2.80):**
+
+| Area | Change |
+| --- | --- |
+| Provider availability | Edit (validated, audited) and Deactivate/Reactivate; verified against the slot search. |
+
