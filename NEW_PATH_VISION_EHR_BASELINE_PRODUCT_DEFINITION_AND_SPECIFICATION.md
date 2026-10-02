@@ -5084,3 +5084,33 @@ Storing granular ROS answers with the exam (stage 4), compliance advisories on r
 | ROS catalog | View-only banner for roles that can read but not edit. |
 | Exam form | ROS suggestions panel (advisory, unsaved) fed by /admin/ros/catalog.json. |
 
+## 111. ROS Findings Saved With the Exam (stage 4) (v2.84)
+
+### 111.1 What changed
+
+The ROS suggestions panel (§110.2) is no longer inert about the finding itself. A prompt ticked in the panel is a **positive finding**: it is submitted with the exam as `ros_finding` and stored in `encounter_ros_responses` (one row per exam and prompt, status `positive`) in the same transaction as the exam, and it now counts as progress on the exam step rail. The exam detail page shows an "ROS Findings (catalog)" card, grouped by body system, listing what was ticked. The suggestions that appear when a finding is ticked remain **decision support only**: nothing is written into the assessment or plan, and nothing is billed or sent. The panel's intro text says so.
+
+### 111.2 Decisions
+
+* **Only positives are stored.** No row means "not recorded", not "denied"; the table's `negative` status is available but unused. The panel records what was found, not what was asked.
+* **The eight legacy Yes/No ROS columns on `eye_exams` are unchanged** and remain the exam's summary (no schema change, per the append-only rule). The catalog findings add detail beneath them. They are deliberately **not auto-synchronised**: ticking a finding does not flip a dropdown (and vice versa), so a clinician's own answers are never overwritten. The detail page therefore shows both, and they can disagree if the clinician records one and not the other. Revisit if that proves confusing.
+* **Locked on sign by construction.** Exams have no edit route (create, sign, addenda only), so findings are written exactly once at creation and have no update or delete path. Nothing needed to be added to the sign step.
+* **Saving an exam can never be blocked by ROS.** The write is best-effort and savepoint-guarded (`ehr/services/ros_responses.py`): unknown, inactive, garbled or duplicated ids are ignored, input is capped, and any failure rolls back only the ROS rows, not the exam. The detail-page read degrades to empty the same way.
+* Findings for prompts that are later deactivated still display on the exams they were recorded on.
+
+### 111.3 Verified
+
+`test_ros_findings_are_saved_with_the_exam_and_shown_on_the_detail_page` (two findings ticked plus forged ids; saved, shown by system, forged ids ignored) and `tests/test_ros_responses.py` (valid/active/deduplicated only, bounded input, and a deliberately broken ROS table leaves the surrounding transaction intact). The stage-3 test was updated for the new semantics. Full suite green.
+
+### 111.4 Not done
+
+Compliance advisories on reviewed rules, the clinical hard-stops (stage 5), and the content review of every rule (stage 1). No change to the Rx or appointment flows.
+
+**Version 2.84 change log (relative to v2.83):**
+
+| Area | Change |
+| --- | --- |
+| Exam save | Ticked ROS findings stored in encounter_ros_responses with the exam (positive only, best-effort, savepoint-guarded). |
+| Exam detail | "ROS Findings (catalog)" card by body system. |
+| Exam form | Ticked findings count as step-rail progress; panel text updated. |
+

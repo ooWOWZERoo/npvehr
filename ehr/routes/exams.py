@@ -18,6 +18,7 @@ from ehr.services import scheduling as sched
 from ehr.services import authz
 from ehr.services import billing_override
 from ehr.services import billing_ledger
+from ehr.services import ros_responses
 
 router = APIRouter(prefix="/exams", tags=["exams"])
 templates = Jinja2Templates(directory="ehr/templates")
@@ -321,6 +322,9 @@ async def create_exam(request: Request, db: Session = Depends(get_db)):
             db.add(ProblemAddendum(problem_id=problem.id, exam_id=exam.id,
                 author_user_id=request.state.user.id, note=note))
     billing_ledger.add_exam_charges(db, exam, request.state.user.id)
+    # Granular ROS findings ticked in the ROS suggestions panel (ROS plan stage 4). Best-effort
+    # and savepoint-guarded: a problem here can never stop the exam itself from saving.
+    ros_responses.record_findings(db, exam.id, form.getlist("ros_finding"))
     db.commit()
     return RedirectResponse(f"/exams/{exam.id}", status_code=303)
 
@@ -333,7 +337,7 @@ def exam_detail(request: Request, exam_id: int, db: Session = Depends(get_db)):
     cpt_summary = cpt_mapper.compute_cpt_summary(db, e)
     return templates.TemplateResponse(request, "exams/detail.html",
         {"exam": e, "context_patient": patient_context(e.patient, db), "problem_addenda": problem_addenda,
-         "cpt_summary": cpt_summary})
+         "cpt_summary": cpt_summary, "ros_findings": ros_responses.findings_for_exam(db, exam_id)})
 
 
 @router.post("/{exam_id}/sign", dependencies=[Depends(require_role(*EXAM_SIGN))])
