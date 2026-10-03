@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Import #{{ batch.id }} &mdash; Admin{% endblock %}
+{% block content %}
+<div class="page-header"><div><span class="page-eyebrow">Recall report import</span><h1>Import #{{ batch.id }}{% if batch.file_name %} <span class="muted" style="font-size:1rem">{{ batch.file_name }}</span>{% endif %}</h1></div>
+  <a href="/admin/imports" class="btn btn-secondary">All imports</a></div>
+{% if error %}<div class="alert alert-error" style="margin-bottom:var(--space-4)">{{ error }}</div>{% endif %}
+
+{% if plan %}
+<div class="stats-grid">
+  <div class="stat-tile"><div class="stat-tile-label">Rows in file</div><div class="stat-tile-value">{{ plan.rows_total }}</div></div>
+  <div class="stat-tile"><div class="stat-tile-label">New patients</div><div class="stat-tile-value">{{ plan.new|length }}</div></div>
+  <div class="stat-tile"><div class="stat-tile-label">Already in system</div><div class="stat-tile-value">{{ plan.matched|length }}</div><div class="stat-tile-note">left unchanged; only recalls are added</div></div>
+  <div class="stat-tile"><div class="stat-tile-label">New recalls</div><div class="stat-tile-value">{{ plan.recalls|length }}</div>{% if plan.recalls_already_on_file %}<div class="stat-tile-note">{{ plan.recalls_already_on_file }} already on file</div>{% endif %}</div>
+</div>
+{% if plan.skipped %}
+<div class="card" style="margin-bottom:1rem"><h3>Skipped rows ({{ plan.skipped|length }})</h3>
+  {% for reason, (n, rows) in skipped_by_reason.items() %}<p><strong>{{ n }}</strong> &mdash; {{ reason }} <span class="muted">(rows {{ rows|join(', ') }}{% if n > rows|length %}, &hellip;{% endif %})</span></p>{% endfor %}
+</div>
+{% endif %}
+{% if plan.summary_lines %}
+<div class="card" style="margin-bottom:1rem"><h3>Notes</h3><ul style="margin:0;padding-left:1.2rem">{% for l in plan.summary_lines %}<li>{{ l }}</li>{% endfor %}</ul></div>
+{% endif %}
+<div class="card form-card"><h3>Import</h3>
+  <p>This creates {{ plan.new|length }} patients and {{ plan.recalls|length }} recall entries. Reminder opt-ins stay <strong>off</strong>, and no exams or appointments are created. It can be undone afterwards.</p>
+  <form method="post" action="/admin/imports/{{ batch.id }}/confirm">
+    <div class="checkbox-row"><input type="checkbox" name="attest" id="attest" required><label for="attest"><strong>I confirm this file contains test or de-identified data only &mdash; not real patient records.</strong></label></div>
+    <div class="form-group" style="margin-top:var(--space-3)"><label>Reason / source of this data* <input name="reason" required minlength="5" maxlength="500" placeholder="e.g. Sample recall list for demo and training"></label></div>
+    <div style="display:flex;gap:0.5rem"><button type="submit" class="btn btn-primary">Import now</button></div>
+  </form>
+  <form method="post" action="/admin/imports/{{ batch.id }}/discard" style="margin-top:var(--space-3)"><button type="submit" class="btn btn-secondary btn-sm">Discard this upload</button></form>
+</div>
+{% else %}
+<div class="stats-grid">
+  <div class="stat-tile"><div class="stat-tile-label">Status</div><div class="stat-tile-value" style="font-size:1.6rem">{{ batch.status|title }}</div></div>
+  <div class="stat-tile"><div class="stat-tile-label">Patients created</div><div class="stat-tile-value">{{ batch.patients_created }}</div></div>
+  <div class="stat-tile"><div class="stat-tile-label">Already in system</div><div class="stat-tile-value">{{ batch.patients_matched }}</div></div>
+  <div class="stat-tile"><div class="stat-tile-label">Recalls created</div><div class="stat-tile-value">{{ batch.recalls_created }}</div></div>
+</div>
+<div class="card">
+  <dl class="dl-grid">
+    <dt>Uploaded</dt><dd>{{ batch.created_at.strftime('%m/%d/%Y %I:%M %p') }}</dd>
+    {% if batch.imported_at %}<dt>Imported</dt><dd>{{ batch.imported_at.strftime('%m/%d/%Y %I:%M %p') }}</dd>{% endif %}
+    <dt>Rows</dt><dd>{{ batch.rows_total }} ({{ batch.rows_skipped }} skipped)</dd>
+    {% if batch.attestation_reason %}<dt>Confirmed as test data</dt><dd>{{ batch.attestation_reason }}</dd>{% endif %}
+    {% if batch.status == 'undone' %}<dt>Undone</dt><dd>{{ batch.patients_undone }} patients removed{% if batch.patients_kept_on_undo %}; {{ batch.patients_kept_on_undo }} kept because they now have other records{% endif %}</dd>{% endif %}
+  </dl>
+  {% if batch.summary_text %}<h4>Notes</h4><ul style="margin:0;padding-left:1.2rem">{% for l in batch.summary_text.split('\n') %}<li>{{ l }}</li>{% endfor %}</ul>{% endif %}
+  {% if batch.status == 'imported' %}
+  <form method="post" action="/admin/imports/{{ batch.id }}/undo" style="margin-top:var(--space-4)" onsubmit="return confirm('Remove the patients this import created? Patients that already existed, or that now have appointments, exams or other records, are kept.');">
+    <button type="submit" class="btn btn-secondary">Undo this import</button>
+    <p class="muted" style="font-size:0.8rem;margin-top:0.5rem">Removes the patients this import created that have no other records, and the recalls it added. Anything else is left alone.</p>
+  </form>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

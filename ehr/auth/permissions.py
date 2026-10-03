@@ -114,6 +114,9 @@ SAFETY_RULES_REVIEW = {SYSTEM_ADMINISTRATOR, PRACTICE_ADMINISTRATOR}
 SAFETY_RULES_VIEW = SAFETY_RULES_EDIT | {READ_ONLY_AUDITOR}
 # (PATIENT_SAFETY_EDIT is defined after EXAM_EDIT below.)
 
+# Bulk data import (recall report). Loads many patient records at once, so System Administrator only.
+DATA_IMPORT = {SYSTEM_ADMINISTRATOR}
+
 # All 5 Claim Management sections are currently GET-only placeholders/views in
 # this codebase (no create/edit routes exist yet), so only a VIEW group is needed.
 CLAIMS_VIEW = set(STORE_OPS_VIEW)

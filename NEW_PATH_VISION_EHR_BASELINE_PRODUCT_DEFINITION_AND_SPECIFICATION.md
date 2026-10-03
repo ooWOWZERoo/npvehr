@@ -5150,3 +5150,57 @@ Four new tables (`ehr/models/safety.py`, SQLAlchemy 2.x `Mapped` on the app's Ba
 | Chart | Safety flags card on the patient Overview (audited). |
 | Exam | Warning banner on the exam form; signing requires acknowledging every warning that applies (recorded with who/when). |
 
+## 113. Recall Report Import and the Recalls Tab (v2.86)
+
+### 113.1 Request and decisions
+
+User request: import the supplied recall report (`RecallDetails.xls`, 2,668 patient rows in 11 recall-type sections, 14 columns) as test patients, map every field, using judgment. Decisions:
+
+* **An in-app admin importer, not a script, and no data in the repository.** The file is uploaded through System Administrator-only `/admin/imports` (Administration > Data > Recall Report Import) on whichever environment should hold the patients. The file itself, and anything derived from it, is never committed; the repository's tests use a fabricated sample (`tests/fixtures/recall_sample.csv` and `.xls`).
+* **The data looks like a real practice's recall list** (realistic names, addresses, phone numbers and emails across ~2,500 people, including children), although it was described as test data. This system's own banner says it is not for real patient records. So the importer requires, before anything is saved, a tick on "I confirm this file contains test or de-identified data only" plus a stated reason, both recorded on the import batch with who and when. If the file is in fact real patient data, do not import it here.
+* **Recalls have no home in the schema** (the Recalls tab was a placeholder), so a new `patient_recalls` table holds them.
+
+### 113.2 Column mapping
+
+| Report column | Goes to |
+| --- | --- |
+| LastName, FirstName | Patient last/first name; ALL-CAPS or all-lowercase becomes Title Case (McDonald, O'Neil handled); mixed case kept |
+| DOB | Patient date of birth, stored YYYY-MM-DD |
+| Sex | Gender: F, M; anything else (e.g. "U") left blank |
+| Phone# | Phone as (610) 555-0100; odd lengths kept as typed and counted |
+| Address 1 + Address 2 | Patient address, "line 1, line 2" |
+| City, State, Zip | City (tidied), state, zip code (kept as typed; odd shapes counted) |
+| Email | Email, lower-cased; invalid ones dropped and counted |
+| "Recall Type:" section row | Recall type, kept as labelled (e.g. "12 Month Adult", "Appt Time"), plus interval in months and adult/child parsed from the label |
+| Scheduled Recall Date | Recall due date |
+| Last Exam Date | Recall "last exam" date; "Never" recorded as never examined |
+| Next Appt Date | Recall "next appointment" date |
+
+Not done on purpose: no exams or appointments are created from the last-exam / next-appointment dates (nothing clinical or scheduling-related is invented; the Recalls tab says these dates are as of the report), reminder opt-ins stay **off** so nobody is contacted because of an import, and MRN is left blank.
+
+### 113.3 Behaviour
+
+* **Upload then preview**: the preview shows counts only (rows, new patients, patients already in the system, new recalls) plus skipped rows by reason with row numbers, and notes (merged repeats, odd phones/ZIPs, dropped emails). It never shows names. The upload is held on the batch row only until imported, discarded, or 24 hours old.
+* **Same person** = same last name, first name and date of birth (case-insensitive), within the file or against patients already in the system. The report lists a person once per recall type (about 190 people appear 2-3 times); those become one patient with several recalls. Existing patients are **never overwritten**; only their recalls are added.
+* **Idempotent**: importing the same file again adds nothing. Both .xls and .csv are read (columns found by header name).
+* **Undo**: removes the patients a batch created and the recalls it added, except patients that now have any other record (appointment, exam, Rx, charge, ...), which are kept and counted.
+* **Recalls tab** on the patient chart now lists recalls with due date, overdue / due-in status, last exam, next appointment and source. Informational only: nothing is sent from it. Marking recalls satisfied and a worklist remain future work.
+* The supplied file was checked on a scratch database; see §113.4.
+
+### 113.4 What the supplied file produces
+
+2,668 rows -> **2,467 patients** and **2,663 recalls**; 0 rows skipped; 201 repeated rows merged into their patient; 17 invalid emails dropped; 4 phone numbers and 1 ZIP code kept as typed; 1 row with no usable sex value; 4 repeated patients with differing contact details (first row kept). Importing takes well under a second here, so it is comfortably inside Vercel's time limit; the file is 0.7 MB against a 4 MB cap. Recalls by type: 12 Month Adult 1,765; 6 Months Adult 322; 3 Months Adult 317; Adult Recall 137; 12 Months Child 33; 6 Months Child 27; Appt Time 22; 3 month adult 21; 3 Months Child 13; 3 months recall OAG 4; 24 Month Adult 2.
+
+### 113.5 Verified and limits
+
+Unit tests (`tests/test_recall_import.py`: normalisers, csv/xls parity, mapping, skipped rows, idempotency, matched patients untouched, undo that spares patients with records), and an end-to-end test (preview without names, attestation enforced server-side, Recalls tab, re-import adds nothing, undo, other roles refused). Full suite green. Limits: all names are title-cased from the source's capitalisation, so some surnames (e.g. "Mac...", "De...") may need a manual touch; address line 2 is joined into the address; no household or guardian linking (phones shared by several people are left as-is); duplicates are matched on exact name and date of birth only; `xlrd` was added as a dependency for .xls files.
+
+**Version 2.86 change log (relative to v2.85):**
+
+| Area | Change |
+| --- | --- |
+| Schema | New tables: patient_recalls, data_import_batches, data_import_batch_patients. |
+| Admin | /admin/imports recall-report import: preview, test-data attestation, import, undo (System Administrator only). |
+| Chart | Recalls tab lists a patient's recalls (replaces the placeholder). |
+| Dependencies | xlrd (reads .xls). |
+

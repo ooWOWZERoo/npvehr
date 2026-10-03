@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Data Imports &mdash; Admin{% endblock %}
+{% block content %}
+<div class="page-header"><div><span class="page-eyebrow">Administration</span><h1>Recall Report Import</h1>
+  <p class="page-lede">Load patients and their recall dates from a recall report (.xls or .csv). You'll see a preview before anything is saved.</p></div></div>
+<div class="alert alert-warning" style="margin-bottom:var(--space-4)">
+  <strong>Test or de-identified data only.</strong> This system is not set up for real patient records. You'll be asked to confirm the file contains test data before an import runs.
+</div>
+{% if error %}<div class="alert alert-error" style="margin-bottom:var(--space-4)">{{ error }}</div>{% endif %}
+<div class="card form-card"><h3>Upload a file</h3>
+  <form method="post" action="/admin/imports/upload" enctype="multipart/form-data">
+    <div class="form-group"><label>Recall report (.xls or .csv, up to {{ max_mb }} MB) <input type="file" name="file" accept=".xls,.csv" required></label></div>
+    <button type="submit" class="btn btn-primary">Upload &amp; preview</button>
+    <p style="font-size:0.8rem;color:var(--ink-muted);margin-top:0.75rem">The report's columns are matched by name: Scheduled Recall Date, Next Appt Date, Last Exam Date, LastName, FirstName, DOB, Sex, Phone#, Address 1, Address 2, City, Zip, State, Email, with "Recall Type:" section rows. The uploaded file is held only until you import or discard it (and is deleted after 24 hours if you do neither).</p>
+  </form>
+</div>
+<div class="card" style="margin-top:1rem"><h3>Recent imports</h3>
+  <div class="table-responsive"><table><thead><tr><th>#</th><th>File</th><th>When</th><th>Status</th><th>Patients</th><th>Recalls</th><th></th></tr></thead><tbody>
+  {% for b in batches %}
+    <tr><td>{{ b.id }}</td><td>{{ b.file_name or '—' }}</td><td>{{ b.created_at.strftime('%m/%d/%Y %I:%M %p') }}</td>
+      <td><span class="badge {{ 'badge-completed' if b.status == 'imported' else 'badge-cancelled' }}">{{ b.status|title }}</span></td>
+      <td>{{ b.patients_created }} new{% if b.patients_matched %} &middot; {{ b.patients_matched }} existing{% endif %}</td>
+      <td>{{ b.recalls_created }}</td>
+      <td><a href="/admin/imports/{{ b.id }}" class="btn btn-sm btn-secondary">{{ 'Preview' if b.status == 'staged' else 'Details' }}</a></td></tr>
+  {% else %}<tr><td colspan="7"><div class="empty-state" style="border:0"><strong>No imports yet</strong>Upload a report above.</div></td></tr>
+  {% endfor %}
+  </tbody></table></div>
+</div>
+{% endblock %}

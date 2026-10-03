@@ -1,5 +1,5 @@
 import os, uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import Optional
 from fastapi import APIRouter, Depends, Request, Form, UploadFile, File, Response
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from ehr.models.database import (get_db, Patient, Appointment, EyeExam, Prescription, AppointmentStatus,
     PatientDocument, Problem, ProblemAddendum, WaitlistEntry, AppointmentTypeVersion, AppointmentType,
     PatientInsurancePlan, DiagnosticOrder, DiagnosticTest, EyeExamFollowUp, Service, VisitCharge)
+from ehr.models.imports import PatientRecall
 from ehr.services import safety as safety_svc
 from ehr.services import diagnostic_orders as diag_orders
 from ehr.services import lookback_alerts
@@ -493,13 +494,15 @@ def patient_appointments(request: Request, patient_id: int, db: Session = Depend
 
 @router.get("/{patient_id}/recalls", response_class=HTMLResponse)
 def patient_recalls(request: Request, patient_id: int, db: Session = Depends(get_db)):
-    return _placeholder_tab(request, db, patient_id, "recalls", "Recalls", "&#128276;",
-        "Recalls will track when this patient is due back for a follow-up -- for example "
-        "\"due back in 12 months for a comprehensive exam\" -- and let staff generate reminder "
-        "lists tied into the existing appointment scheduling module.",
-        ["Automatic due-back dates computed from exam type and provider-set recall intervals.",
-         "A recall worklist staff can use to call/text/email patients who are due or overdue.",
-         "Marking a recall satisfied automatically once the matching appointment is completed."])
+    """Recalls tab: the patient's due-back dates by recall type (loaded by the recall-report import). Informational --
+    nothing is sent from here; marking recalls satisfied and a worklist are still to come."""
+    p = _get_patient_or_404(db, patient_id, request.state.user)
+    if not p: return HTMLResponse("Not found", status_code=404)
+    ctx = _workspace_ctx(db, p, "recalls")
+    ctx["recalls"] = (db.query(PatientRecall).filter(PatientRecall.patient_id == patient_id)
+                      .order_by(PatientRecall.due_date.desc(), PatientRecall.id.desc()).all())
+    ctx["today"] = date.today()
+    return templates.TemplateResponse(request, "patients/recalls_tab.html", ctx)
 
 
 @router.get("/{patient_id}/insurance", response_class=HTMLResponse)

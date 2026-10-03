@@ -1,6 +1,6 @@
 # New Path Vision EHR — Master Build Backlog
 
-**Status:** Living tracking document. **Baseline as of:** spec v2.85 / research doc v2.24 (2026-09-30).
+**Status:** Living tracking document. **Baseline as of:** spec v2.86 / research doc v2.24 (2026-09-30).
 
 ## Purpose and how to use this document
 
@@ -243,3 +243,21 @@ A real visit-summary document export prompted a full component-by-component gap 
 A few `§18.2`/`§18.3` items above (record linkage, provider management, prescription display fields) were written early in this project's spec history and may have been partially superseded by later work (the Appointment Scheduling Module, the v2.10 Lens Design fields) without the spec's own gap-list being re-audited against them — each is flagged above with a "re-verify" note rather than assumed still fully accurate. Confirm current truth before scoping work against them.
 - [~] **Review-of-Systems decision support (from the practice's 13-system ROS reference)** — staged. **Stage 5 done, v2.85** (safety flags + clinician-authored warnings with acknowledge-to-sign, spec §112; no rules shipped), after **stage 4, v2.84** (findings saved with the exam, spec §111), after **stage 3, v2.83** (suggestions-only panel on the exam form, spec §110), after **stage 2, v2.82:** three new tables plus the `/admin/ros` catalog screen with citation-gated compliance sign-off (baseline spec §109). Remaining: **stage 1** a coder/compliance review of every rule's clinical and coding content (nothing is marked reviewed yet); and for stage 5, **the clinicians must author and sign off the actual warning rules** in /admin/safety (none exist), and drug-based rules would need a medication list the app doesn't have.
 
+
+## To-do list (ROS follow-ups and recall import) — captured 2026-10-02 for work over the next couple of days
+
+**Needs people, not code**
+- [ ] **ROS stage 1** — a coder/compliance reviewer checks every ROS rule's ICD-10/CPT pairing and note, adds a source citation, marks it reviewed in `/admin/ros`. Everything is Unreviewed today; blocks the compliance advisories below.
+- [ ] **Safety warnings** — the practice's clinicians author and sign off the warnings in `/admin/safety`. None ship; none can fire until then.
+
+**Build**
+- [ ] **Compliance advisories on reviewed ROS rules** — advisory (never blocking) when a test is ordered with no supporting ICD-10 per the *reviewed* rules. Prototype logic: scratchpad `ros_plugin.py` `evaluate()`. Blocked on stage 1.
+- [ ] **Routine → medical visit switch** offered from ROS positives (billing-adjacent; coder approves the logic first; `cpt_mapper` already models both flows).
+- [ ] **PCP communication letter** template for diabetes findings (MIPS communication measure as the reference describes it; verify scope with a compliance expert).
+- [ ] **Patient medication list** — structured meds so drug-based safety warnings stop depending on typed-text keywords. Design first; larger.
+- [ ] **Bulk import of ROS prompts/rules** from CSV/XLS (imported rules land Unreviewed; reuse the import-batch pattern).
+- [ ] **Decide** whether the 8 legacy Yes/No ROS dropdowns sync with the catalog findings (deliberately not synced today).
+
+**In flight**
+- [x] **Recall report import** (`RecallDetails.xls`) — built v2.86 (spec §113): admin upload with preview/confirm and a test-data attestation, new `patient_recalls` table shown on the Recalls tab, undo. **Still to do:** upload the file in the target environment (it holds ~2,467 patients/2,663 recalls); a recall worklist and "mark satisfied" are future work.
+- [~] **PR #56** (ROS stage 5) — waiting on CI; merge when green.

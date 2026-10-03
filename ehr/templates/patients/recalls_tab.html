@@ -1,0 +1,27 @@
+{% extends "patients/_workspace.html" %}
+{% block wcontent %}
+<div class="section">
+  <div class="section-head"><div><span class="page-eyebrow">Due back</span><h2>Recalls</h2>
+    <p class="section-sub">When this patient is due back, by recall type. Informational &mdash; nothing is sent from this page.</p></div></div>
+  {% if recalls %}
+  <div class="table-responsive"><table><thead><tr><th>Recall type</th><th>Due</th><th>Status</th><th>Last exam</th><th>Next appointment</th><th>Source</th></tr></thead><tbody>
+  {% for r in recalls %}
+    {% set days = (r.due_date - today).days %}
+    <tr>
+      <td>{{ r.recall_type }}{% if r.interval_months %} <span class="muted">({{ r.interval_months }} mo)</span>{% endif %}</td>
+      <td>{{ r.due_date.strftime('%m/%d/%Y') }}</td>
+      <td>{% if days < 0 %}<span class="badge badge-cancelled">Overdue {{ -days }} day{{ '' if -days == 1 else 's' }}</span>
+          {% elif days == 0 %}<span class="badge badge-completed">Due today</span>
+          {% else %}<span class="badge badge-scheduled">Due in {{ days }} day{{ '' if days == 1 else 's' }}</span>{% endif %}</td>
+      <td>{% if r.never_examined %}Never{% elif r.last_exam_date %}{{ r.last_exam_date.strftime('%m/%d/%Y') }}{% else %}&mdash;{% endif %}</td>
+      <td>{{ r.next_appt_date.strftime('%m/%d/%Y') if r.next_appt_date else '—' }}</td>
+      <td class="muted">{% if r.import_batch_id %}Imported (batch #{{ r.import_batch_id }}){% else %}Entered in app{% endif %}</td>
+    </tr>
+  {% endfor %}
+  </tbody></table></div>
+  <p class="muted" style="font-size:0.8rem;margin-top:0.75rem">&ldquo;Last exam&rdquo; and &ldquo;Next appointment&rdquo; are as of the report that loaded this recall; they are not linked to exams or appointments in this system.</p>
+  {% else %}
+  <div class="empty-state"><strong>No recalls on file</strong>This patient has no due-back dates yet.</div>
+  {% endif %}
+</div>
+{% endblock %}
