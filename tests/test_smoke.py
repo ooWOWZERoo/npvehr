@@ -4376,3 +4376,77 @@ def test_ros_bulk_import_preview_unreviewed_landing_export_and_undo(logged_in_pa
     assert "Undone" in page.locator("body").inner_text()
     page.goto(live_server + "/admin/ros")
     assert page.locator("tr", has_text="Sample thyroid history").count() == 0
+
+
+def test_medication_list_allergies_review_classes_and_derived_safety_flag(logged_in_page, live_server):
+    """Medication & allergy lists (fabricated entries): an unreviewed list reads as unknown, medications and allergies are
+    added/stopped/reviewed, a medication matches no class until the admin adds, links and signs off a drug class, and then the
+    patient's safety card shows the flag as derived from the medication list (which wins over a manual 'No')."""
+    page = logged_in_page
+    page.goto(live_server + "/patients/")
+    page.locator("table a.patient-name-cell").first.click()
+    page.wait_for_load_state()
+    patient_url = page.url.split("?")[0].rstrip("/")
+    page.goto(patient_url + "/medications")
+    body = page.locator("body").inner_text()
+    assert "Medications not yet reviewed" in body and "Allergies not yet reviewed" in body
+    assert page.locator('button:has-text("Patient reports none")').count() == 2           # empty lists can be marked 'none'
+
+    page.fill('#medsSection input[name="name"]', "Warfarin 5 mg (sample)")
+    page.fill('#medsSection input[name="frequency"]', "daily")
+    page.locator('#medsSection button[type="submit"]', has_text="Add medication").click()
+    page.wait_for_load_state()
+    row = page.locator("#medsSection tr", has_text="Warfarin 5 mg (sample)")
+    assert row.count() == 1 and "not classified" in row.inner_text()
+    assert page.locator('#medsSection button:has-text("Patient reports none")').count() == 0   # not offered once something is listed
+    page.fill('#allergiesSection input[name="allergen"]', "Sample sulfa allergy")
+    page.select_option('#allergiesSection select[name="severity"]', "severe")
+    page.locator('#allergiesSection button[type="submit"]', has_text="Add allergy").click()
+    page.wait_for_load_state()
+    assert "Sample sulfa allergy" in page.locator("#allergiesSection").inner_text()
+    page.locator('#medsSection button:has-text("Reviewed — no changes")').click()
+    page.wait_for_load_state()
+    assert "Reviewed" in page.locator("#medsSection").inner_text() and "Medications not yet reviewed" not in page.locator("body").inner_text()
+
+    # The practice's clinician defines and signs off a class, and links it to the flag.
+    page.goto(live_server + "/admin/medications")
+    page.fill('input[name="label"]', "Sample anticoagulant class")
+    page.locator('button[type="submit"]', has_text="Add class").click()
+    page.wait_for_load_state()
+    card = page.locator(".card", has_text="Sample anticoagulant class").last
+    card.locator('input[name="term"]').fill("warfarin, coumadin")
+    card.locator("button", has_text="Add names").click()
+    page.wait_for_load_state()
+    card = page.locator(".card", has_text="Sample anticoagulant class").last
+    assert "unreviewed" in card.inner_text().lower()
+    card.locator('select[name="flag_type_id"]').select_option(label="Takes a blood thinner")
+    card.locator("button", has_text="Link").click()
+    page.wait_for_load_state()
+    page.goto(patient_url + "/medications")
+    assert "not classified" in page.locator("#medsSection").inner_text()                  # unreviewed terms classify nothing
+    page.goto(live_server + "/admin/medications")
+    term_row = page.locator("tr", has_text="warfarin").last
+    page.evaluate("document.querySelectorAll('input[name=source_citation]').forEach(e => e.required = false)")
+    term_row.locator("button", has_text="Mark reviewed").click()                          # no citation: refused
+    page.wait_for_load_state()
+    assert "source citation" in page.locator("body").inner_text().lower() and "unreviewed" in page.locator("tr", has_text="warfarin").last.inner_text().lower()
+    page.locator("tr", has_text="warfarin").last.locator('input[name="source_citation"]').fill("Sample formulary, section 1")
+    page.locator("tr", has_text="warfarin").last.locator("button", has_text="Mark reviewed").click()
+    page.wait_for_load_state()
+    assert "Sample formulary, section 1" in page.locator("body").inner_text()
+
+    page.goto(patient_url + "/medications")
+    row = page.locator("#medsSection tr", has_text="Warfarin 5 mg (sample)")
+    assert "Sample anticoagulant class" in row.inner_text()
+    page.goto(patient_url)
+    card_text = page.locator("#safetyFlagsCard").inner_text()
+    assert "Yes, from medication list: Warfarin 5 mg (sample)" in card_text
+
+    # Stopping the medication removes the derived flag and keeps the history.
+    page.goto(patient_url + "/medications")
+    page.once("dialog", lambda d: d.accept())
+    page.locator("#medsSection tr", has_text="Warfarin 5 mg (sample)").locator("button", has_text="Stop").click()
+    page.wait_for_load_state()
+    assert page.locator("#medsSection tr", has_text="Warfarin 5 mg (sample)").count() == 1 and "Stopped medications (1)" in page.locator("#medsSection").inner_text()
+    page.goto(patient_url)
+    assert "from medication list" not in page.locator("#safetyFlagsCard").inner_text()

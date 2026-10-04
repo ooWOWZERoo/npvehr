@@ -1,6 +1,6 @@
 # New Path Vision EHR — Master Build Backlog
 
-**Status:** Living tracking document. **Baseline as of:** spec v2.87 / research doc v2.24 (2026-09-30).
+**Status:** Living tracking document. **Baseline as of:** spec v2.88 / research doc v2.24 (2026-09-30).
 
 ## Purpose and how to use this document
 
@@ -241,7 +241,7 @@ A real visit-summary document export prompted a full component-by-component gap 
 ## Notes on stale items
 
 A few `§18.2`/`§18.3` items above (record linkage, provider management, prescription display fields) were written early in this project's spec history and may have been partially superseded by later work (the Appointment Scheduling Module, the v2.10 Lens Design fields) without the spec's own gap-list being re-audited against them — each is flagged above with a "re-verify" note rather than assumed still fully accurate. Confirm current truth before scoping work against them.
-- [~] **Review-of-Systems decision support (from the practice's 13-system ROS reference)** — staged. **Stage 5 done, v2.85** (safety flags + clinician-authored warnings with acknowledge-to-sign, spec §112; no rules shipped), after **stage 4, v2.84** (findings saved with the exam, spec §111), after **stage 3, v2.83** (suggestions-only panel on the exam form, spec §110), after **stage 2, v2.82:** three new tables plus the `/admin/ros` catalog screen with citation-gated compliance sign-off (baseline spec §109). Remaining: **stage 1** a coder/compliance review of every rule's clinical and coding content (nothing is marked reviewed yet); and for stage 5, **the clinicians must author and sign off the actual warning rules** in /admin/safety (none exist), and drug-based rules would need a medication list the app doesn't have.
+- [~] **Review-of-Systems decision support (from the practice's 13-system ROS reference)** — staged. **Stage 5 done, v2.85** (safety flags + clinician-authored warnings with acknowledge-to-sign, spec §112; no rules shipped), after **stage 4, v2.84** (findings saved with the exam, spec §111), after **stage 3, v2.83** (suggestions-only panel on the exam form, spec §110), after **stage 2, v2.82:** three new tables plus the `/admin/ros` catalog screen with citation-gated compliance sign-off (baseline spec §109). Remaining: **stage 1** a coder/compliance review of every rule's clinical and coding content (nothing is marked reviewed yet); and for stage 5, **the clinicians must author and sign off the actual warning rules** in /admin/safety (none exist), and drug-based rules now have a medication list to draw on (v2.88) once the clinicians define their drug classes.
 
 
 ## To-do list (ROS follow-ups and recall import) — captured 2026-10-02 for work over the next couple of days
@@ -254,7 +254,7 @@ A few `§18.2`/`§18.3` items above (record linkage, provider management, prescr
 - [ ] **Compliance advisories on reviewed ROS rules** — advisory (never blocking) when a test is ordered with no supporting ICD-10 per the *reviewed* rules. Prototype logic: scratchpad `ros_plugin.py` `evaluate()`. Blocked on stage 1.
 - [ ] **Routine → medical visit switch** offered from ROS positives (billing-adjacent; coder approves the logic first; `cpt_mapper` already models both flows).
 - [ ] **PCP communication letter** template for diabetes findings (MIPS communication measure as the reference describes it; verify scope with a compliance expert).
-- [ ] **Patient medication list** — structured meds so drug-based safety warnings stop depending on typed-text keywords. Design first; larger.
+- [x] **Patient medication list** — built v2.88 (spec §115, design in `PATIENT_MEDICATION_LIST_DESIGN.md`): medications + allergies tab with review events, practice-defined drug classes with citation-gated sign-off, flags derived from the list (list wins over a manual No). **Still to do:** the clinicians load and sign off their drug classes (none ship); phase 3 exam-form medications card and stale-list banner; optional CSV import of medication lists; allergy-driven warnings; interaction checking (needs a licensed source).
 - [x] **Bulk import of ROS prompts/rules** from CSV/XLS — built v2.87 (spec §114): `/admin/ros/import` with preview, undo, template and catalog export; everything lands Unreviewed. Hand the exported sheet to the stage-1 reviewer.
 - [ ] **Decide** whether the 8 legacy Yes/No ROS dropdowns sync with the catalog findings (deliberately not synced today).
 

@@ -107,7 +107,7 @@
         </div>
 
         <div class="sidebar-section-heading">Administration</div>
-        <div class="sidebar-group{% if request.url.path.startswith('/admin/scheduling') or request.url.path.startswith('/admin/billing') or request.url.path.startswith('/admin/voice-scribe') or request.url.path.startswith('/admin/ros') or request.url.path.startswith('/admin/safety') or request.url.path.startswith('/admin/imports') %} open{% endif %}">
+        <div class="sidebar-group{% if request.url.path.startswith('/admin/scheduling') or request.url.path.startswith('/admin/billing') or request.url.path.startswith('/admin/voice-scribe') or request.url.path.startswith('/admin/ros') or request.url.path.startswith('/admin/safety') or request.url.path.startswith('/admin/medications') or request.url.path.startswith('/admin/imports') %} open{% endif %}">
           <button type="button" class="sidebar-expand-toggle" data-group>
             <span class="sidebar-icon">&#9881;&#65039;</span><span class="sidebar-label">Administration</span><span class="sidebar-caret">&#9656;</span>
           </button>
@@ -130,6 +130,7 @@
             <div class="sidebar-subnav-heading">Clinical Decision Support</div>
             <a href="/admin/ros">ROS Catalog</a>
             <a href="/admin/safety">Safety Warnings</a>
+            <a href="/admin/medications">Medication Classes</a>
             {% endif %}
             {% if current_user and current_user.role == 'system_administrator' %}
             <div class="sidebar-subnav-heading">Data</div>

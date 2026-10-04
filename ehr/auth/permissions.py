@@ -164,3 +164,6 @@ def require_role(*allowed_roles):
                 detail=f"Your role ({ROLE_LABELS.get(user.role, user.role)}) does not have access to this page.")
         return user
     return _dep
+
+# Patient medication and allergy lists: clinical staff who can edit an exam; class/term admin reuses the SAFETY_RULES_* sets.
+MEDICATION_EDIT = EXAM_EDIT

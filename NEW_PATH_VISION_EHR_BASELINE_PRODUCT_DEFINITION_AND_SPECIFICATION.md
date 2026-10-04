@@ -5236,3 +5236,35 @@ Unit tests (`tests/test_ros_import.py`: plan counts and skip reasons, Unreviewed
 | Schema | New table: data_import_batch_records. |
 | Admin | /admin/ros/import: upload, preview, import, undo, template and catalog export (ROS catalog editors). |
 | Catalog | "Bulk import" and "Export CSV" buttons on /admin/ros. |
+
+## 115. Patient Medication & Allergy Lists and Drug Classes (v2.88)
+
+### 115.1 Request and decisions
+
+From the to-do list: a structured medication list so drug-based safety warnings (spec §112) stop depending on typed exam text. A design document (`PATIENT_MEDICATION_LIST_DESIGN.md`) was written first; the practice decided: **(1)** build the list *and* the drug-class / derived-flag layer together; **(2)** when the medication list says a flag is "yes", it **wins over a manual "No"** on the safety card; **(3)** structured **allergies** are built alongside. Review window defaults to 12 months. Phase 3 of the design (an exam-form medications card and stale-list banner) and any import/portal work are **not** built here.
+
+### 115.2 What was built
+
+* **Medications & Allergies tab** on the patient chart (after Problem List). Medications: name, strength, route, eye (OD/OS/OU), frequency, what it is for, start date, note; edit in place, stop (stop date recorded) and restart; stopped medications are kept in a collapsed history. Allergies: allergen, reaction, severity (mild/moderate/severe), note; deactivate/reactivate. Clinical staff (System/Practice Administrator, Technician, Optometrist/Provider) can edit; every other role with access to the chart sees it read-only with a "you don't have privileges" notice. Existing free-text `patients.allergies` is left untouched and shown as an older note.
+* **Review events**: "Reviewed — no changes", "Reviewed — updated" or "Patient reports none" for each list, recorded with who/when and the item count. A list that has never been reviewed reads as **unknown, not none**; "patient reports none" is only accepted when the list is empty; a review older than 12 months, or a "none reported" review followed by new items, shows a "needs review" banner (ambient, never blocking).
+* **Drug classes** (`/admin/medications`, System/Practice Administrator edit and sign off; auditor views): the practice defines classes, adds generic/brand names (comma-separated), links each class to a patient safety flag, and marks each name **reviewed with a source citation** (reviewer and time recorded; withdrawable). Nothing ships pre-loaded. A name classifies nothing until reviewed, and an inactive or unlinked class affects nothing.
+* **Derived flags**: a safety flag is derived "yes" when the patient has an *active* medication whose name contains (whole word/phrase, case-insensitive) a *reviewed* term of an *active* class linked to that flag. `safety.evaluate()` now counts a derived yes like a manual yes, so the exam banner, exam detail and sign step all agree; a rule still needs to be active and reviewed, and acknowledge-to-sign is unchanged. The patient's safety card labels derived flags ("Yes, from medication list: ...") and flags the conflict when a manual "No" is contradicted.
+* Medications on the list that match no reviewed class are shown as **"not classified"** with a count, so gaps are visible instead of read as safe.
+* Every add/edit/stop and class/term/link change is written to the field-change audit.
+
+### 115.3 Schema and limits
+
+Six new tables, no existing table changed: `patient_medications`, `patient_allergies`, `medication_list_reviews`, `medication_classes`, `medication_class_terms`, `safety_flag_class_links` (created by `create_all`; no migration needed). Limits: matching is plain text (no brand/generic knowledge beyond the names clinicians enter; no negation or spelling tolerance); no RxNorm or drug database, no e-prescribing, no drug-drug or allergy-drug interaction checking (would need a licensed source and clinical governance); allergies do not drive any warning yet; editing a class term is delete-and-re-add (so sign-off can never carry over to changed text).
+
+### 115.4 Verified
+
+Unit tests (`tests/test_medications.py`: term matching, nothing derived until reviewed/active/linked, derived flag fires the safety rule and stops when the med is stopped, medication list beats a manual "No", unclassified reporting, review states, validation and audit) and an end-to-end test (unreviewed lists read as unknown, add/stop/review, a class is added, linked and refused sign-off without a citation, then the safety card shows the derived flag and drops it when the medication is stopped). Full suite green.
+
+**Version 2.88 change log (relative to v2.87):**
+
+| Area | Change |
+| --- | --- |
+| Schema | New tables: patient_medications, patient_allergies, medication_list_reviews, medication_classes, medication_class_terms, safety_flag_class_links. |
+| Chart | New Medications & Allergies tab; safety card shows flags derived from the medication list. |
+| Admin | /admin/medications: drug classes, names with citation-gated sign-off, flag links. |
+| Safety | `evaluate()` counts a medication-derived "yes" (medication list wins over a manual "No"). |
