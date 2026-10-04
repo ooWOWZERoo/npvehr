@@ -5204,3 +5204,35 @@ Unit tests (`tests/test_recall_import.py`: normalisers, csv/xls parity, mapping,
 | Chart | Recalls tab lists a patient's recalls (replaces the placeholder). |
 | Dependencies | xlrd (reads .xls). |
 
+
+## 114. ROS Catalog Bulk Import (v2.87)
+
+### 114.1 Request
+
+From the to-do list: load ROS prompts and their ICD-10 / CPT rules from a spreadsheet instead of one at a time, so the coder/compliance reviewer (ROS stage 1) can work from a sheet. Reuses the recall import's stage -> preview -> confirm -> undo shape and its file reader.
+
+### 114.2 Behaviour
+
+* **Where**: `/admin/ros/import`, reached from a "Bulk import" button on the ROS catalog (System and Practice Administrators; the read-only auditor can still export). Template download and a full-catalog **export** (same layout plus Reviewed/Active columns) are on that page, so a reviewer can round-trip a spreadsheet.
+* **Layout**: one row per rule. Columns found by header name: Body System*, Prompt*, ICD-10, ICD-10 Family, CPT, Note, Source. ICD-10 and CPT go together (one without the other is skipped); a row with neither just adds the prompt. A Source value is kept inside the note as "Source (not yet verified): ...".
+* **Everything lands Unreviewed.** An import never sets `reviewed`, never records a citation, never records a reviewer; sign-off stays a deliberate act in the catalog.
+* **Add-only and idempotent**: prompts match on body system + prompt text (case-insensitive) and are never changed (an inactive prompt stays inactive); rules match on prompt + ICD-10 + CPT and are skipped if present. Re-running a file adds nothing. Repeated rows in the file are merged.
+* **Preview** shows new prompts, new rules, skipped rows with the row number and reason (unknown body system, empty/long prompt, half a rule, bad ICD-10/CPT shape), and a note when a CPT code isn't in the app's CPT list (imported anyway). Nothing is saved until Import now. The upload is held on the batch row only until imported or discarded.
+* **Undo** removes the rules the batch added that are still unreviewed, then prompts it added that have no rules left and no recorded exam answers. Reviewed rules and prompts in use are kept and counted.
+* Every created prompt and rule is written to the field-change audit; exported cells that start with `= + - @` are prefixed with an apostrophe (and unwrapped again on re-import).
+
+### 114.3 Schema and limits
+
+One new table, `data_import_batch_records` (batch, table name, record id) so undo knows exactly what a batch created. Batches reuse `data_import_batches` with `kind = 'ros_catalog'` (its patient-named counters hold prompts/rules for these batches). .xlsx is not read (save as .xls or .csv), 4 MB cap. No patient data is involved, so no test-data attestation is asked for.
+
+### 114.4 Verified
+
+Unit tests (`tests/test_ros_import.py`: plan counts and skip reasons, Unreviewed landing with note/source/audit, idempotency, existing prompts untouched, undo sparing reviewed/used items, export round-trip and formula guard, header errors) and an end-to-end test (preview, import, Unreviewed in the catalog, export download, re-upload adds nothing, undo). Full suite green (145 tests).
+
+**Version 2.87 change log (relative to v2.86):**
+
+| Area | Change |
+| --- | --- |
+| Schema | New table: data_import_batch_records. |
+| Admin | /admin/ros/import: upload, preview, import, undo, template and catalog export (ROS catalog editors). |
+| Catalog | "Bulk import" and "Export CSV" buttons on /admin/ros. |

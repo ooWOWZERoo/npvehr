@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}ROS Import #{{ batch.id }} &mdash; Admin{% endblock %}
+{% block content %}
+<div class="page-header"><div><span class="page-eyebrow">ROS bulk import</span><h1>Import #{{ batch.id }}{% if batch.file_name %} <span class="muted" style="font-size:1rem">{{ batch.file_name }}</span>{% endif %}</h1></div>
+  <a href="/admin/ros/import" class="btn btn-secondary">All imports</a></div>
+{% if error %}<div class="alert alert-error" style="margin-bottom:var(--space-4)">{{ error }}</div>{% endif %}
+{% if plan %}
+<div class="stats-grid">
+  <div class="stat-tile"><div class="stat-tile-label">Rows in file</div><div class="stat-tile-value">{{ plan.rows_total }}</div></div>
+  <div class="stat-tile"><div class="stat-tile-label">New prompts</div><div class="stat-tile-value">{{ plan.new_items|length }}</div></div>
+  <div class="stat-tile"><div class="stat-tile-label">New rules</div><div class="stat-tile-value">{{ plan.new_rules }}</div><div class="stat-tile-note">all land Unreviewed</div></div>
+  <div class="stat-tile"><div class="stat-tile-label">Skipped rows</div><div class="stat-tile-value">{{ plan.skipped|length }}</div></div>
+</div>
+{% if plan.skipped %}
+<div class="card" style="margin-bottom:1rem"><h3>Skipped rows ({{ plan.skipped|length }})</h3>
+  <ul style="margin:0;padding-left:1.2rem">{% for row, reason in plan.skipped[:50] %}<li>Row {{ row }} &mdash; {{ reason }}</li>{% endfor %}{% if plan.skipped|length > 50 %}<li class="muted">&hellip; and {{ plan.skipped|length - 50 }} more</li>{% endif %}</ul>
+</div>
+{% endif %}
+{% if plan.summary_lines %}
+<div class="card" style="margin-bottom:1rem"><h3>Notes</h3><ul style="margin:0;padding-left:1.2rem">{% for l in plan.summary_lines %}<li>{{ l }}</li>{% endfor %}</ul></div>
+{% endif %}
+<div class="card form-card"><h3>Import</h3>
+  <p>This adds {{ plan.new_items|length }} prompts and {{ plan.new_rules }} rules to the catalog. None are reviewed; nothing already in the catalog changes. It can be undone afterwards.</p>
+  <form method="post" action="/admin/ros/import/{{ batch.id }}/confirm"><button type="submit" class="btn btn-primary"{% if not plan.new_items and not plan.new_rules %} disabled{% endif %}>Import now</button></form>
+  <form method="post" action="/admin/ros/import/{{ batch.id }}/discard" style="margin-top:var(--space-3)"><button type="submit" class="btn btn-secondary btn-sm">Discard this upload</button></form>
+</div>
+{% else %}
+<div class="stats-grid">
+  <div class="stat-tile"><div class="stat-tile-label">Status</div><div class="stat-tile-value" style="font-size:1.6rem">{{ batch.status|title }}</div></div>
+  <div class="stat-tile"><div class="stat-tile-label">Prompts added</div><div class="stat-tile-value">{{ batch.patients_created }}</div></div>
+  <div class="stat-tile"><div class="stat-tile-label">Rules added</div><div class="stat-tile-value">{{ batch.recalls_created }}</div></div>
+</div>
+<div class="card">
+  <dl class="dl-grid">
+    <dt>Uploaded</dt><dd>{{ batch.created_at.strftime('%m/%d/%Y %I:%M %p') }}</dd>
+    {% if batch.imported_at %}<dt>Imported</dt><dd>{{ batch.imported_at.strftime('%m/%d/%Y %I:%M %p') }}</dd>{% endif %}
+    <dt>Rows</dt><dd>{{ batch.rows_total }} ({{ batch.rows_skipped }} skipped)</dd>
+  </dl>
+  {% if batch.summary_text %}<h4>Notes</h4><ul style="margin:0;padding-left:1.2rem">{% for l in batch.summary_text.split('\n') %}<li>{{ l }}</li>{% endfor %}</ul>{% endif %}
+  {% if batch.status == 'imported' %}
+  <form method="post" action="/admin/ros/import/{{ batch.id }}/undo" style="margin-top:var(--space-4)" onsubmit="return confirm('Remove the rules and prompts this import added? Rules that have since been reviewed, and prompts that are in use, are kept.');">
+    <button type="submit" class="btn btn-secondary">Undo this import</button>
+    <p class="muted" style="font-size:0.8rem;margin-top:0.5rem">Removes the rules this import added that are still unreviewed, then any prompts it added that are left with no rules and no recorded answers.</p>
+  </form>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

@@ -4324,3 +4324,55 @@ def test_design_system_components_and_link_contrast_in_both_themes(logged_in_pag
     dark = page.evaluate(probe)
     assert dark["sectionBg"] != light["sectionBg"], "section surface must follow the theme"
     assert dark["linkContrast"] >= 4.5, f"dark link contrast {dark['linkContrast']:.2f}"
+
+
+def test_ros_bulk_import_preview_unreviewed_landing_export_and_undo(logged_in_page, live_server):
+    """ROS bulk import (fabricated sample file): the preview counts new prompts/rules and lists skipped rows with reasons, the
+    import adds them to the catalog as Unreviewed (never reviewed), re-uploading the same file adds nothing, the export
+    downloads in the import layout, and Undo removes what the import added."""
+    from pathlib import Path
+    page = logged_in_page
+    page.goto(live_server + "/admin/ros")
+    page.locator("a", has_text="Bulk import").click()
+    page.wait_for_url(re.compile(r"/admin/ros/import$"))
+    page.set_input_files('input[type="file"]', str(Path(__file__).parent / "fixtures" / "ros_import_sample.csv"))
+    page.locator("button", has_text="Upload & preview").click()
+    page.wait_for_url(re.compile(r"/admin/ros/import/\d+$"))
+    tiles = page.locator(".stat-tile").all_inner_texts()
+    assert any("NEW PROMPTS" in t.upper() and "4" in t for t in tiles) and any("NEW RULES" in t.upper() and "3" in t for t in tiles)
+    body = page.locator("body").inner_text()
+    assert "Skipped rows (3)" in body and "13 ROS systems" in body and "both an ICD-10 and a CPT" in body
+    page.locator("button", has_text="Import now").click()
+    page.wait_for_load_state()
+    assert "Imported" in page.locator("body").inner_text() and page.locator("button", has_text="Undo this import").count() == 1
+    batch_url = page.url
+
+    page.goto(live_server + "/admin/ros")
+    row = page.locator("tr", has_text="Sample thyroid history")
+    assert row.count() == 1 and "2" in row.inner_text() and "0 reviewed" in row.inner_text()
+    row.locator("a", has_text="Rules").click()
+    page.wait_for_load_state()
+    assert "Source (not yet verified): Sample LCD" in page.locator("body").inner_text()
+    assert page.locator('button:has-text("Mark reviewed")').count() >= 2           # nothing was signed off by the import
+
+    with page.expect_download() as dl:
+        page.evaluate(
+            "() => { const a = document.createElement('a'); a.href = '/admin/ros/import/export.csv'; a.download = ''; document.body.appendChild(a); a.click(); }")
+    assert dl.value.suggested_filename == "ros_catalog.csv"
+
+    # Same file again: nothing new, and the Import button is disabled.
+    page.goto(live_server + "/admin/ros/import")
+    page.set_input_files('input[type="file"]', str(Path(__file__).parent / "fixtures" / "ros_import_sample.csv"))
+    page.locator("button", has_text="Upload & preview").click()
+    page.wait_for_url(re.compile(r"/admin/ros/import/\d+$"))
+    assert page.locator("button", has_text="Import now").is_disabled()
+    page.locator("button", has_text="Discard this upload").click()
+    page.wait_for_url(re.compile(r"/admin/ros/import$"))
+
+    page.goto(batch_url)
+    page.once("dialog", lambda d: d.accept())
+    page.locator("button", has_text="Undo this import").click()
+    page.wait_for_load_state()
+    assert "Undone" in page.locator("body").inner_text()
+    page.goto(live_server + "/admin/ros")
+    assert page.locator("tr", has_text="Sample thyroid history").count() == 0

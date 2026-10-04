@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}ROS Bulk Import &mdash; Admin{% endblock %}
+{% block content %}
+<div class="page-header"><div><span class="page-eyebrow">Administration</span><h1>Bulk Import: ROS Prompts &amp; Rules</h1>
+  <p class="page-lede">Load ROS prompts and their ICD-10 / CPT rules from a spreadsheet (.csv or .xls). You'll see a preview before anything is saved.</p></div>
+  <a href="/admin/ros" class="btn btn-secondary">ROS Catalog</a></div>
+<div class="alert alert-info" style="margin-bottom:var(--space-4)">
+  <strong>Everything imports as Unreviewed.</strong> An import never marks a rule reviewed or records a citation &mdash; a reviewer still signs each rule off in the catalog. Existing prompts and rules are never changed; the import only adds.
+</div>
+{% if error %}<div class="alert alert-error" style="margin-bottom:var(--space-4)">{{ error }}</div>{% endif %}
+<div class="card form-card"><h3>Upload a file</h3>
+  <form method="post" action="/admin/ros/import/upload" enctype="multipart/form-data">
+    <div class="form-group"><label>Spreadsheet (.csv or .xls, up to {{ max_mb }} MB) <input type="file" name="file" accept=".csv,.xls" required></label></div>
+    <button type="submit" class="btn btn-primary">Upload &amp; preview</button>
+  </form>
+  <p style="font-size:0.8rem;color:var(--ink-muted);margin-top:0.75rem">One row per rule. Columns (matched by name, any order): {{ columns|join(', ') }}. A row with a Body System and Prompt but no codes just adds the prompt; ICD-10 and CPT go together.
+  <a href="/admin/ros/import/template.csv">Download the template</a> &middot; <a href="/admin/ros/import/export.csv">Export the current catalog</a> (same layout, plus review status).</p>
+</div>
+<div class="card" style="margin-top:1rem"><h3>Recent imports</h3>
+  <div class="table-responsive"><table><thead><tr><th>#</th><th>File</th><th>When</th><th>Status</th><th>Added</th><th></th></tr></thead><tbody>
+  {% for b in batches %}
+    <tr><td>{{ b.id }}</td><td>{{ b.file_name or '—' }}</td><td>{{ b.created_at.strftime('%m/%d/%Y %I:%M %p') }}</td>
+      <td><span class="badge {{ 'badge-completed' if b.status == 'imported' else 'badge-cancelled' }}">{{ b.status|title }}</span></td>
+      <td>{{ b.patients_created }} prompts &middot; {{ b.recalls_created }} rules</td>
+      <td><a href="/admin/ros/import/{{ b.id }}" class="btn btn-sm btn-secondary">{{ 'Preview' if b.status == 'staged' else 'Details' }}</a></td></tr>
+  {% else %}<tr><td colspan="6"><div class="empty-state" style="border:0"><strong>No imports yet</strong>Upload a spreadsheet above.</div></td></tr>
+  {% endfor %}
+  </tbody></table></div>
+</div>
+{% endblock %}

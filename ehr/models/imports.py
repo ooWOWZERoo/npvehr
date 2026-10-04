@@ -68,3 +68,14 @@ class PatientRecall(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     __table_args__ = (UniqueConstraint("patient_id", "recall_type", "due_date", name="uq_patient_recall"),
                       Index("ix_patient_recalls_due", "due_date"))
+
+
+class DataImportBatchRecord(Base):
+    """Rows a non-patient import batch CREATED (e.g. ROS prompts/rules), by table name and id, so the batch can be
+    undone without touching anything that existed before or that has since been reviewed or used."""
+    __tablename__ = "data_import_batch_records"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    batch_id: Mapped[int] = mapped_column(ForeignKey("data_import_batches.id", ondelete="CASCADE"))
+    record_table: Mapped[str] = mapped_column(String(60))
+    record_id: Mapped[int] = mapped_column()
+    __table_args__ = (Index("ix_import_batch_records_batch", "batch_id", "record_table"),)

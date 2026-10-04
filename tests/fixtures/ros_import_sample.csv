@@ -1,0 +1,10 @@
+Body System,Prompt,ICD-10,ICD-10 Family,CPT,Note,Source
+Endocrine,Sample thyroid history,E05.90,E05,92250,Sample note for testing only,Sample LCD
+endocrine,sample thyroid history,E05.90,E05,92250,Repeated row,
+Endocrine,Sample thyroid history,E05.90,E05,92134,Second test on same prompt,
+Ocular,Sample prompt with no rule,,,,,
+Cardiovascular,Sample hypertension history,I10,I10,92250,,
+Nonsense System,Sample bad system,I10,,92250,,
+Ocular,Sample half rule,H40.9,,,,
+Ocular,Sample bad cpt,H40.9,,ABC,,
+Endocrine,=Sample formula prompt,,,,,

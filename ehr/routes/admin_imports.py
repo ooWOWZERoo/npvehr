@@ -32,7 +32,7 @@ def _purge_stale(db: Session) -> None:
 
 
 def _index(request, db, error=None, status_code=200):
-    batches = db.query(DataImportBatch).order_by(DataImportBatch.id.desc()).limit(20).all()
+    batches = db.query(DataImportBatch).filter(DataImportBatch.kind == "recall_report").order_by(DataImportBatch.id.desc()).limit(20).all()
     return templates.TemplateResponse(request, "admin/imports/index.html",
         {"batches": batches, "error": error, "max_mb": ri.MAX_FILE_BYTES // 1_000_000}, status_code=status_code)
 
@@ -70,6 +70,8 @@ def batch_detail(request: Request, batch_id: int, db: Session = Depends(get_db))
     batch = db.get(DataImportBatch, batch_id)
     if not batch:
         return HTMLResponse("Not found", status_code=404)
+    if batch.kind == "ros_catalog":
+        return RedirectResponse(f"/admin/ros/import/{batch_id}", status_code=303)
     ctx = {"batch": batch, "error": request.query_params.get("error"), "plan": None, "skipped_by_reason": {}}
     if batch.status == "staged" and batch.file_bytes:
         try:
