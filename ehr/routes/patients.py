@@ -105,26 +105,6 @@ def list_patients(request: Request, q: str = "",
     ctx.update(pg.pagination_context(request, page, total, total_pages))
     return templates.TemplateResponse(request, "patients/list.html", ctx)
 
-@router.get("/merge", response_class=HTMLResponse)
-def merge_patient_stub(request: Request):
-    """Placeholder for duplicate-patient detection/merge (competitive review item).
-    Not functional -- describes the eventual search/compare/merge workflow."""
-    return templates.TemplateResponse(request, "placeholder.html", {
-        "title": "Merge Patient",
-        "icon": "&#128101;",
-        "description": ("Merge Patient will help staff find and resolve duplicate patient records -- "
-            "for example when the same person was registered twice under slightly different names, "
-            "or with a typo'd date of birth. It will let you search for a suspected duplicate, review "
-            "both records side by side, and combine them into one."),
-        "bullets": [
-            "A search screen to find likely duplicate patients by name, DOB, or phone.",
-            "A side-by-side comparison view highlighting conflicting fields.",
-            "A guided merge that consolidates appointments, exams, prescriptions, and history onto the surviving record.",
-            "An audit trail recording which records were merged, when, and by whom.",
-        ],
-    })
-
-
 @router.get("/search", response_class=JSONResponse)
 def search_patients_json(request: Request, q: str = "", db: Session = Depends(get_db)):
     """Lightweight JSON search backing the top-bar quick patient switcher's

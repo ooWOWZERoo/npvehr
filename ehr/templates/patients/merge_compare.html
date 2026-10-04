@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Compare Patients &mdash; New Path Vision EHR{% endblock %}
+{% block content %}
+<div class="page-header"><div><span class="page-eyebrow">Merge Patient</span><h1>Compare and merge</h1>
+  <p class="page-lede">The chart you keep stays; the other is merged into it and removed. Everything linked to it (appointments, exams, prescriptions, medications, ...) moves to the kept chart.</p></div>
+  <a href="/patients/merge" class="btn btn-secondary">Back</a></div>
+{% if error %}<div class="alert alert-error" style="margin-bottom:var(--space-4)">{{ error }}</div>{% endif %}
+<div class="form-row cols-2" id="mergeSides">
+  <div class="card" id="keepCard" style="border-left:5px solid var(--primary)"><span class="page-eyebrow">Keep</span><h3 style="margin:2px 0">{{ keep.last_name }}, {{ keep.first_name }}</h3>
+    <p class="muted" style="margin:0">Patient #{{ keep.id }} &middot; DOB {{ keep.date_of_birth or '—' }}{% if keep.mrn %} &middot; MRN {{ keep.mrn }}{% endif %} &middot; <a href="/patients/{{ keep.id }}" target="_blank" rel="noopener">open chart</a></p></div>
+  <div class="card" id="dupCard" style="border-left:5px solid var(--danger-text)"><span class="page-eyebrow">Merge in, then remove</span><h3 style="margin:2px 0">{{ dup.last_name }}, {{ dup.first_name }}</h3>
+    <p class="muted" style="margin:0">Patient #{{ dup.id }} &middot; DOB {{ dup.date_of_birth or '—' }}{% if dup.mrn %} &middot; MRN {{ dup.mrn }}{% endif %} &middot; <a href="/patients/{{ dup.id }}" target="_blank" rel="noopener">open chart</a></p></div>
+</div>
+<p><a class="btn btn-sm btn-secondary" href="/patients/merge/compare?p={{ keep.id }}&p={{ dup.id }}&keep={{ dup.id }}">Swap: keep {{ dup.last_name }}, {{ dup.first_name }} instead</a></p>
+
+<div class="card" style="margin-top:1rem"><h3>What will move</h3>
+  <div class="table-responsive"><table id="mergePreview"><thead><tr><th>Records</th><th>Kept chart has</th><th>Duplicate has</th><th>Set aside</th></tr></thead><tbody>
+  {% for r in preview %}<tr><td>{{ r.label }}</td><td>{{ r.keep }}</td><td>{{ r.dup }}</td>
+    <td>{% if r.aside %}{{ r.aside }} <span class="muted" style="font-size:0.78rem">{% if r.table in ('data_import_batch_patients', 'patient_portal_login_tokens', 'patient_portal_sessions') %}not transferred{% else %}the kept chart already has this{% endif %}</span>{% else %}&mdash;{% endif %}</td></tr>
+  {% else %}<tr><td colspan="4"><div class="empty-state" style="border:0"><strong>No linked records on either chart</strong></div></td></tr>{% endfor %}
+  </tbody></table></div>
+  <p class="muted" style="font-size:0.8rem;margin:var(--space-3) 0 0">Rows set aside are stored with the merge record and come back if you undo it. Signed exams move as they are, signature intact.</p>
+</div>
+
+<form method="post" action="/patients/merge" class="card form-card" style="margin-top:1rem" id="mergeForm">
+  <input type="hidden" name="keep_id" value="{{ keep.id }}"><input type="hidden" name="dup_id" value="{{ dup.id }}">
+  <h3>Demographics</h3>
+  <p class="muted" style="font-size:0.85rem">Where the charts differ, choose what the kept chart should have. Free-text clinical fields can be combined so nothing is lost.</p>
+  <div class="table-responsive"><table id="fieldTable"><thead><tr><th>Field</th><th>Kept chart</th><th>Duplicate</th><th>Result</th></tr></thead><tbody>
+  {% for f in fields %}{% if not f.same %}
+    <tr><td>{{ f.label }}</td><td style="white-space:pre-wrap">{{ f.keep or '—' }}</td><td style="white-space:pre-wrap">{{ f.dup or '—' }}</td>
+      <td><select name="field_{{ f.name }}" aria-label="{{ f.label }}"><option value="keep" {{ 'selected' if f.default == 'keep' }}>Keep the kept chart's</option><option value="dup" {{ 'selected' if f.default == 'dup' }}>Use the duplicate's</option>{% if f.can_combine %}<option value="both" {{ 'selected' if f.default == 'both' }}>Combine both</option>{% endif %}</select></td></tr>
+  {% endif %}{% endfor %}
+  </tbody></table></div>
+  {% if not fields|rejectattr('same')|list %}<p class="muted">The two charts have identical demographics.</p>{% endif %}
+  {% if balance_note %}<p class="muted" style="font-size:0.82rem">Balance due: the two balances are added together.</p>{% endif %}
+  {% if optin_note %}<p class="muted" style="font-size:0.82rem">Text and email reminders stay on only if <em>both</em> charts had them on.</p>{% endif %}
+  <h3 style="margin-top:var(--space-5)">Confirm</h3>
+  <div class="form-row cols-2">
+    <div class="form-group"><label>Reason* <input name="reason" required minlength="5" maxlength="500" placeholder="e.g. Same patient registered twice"></label></div>
+    <div class="form-group"><label>Type MERGE to confirm* <input name="confirm" required autocomplete="off" placeholder="MERGE"></label></div>
+  </div>
+  <button type="submit" class="btn btn-primary">Merge {{ dup.last_name }}, {{ dup.first_name }} into {{ keep.last_name }}, {{ keep.first_name }}</button>
+</form>
+{% endblock %}

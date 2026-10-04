@@ -4755,3 +4755,85 @@ def test_recall_worklist_log_contact_close_dismiss_reopen_and_roles(logged_in_pa
     page.wait_for_load_state()
     page.goto(live_server + "/recalls?q=Samplesmith")
     assert page.locator("#recallTable tbody tr").count() == 1 and "No recalls match" in page.locator("#recallTable").inner_text()
+
+
+def test_merge_duplicate_patients_compare_confirm_merge_and_undo(logged_in_page, live_server):
+    """Merge Patient (replaces the placeholder): two duplicate charts are found, compared side by side with a preview of what moves,
+    the merge needs a reason and the word MERGE, everything (a medication here) lands on the kept chart and the duplicate is
+    gone, the history shows it, and Undo brings the duplicate and its records back. Only administrators can use it."""
+    page = logged_in_page
+
+    def make(phone=""):
+        page.goto(live_server + "/patients/new")
+        page.fill('input[name="first_name"]', "Zed")
+        page.fill('input[name="last_name"]', "Mergetest")
+        page.fill('input[name="date_of_birth"]', "1960-04-04")
+        if phone:
+            page.fill('input[name="phone"]', phone)
+        page.locator('button[type="submit"]', has_text="Create Patient").click()
+        page.wait_for_url(re.compile(r"/patients/\d+$"))
+        return page.url.rstrip("/").split("/")[-1]
+
+    keep_id = make()
+    dup_id = make("(610) 555-0177")
+    page.goto(f"{live_server}/patients/{dup_id}/medications")
+    page.fill('#medsSection input[name="name"]', "Sample merge medication")
+    page.locator('#medsSection button[type="submit"]', has_text="Add medication").click()
+    page.wait_for_load_state()
+
+    page.goto(live_server + "/patients/merge")
+    assert "Same name and date of birth" in page.locator("#dupTable").inner_text()
+    row = page.locator("#dupTable tr", has_text="Mergetest").first
+    row.locator("a", has_text="Compare").click()
+    page.wait_for_load_state()
+    # The chart with more records is kept by default; swap so the empty one is kept, then check the preview and the fields.
+    page.locator("a", has_text="Swap").click()
+    page.wait_for_load_state()
+    assert f"Patient #{keep_id}" in page.locator("#keepCard").inner_text() and f"Patient #{dup_id}" in page.locator("#dupCard").inner_text()
+    preview = page.locator("#mergePreview").inner_text()
+    assert "Medications" in preview
+    phone_row = page.locator("#fieldTable tr", has_text="Phone")
+    assert "(610) 555-0177" in phone_row.inner_text() and phone_row.locator("select").input_value() == "dup"   # blank on the kept chart: filled
+
+    # A reason and the word MERGE are required, enforced on the server.
+    page.fill('input[name="reason"]', "Same person registered twice (sample)")
+    page.evaluate("document.querySelector('input[name=confirm]').required = false")
+    page.fill('input[name="confirm"]', "merge")
+    page.locator("#mergeForm button[type=submit]").click()
+    page.wait_for_load_state()
+    assert "Type MERGE to confirm" in page.locator(".alert-error").inner_text()
+    assert page.locator("#mergeForm").count() == 1                                              # still not merged
+    page.fill('input[name="reason"]', "Same person registered twice (sample)")
+    page.fill('input[name="confirm"]', "MERGE")
+    page.locator("#mergeForm button[type=submit]").click()
+    page.wait_for_url(re.compile(r"/patients/merge\?done="))
+    assert "Mergetest" in page.locator("#mergeHistory").inner_text() and "1 moved" in page.locator("#mergeHistory").inner_text()
+
+    # The kept chart has the medication and the phone; the duplicate chart is gone.
+    page.goto(f"{live_server}/patients/{keep_id}/medications")
+    assert "Sample merge medication" in page.locator("#medsSection").inner_text()
+    assert page.goto(f"{live_server}/patients/{dup_id}").status == 404
+    page.goto(f"{live_server}/patients/{keep_id}/demographics")
+    assert "(610) 555-0177" in page.locator("body").inner_text()
+
+    # Undo brings the duplicate and its medication back.
+    page.goto(live_server + "/patients/merge")
+    page.once("dialog", lambda d: d.accept())
+    page.locator("#mergeHistory tr", has_text="Mergetest").first.locator("button", has_text="Undo").click()
+    page.wait_for_load_state()
+    assert "undone" in page.locator("#mergeHistory").inner_text().lower()
+    assert page.goto(f"{live_server}/patients/{dup_id}/medications").status == 200
+    assert "Sample merge medication" in page.locator("#medsSection").inner_text()
+    page.goto(f"{live_server}/patients/{keep_id}/medications")
+    assert "Sample merge medication" not in page.locator("#medsSection").inner_text()
+
+    # Front desk can't use it.
+    other = page.context.browser.new_context()
+    fd = other.new_page()
+    fd.goto(live_server + "/login")
+    fd.fill("#email", "frontdesk@newpathvision.example")
+    fd.fill("#password", "ChangeMe123!")
+    fd.click("button[type=submit]")
+    fd.wait_for_url(f"{live_server}/")
+    assert fd.goto(live_server + "/patients/merge").status == 403
+    other.close()

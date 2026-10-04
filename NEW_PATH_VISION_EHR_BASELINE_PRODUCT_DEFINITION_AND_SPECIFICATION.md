@@ -5430,3 +5430,31 @@ Unit tests (`tests/test_recalls.py`: windows, status, type and search filters an
 | Scheduling | Recall Worklist at /recalls with filters, context badges, log contact, mark satisfied, dismiss, reopen. |
 | Chart | Recalls tab shows each recall's status and links to the worklist. |
 | Recall import | Undo also removes worklist history for removed recalls. |
+
+## 121. Merge Patient (v2.94)
+
+### 121.1 Request
+
+Replace the "Merge Patient" placeholder (§27.4) with a working way to combine two charts for the same person.
+
+### 121.2 What was built
+
+* **`/patients/merge`** (System Administrator and Practice Administrator only; it replaces the placeholder page in the sidebar). It lists **likely duplicates** (same name and date of birth; same last name and date of birth with first names that start alike, e.g. Pat / Patricia; same phone and date of birth) and lets staff **search** for any two charts by name, phone or MRN. A merge history with an **Undo** button is at the bottom.
+* **Compare page**: the two charts side by side, which to keep (the chart with more linked records is the default; one click swaps), a **preview table of every kind of record** each chart has and how many of the duplicate's will move or be set aside, and a field-by-field choice where the demographics differ. Free-text clinical fields (allergies note, medical, ocular and family histories, social-history notes) can be **combined** so nothing is lost; blanks on the kept chart are filled from the duplicate; the two **balances are added**; text and email reminders stay on **only if both charts had them on**; an MRN can be taken from the duplicate.
+* **The merge** needs a reason and the word MERGE typed (both enforced on the server) and runs in one transaction. It finds **every table with a link to a patient from the database metadata** (currently 20, including appointments, exams, prescriptions, problems, documents, insurance, waitlist, orders, medications, allergies, medication reviews, safety flags, recalls, primary-care link and PCP letters), so a table added later is covered without edits. Signed exams move with their signatures intact. Where a uniqueness rule would be broken (the kept chart already has that safety flag, primary-care link or recall) **the kept chart's row wins** and the duplicate's is **set aside**; import-batch membership and portal login links/sessions are set aside too (so undoing an import can't delete the kept chart, and no session transfers). If any record could not be moved, nothing changes. The empty duplicate row is then removed.
+* **Undo** recreates the duplicate with its **original id** and fields, restores the kept chart's fields, moves each record back that is still where the merge left it, and restores the set-aside rows. Records deleted or moved elsewhere since are skipped and counted; it refuses if the kept chart no longer exists. A merge is recorded in `patient_merge_events` (who, when, why, counts, and the details needed to undo), in the field-change audit, and the kept chart's changed fields are audited.
+
+### 121.3 Schema and limits
+
+One new table, `patient_merge_events`; no existing table changed (the duplicate is removed rather than flagged, so no list, search or dropdown needed changing). The event stores a snapshot of the duplicate's demographics and the ids of what moved, which is chart-sensitive data; the app remains for test or de-identified data only. Limits: the field-edit audit of the duplicate's old record stays under its old id; the duplicate's photo file is only carried over if the kept chart has none; detection is by simple matching rules, not fuzzy scoring (the search covers anything it misses); merging more than two charts is done two at a time; an undone merge can't be redone from the history (merge again).
+
+### 121.4 Verified
+
+Unit tests (`tests/test_patient_merge.py`: the linked tables found from the metadata, a merge moving records with signed-exam integrity, collisions set aside and import membership not transferred, demographics rules (blank fill, combined text, balances added, opt-ins ANDed, explicit choices and MRN transfer), undo restoring the duplicate, its fields, rows and set-aside rows, undo skipping rows deleted since, guards and no change on refusal, duplicate detection and the preview) and an end-to-end test (duplicate found, compare with swap, preview and field choices, MERGE enforced on the server, the medication and phone land on the kept chart and the duplicate chart is gone, history, undo brings both back, front desk refused). Full suite green.
+
+**Version 2.94 change log (relative to v2.93):**
+
+| Area | Change |
+| --- | --- |
+| Schema | New table: patient_merge_events. |
+| Patients | Merge Patient is real: duplicate detection and search, compare with preview, field choices, confirmed merge, history and undo (administrators). |

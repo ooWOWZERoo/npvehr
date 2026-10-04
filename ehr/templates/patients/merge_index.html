@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Merge Patient &mdash; New Path Vision EHR{% endblock %}
+{% block content %}
+<div class="page-header"><div><span class="page-eyebrow">Patients</span><h1>Merge Patient</h1>
+  <p class="page-lede">Find a duplicate chart, compare it with the original, and combine them into one. You see exactly what moves before anything changes, and a merge can be undone.</p></div></div>
+{% if error %}<div class="alert alert-error" style="margin-bottom:var(--space-4)">{{ error }}</div>{% endif %}
+{% if done %}<div class="alert alert-info" style="margin-bottom:var(--space-4)">Merged. Everything from the duplicate chart is now on the kept patient. You can undo it below.</div>{% endif %}
+
+<div class="card"><h3>Likely duplicates</h3>
+  {% if candidates %}
+  <div class="table-responsive"><table id="dupTable"><thead><tr><th>Why</th><th>Charts</th><th></th></tr></thead><tbody>
+  {% for g in candidates %}
+    <tr><td>{{ g.reason }}</td>
+      <td>{% for p in g.patients %}<div><a href="/patients/{{ p.id }}">{{ p.last_name }}, {{ p.first_name }}</a> <span class="muted">#{{ p.id }} &middot; DOB {{ p.date_of_birth or '—' }}{% if p.mrn %} &middot; MRN {{ p.mrn }}{% endif %}</span></div>{% endfor %}</td>
+      <td>{% if g.patients|length == 2 %}<a class="btn btn-sm btn-primary" href="/patients/merge/compare?p={{ g.patients[0].id }}&p={{ g.patients[1].id }}">Compare</a>
+        {% else %}<span class="muted" style="font-size:0.8rem">More than two: pick two below</span>{% endif %}</td></tr>
+  {% endfor %}
+  </tbody></table></div>
+  {% else %}<div class="empty-state" style="border:0"><strong>No obvious duplicates</strong>Matches on name and date of birth, or on phone and date of birth, appear here. You can still search for two charts below.</div>{% endif %}
+</div>
+
+<div class="card" style="margin-top:1rem"><h3>Find two charts to compare</h3>
+  <form method="get" style="display:flex;gap:0.5rem;align-items:end;margin-bottom:var(--space-3)">
+    <label class="fld" style="flex:1">Name, phone or MRN<input name="q" value="{{ q }}"></label>
+    <button class="btn btn-secondary" type="submit">Search</button>
+  </form>
+  {% if q %}
+  <form method="get" action="/patients/merge/compare">
+    <div class="table-responsive"><table id="searchTable"><thead><tr><th>Pick two</th><th>Patient</th><th>DOB</th><th>Phone</th><th>MRN</th></tr></thead><tbody>
+    {% for p in results %}<tr><td><input type="checkbox" name="p" value="{{ p.id }}" aria-label="Select {{ p.last_name }}, {{ p.first_name }}"></td>
+      <td><a href="/patients/{{ p.id }}">{{ p.last_name }}, {{ p.first_name }}</a> <span class="muted">#{{ p.id }}</span></td><td>{{ p.date_of_birth or '—' }}</td><td>{{ p.phone or '—' }}</td><td>{{ p.mrn or '—' }}</td></tr>
+    {% else %}<tr><td colspan="5"><div class="empty-state" style="border:0"><strong>No patients found</strong></div></td></tr>{% endfor %}
+    </tbody></table></div>
+    {% if results %}<button class="btn btn-primary" type="submit" style="margin-top:var(--space-3)">Compare the two selected</button>{% endif %}
+  </form>
+  {% endif %}
+</div>
+
+<div class="card" style="margin-top:1rem"><h3>Merge history</h3>
+  <div class="table-responsive"><table id="mergeHistory"><thead><tr><th>When</th><th>Merged chart</th><th>Into</th><th>Records</th><th>By</th><th>Reason</th><th></th></tr></thead><tbody>
+  {% for e in events %}
+    <tr><td>{{ e.merged_at.strftime('%m/%d/%Y %I:%M %p') }}</td><td>{{ e.merged_label }} <span class="muted">#{{ e.merged_patient_id }}</span></td>
+      <td><a href="/patients/{{ e.survivor_id }}">Patient #{{ e.survivor_id }}</a></td>
+      <td>{{ e.moved_total }} moved{% if e.dropped_total %}, {{ e.dropped_total }} set aside{% endif %}</td><td>{{ users.get(e.merged_by_user_id, '—') }}</td><td>{{ e.reason }}</td>
+      <td>{% if e.status == 'merged' %}<form method="post" action="/patients/merge/{{ e.id }}/undo" onsubmit="return confirm('Undo this merge? The duplicate chart is recreated and its records moved back.');"><button class="btn btn-sm btn-secondary" type="submit">Undo</button></form>
+        {% else %}<span class="badge badge-cancelled">Undone {{ e.undone_at.strftime('%m/%d/%Y') if e.undone_at }}</span>{% endif %}</td></tr>
+  {% else %}<tr><td colspan="7"><div class="empty-state" style="border:0"><strong>No merges yet</strong></div></td></tr>{% endfor %}
+  </tbody></table></div>
+</div>
+{% endblock %}

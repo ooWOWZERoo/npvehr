@@ -1,6 +1,6 @@
 # New Path Vision EHR — Master Build Backlog
 
-**Status:** Living tracking document. **Baseline as of:** spec v2.93 / research doc v2.24 (2026-09-30).
+**Status:** Living tracking document. **Baseline as of:** spec v2.94 / research doc v2.24 (2026-09-30).
 
 ## Purpose and how to use this document
 
@@ -259,4 +259,5 @@ A few `§18.2`/`§18.3` items above (record linkage, provider management, prescr
 - [x] **Decided** (v2.90, spec §117): keep both records; a ticked finding fills a *blank* summary with Yes, a **No is never overwritten** (mismatch flagged on the form and exam page), nothing is reversed, summary Yes still only opens the panel. No schema change.
 
 **In flight**
+- [x] **Merge Patient** — built v2.94 (spec §121): `/patients/merge` replaces the placeholder: duplicate detection and search, side-by-side compare with a preview of what moves, confirmed merge (reason + MERGE), history and undo; administrators only. **Still to do (optional):** fuzzy duplicate scoring; merging more than two charts at once.
 - [x] **Recall report import** (`RecallDetails.xls`) — built v2.86 (spec §113): admin upload with preview/confirm and a test-data attestation, new `patient_recalls` table shown on the Recalls tab, undo. **Still to do:** upload the file in the target environment (it holds ~2,467 patients/2,663 recalls); **Recall worklist built v2.93 (spec §120):** `/recalls` with contact log, mark satisfied/dismiss/reopen; still not built: any outbound reminders or a list export.
