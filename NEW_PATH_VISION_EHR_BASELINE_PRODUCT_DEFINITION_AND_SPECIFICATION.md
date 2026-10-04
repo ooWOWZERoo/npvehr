@@ -5366,3 +5366,35 @@ Unit tests (`tests/test_medications.py`: reviews recorded against the exam with 
 | Exam page | Shows what was reviewed at the visit. |
 | API | `GET /patients/{id}/medications/summary.json`. |
 | Schema | None. |
+
+## 119. Medication-List Import (v2.92)
+
+### 119.1 Request
+
+From the medication-list follow-ups (§115, §118): load medication lists for existing patients from a spreadsheet instead of one entry at a time. Built on the recall import's pattern (§113): staged upload, preview, test-data attestation, idempotent import, undo.
+
+### 119.2 What was built
+
+* **`/admin/medication-import`** (System Administrator only, like the recall import; sidebar "Data > Medication List Import"): upload a .csv or .xls, see a preview, confirm, optionally undo. A blank template is downloadable.
+* **Layout**: one row per medication. Columns matched by header name, any order: LastName\*, FirstName\*, DOB\*, Medication\*, Strength, Route, Eye (OD/OS/OU), Frequency, For, Start Date, Status (active/stopped), Note.
+* **Patients must already exist.** A row is matched on last name, first name and date of birth (case-insensitive). The import never creates or changes a patient. A row with no match, or matching more than one patient, is skipped and counted by reason with its row number; names are never shown.
+* **Imported medications are marked source "imported" and are NOT a review.** A list that was never reviewed stays "not yet reviewed" and a reviewed one is not marked reviewed, so a clinician still confirms each list on the chart or the exam form. The preview says so, and also counts the active medications that match no reviewed drug class (they can't trigger a safety warning until the class names are added and signed off).
+* **Add-only and idempotent**: a row matching a medication already on the patient's list (same name, strength and eye, case-insensitive) is skipped, existing entries are never changed, repeated rows in the file are merged, and re-running a file adds nothing. Odd values are tolerated and counted (an eye other than OD/OS/OU is dropped; an unreadable start date is dropped; an unrecognised status imports as active).
+* **Safeguards as the recall import**: test/de-identified-data attestation and a reason (enforced server-side), the uploaded bytes held only until the import is applied, discarded or 24 hours old, no patient identifiers or drug names in the preview notes, and every created medication written to the field-change audit.
+* **Undo** removes the medications a batch added, except any edited afterwards (kept and counted).
+
+### 119.3 Schema and limits
+
+No schema change: uses `patient_medications` (§115) and the shared import tables (a batch of kind `medication_list`; its record table remembers what was created). Limits: medications only (allergies are not imported); .xlsx is not read (save as .xls or .csv); no drug-name normalisation or lookup (names are kept as written, so matching to drug classes depends on the clinicians' reviewed names); a patient must match exactly on name and date of birth.
+
+### 119.4 Verified
+
+Unit tests (`tests/test_medication_import.py`: matching and skip reasons, ambiguous patients skipped, field mapping and "imported" source, not a review, idempotency with existing medications untouched, undo sparing edited rows, header errors and template) and an end-to-end test (preview without names, attestation enforced server-side, medications on the chart with the list still not reviewed, re-upload adds nothing, undo). Full suite green.
+
+**Version 2.92 change log (relative to v2.91):**
+
+| Area | Change |
+| --- | --- |
+| Admin | `/admin/medication-import`: upload, preview, test-data attestation, import, undo, template (System Administrator). |
+| Medication list | Imported medications are marked "imported" and never count as a review. |
+| Schema | None. |

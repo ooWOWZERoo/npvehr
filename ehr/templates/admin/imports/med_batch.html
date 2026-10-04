@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Medication Import #{{ batch.id }} &mdash; Admin{% endblock %}
+{% block content %}
+<div class="page-header"><div><span class="page-eyebrow">Medication list import</span><h1>Import #{{ batch.id }}{% if batch.file_name %} <span class="muted" style="font-size:1rem">{{ batch.file_name }}</span>{% endif %}</h1></div>
+  <a href="/admin/medication-import" class="btn btn-secondary">All imports</a></div>
+{% if error %}<div class="alert alert-error" style="margin-bottom:var(--space-4)">{{ error }}</div>{% endif %}
+{% if plan %}
+<div class="stats-grid">
+  <div class="stat-tile"><div class="stat-tile-label">Rows in file</div><div class="stat-tile-value">{{ plan.rows_total }}</div></div>
+  <div class="stat-tile"><div class="stat-tile-label">Patients matched</div><div class="stat-tile-value">{{ plan.patients_matched|length }}</div></div>
+  <div class="stat-tile"><div class="stat-tile-label">New medications</div><div class="stat-tile-value">{{ plan.drafts|length }}</div>{% if plan.already_on_file %}<div class="stat-tile-note">{{ plan.already_on_file }} already on file</div>{% endif %}</div>
+  <div class="stat-tile"><div class="stat-tile-label">Skipped rows</div><div class="stat-tile-value">{{ plan.skipped|length }}</div></div>
+</div>
+{% if plan.skipped %}
+<div class="card" style="margin-bottom:1rem"><h3>Skipped rows ({{ plan.skipped|length }})</h3>
+  {% for reason, (n, rows) in skipped_by_reason.items() %}<p><strong>{{ n }}</strong> &mdash; {{ reason }} <span class="muted">(rows {{ rows|join(', ') }}{% if n > rows|length %}, &hellip;{% endif %})</span></p>{% endfor %}
+</div>
+{% endif %}
+{% if plan.summary_lines %}
+<div class="card" style="margin-bottom:1rem"><h3>Notes</h3><ul style="margin:0;padding-left:1.2rem">{% for l in plan.summary_lines %}<li>{{ l }}</li>{% endfor %}</ul></div>
+{% endif %}
+<div class="card form-card"><h3>Import</h3>
+  <p>This adds {{ plan.drafts|length }} medications to {{ plan.patients_matched|length }} existing patients' lists. No patient is created or changed, and no list is marked reviewed. It can be undone afterwards.</p>
+  <form method="post" action="/admin/medication-import/{{ batch.id }}/confirm">
+    <div class="checkbox-row"><input type="checkbox" name="attest" id="attest" required><label for="attest"><strong>I confirm this file contains test or de-identified data only &mdash; not real patient records.</strong></label></div>
+    <div class="form-group" style="margin-top:var(--space-3)"><label>Reason / source of this data* <input name="reason" required minlength="5" maxlength="500" placeholder="e.g. Sample medication lists for demo and training"></label></div>
+    <button type="submit" class="btn btn-primary"{% if not plan.drafts %} disabled{% endif %}>Import now</button>
+  </form>
+  <form method="post" action="/admin/medication-import/{{ batch.id }}/discard" style="margin-top:var(--space-3)"><button type="submit" class="btn btn-secondary btn-sm">Discard this upload</button></form>
+</div>
+{% else %}
+<div class="stats-grid">
+  <div class="stat-tile"><div class="stat-tile-label">Status</div><div class="stat-tile-value" style="font-size:1.6rem">{{ batch.status|title }}</div></div>
+  <div class="stat-tile"><div class="stat-tile-label">Medications added</div><div class="stat-tile-value">{{ batch.recalls_created }}</div></div>
+  <div class="stat-tile"><div class="stat-tile-label">Patients</div><div class="stat-tile-value">{{ batch.patients_matched }}</div></div>
+</div>
+<div class="card">
+  <dl class="dl-grid">
+    <dt>Uploaded</dt><dd>{{ batch.created_at.strftime('%m/%d/%Y %I:%M %p') }}</dd>
+    {% if batch.imported_at %}<dt>Imported</dt><dd>{{ batch.imported_at.strftime('%m/%d/%Y %I:%M %p') }}</dd>{% endif %}
+    <dt>Rows</dt><dd>{{ batch.rows_total }} ({{ batch.rows_skipped }} skipped)</dd>
+    {% if batch.attestation_reason %}<dt>Confirmed as test data</dt><dd>{{ batch.attestation_reason }}</dd>{% endif %}
+    {% if batch.status == 'undone' %}<dt>Undone</dt><dd>{{ batch.patients_undone }} medications removed{% if batch.patients_kept_on_undo %}; {{ batch.patients_kept_on_undo }} kept because they were edited afterwards{% endif %}</dd>{% endif %}
+  </dl>
+  {% if batch.summary_text %}<h4>Notes</h4><ul style="margin:0;padding-left:1.2rem">{% for l in batch.summary_text.split('\n') %}<li>{{ l }}</li>{% endfor %}</ul>{% endif %}
+  {% if batch.status == 'imported' %}
+  <form method="post" action="/admin/medication-import/{{ batch.id }}/undo" style="margin-top:var(--space-4)" onsubmit="return confirm('Remove the medications this import added? Any that were edited afterwards are kept.');">
+    <button type="submit" class="btn btn-secondary">Undo this import</button>
+    <p class="muted" style="font-size:0.8rem;margin-top:0.5rem">Removes the medications this import added, except any that have been edited since. Nothing else is touched.</p>
+  </form>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

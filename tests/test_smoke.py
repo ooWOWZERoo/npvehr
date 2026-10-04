@@ -4417,7 +4417,7 @@ def test_medication_list_allergies_review_classes_and_derived_safety_flag(logged
     added/stopped/reviewed, a medication matches no class until the admin adds, links and signs off a drug class, and then the
     patient's safety card shows the flag as derived from the medication list (which wins over a manual 'No')."""
     page = logged_in_page
-    page.goto(live_server + "/patients/")
+    page.goto(live_server + "/patients/?last_name=Brown&first_name=Emma")   # a named patient, so test order never matters
     page.locator("table a.patient-name-cell").first.click()
     page.wait_for_load_state()
     patient_url = page.url.split("?")[0].rstrip("/")
@@ -4604,3 +4604,63 @@ def test_exam_form_medications_card_shows_lists_flags_unreviewed_and_records_rev
     page.locator('button[type="submit"]', has_text="Save Exam").click()
     page.wait_for_url(re.compile(r"/exams/\d+$"))
     assert "list updated" in page.locator("body").inner_text()
+
+
+def test_medication_list_import_preview_attestation_chart_unreviewed_and_undo(logged_in_page, live_server):
+    """Medication-list import (fabricated sample file): the preview shows counts and skipped reasons but no patient names, the
+    import needs the test-data attestation + reason (enforced server-side), medications land on the matched patients' charts
+    marked imported and the list is still NOT reviewed, re-uploading adds nothing, and Undo removes what was added."""
+    from pathlib import Path
+    fx = Path(__file__).parent / "fixtures" / "medication_import_sample.csv"
+    page = logged_in_page
+    page.goto(live_server + "/admin/medication-import")
+    page.set_input_files('input[type="file"]', str(fx))
+    page.locator("button", has_text="Upload & preview").click()
+    page.wait_for_url(re.compile(r"/admin/medication-import/\d+$"))
+    body = page.locator("body").inner_text()
+    assert "Nobody" not in body and "Nopatient" not in body and "Timolol" not in body        # counts, never names or drugs
+    tiles = page.locator(".stat-tile").all_inner_texts()
+    assert any("NEW MEDICATIONS" in t.upper() and "5" in t for t in tiles) and any("PATIENTS MATCHED" in t.upper() and "2" in t for t in tiles)
+    assert "No matching patient in the system" in body and "No medication name" in body and "unreadable date of birth" in body
+    batch_url = page.url
+
+    # Attestation and reason are required, enforced on the server even if the browser's checks are bypassed.
+    page.evaluate("document.querySelectorAll('#attest, input[name=reason]').forEach(e => { e.required = false; e.removeAttribute('minlength'); })")
+    page.fill('input[name="reason"]', "ok")
+    page.locator("button", has_text="Import now").click()
+    page.wait_for_load_state()
+    assert "Tick the confirmation and give a reason" in page.locator("body").inner_text()
+    page.check("#attest")
+    page.fill('input[name="reason"]', "Fabricated sample for automated test")
+    page.locator("button", has_text="Import now").click()
+    page.wait_for_load_state()
+    body = page.locator("body").inner_text()
+    assert "Imported" in body and "Fabricated sample for automated test" in body and "do not count as a review" in body
+    assert page.locator("button", has_text="Undo this import").count() == 1
+
+    # On the chart: the medications are there, and the list has still not been reviewed.
+    page.goto(live_server + "/patients/?last_name=Smith&first_name=Bob")
+    page.locator("table a.patient-name-cell").first.click()
+    page.wait_for_load_state()
+    patient_url = page.url.split("?")[0].rstrip("/")
+    page.goto(patient_url + "/medications")
+    meds = page.locator("#medsSection").inner_text()
+    assert "Timolol 0.5%" in meds and "Metformin" in meds and "Medications not yet reviewed" in page.locator("body").inner_text()
+    assert "Stopped medications (1)" in meds
+
+    # Same file again: nothing new, and Import is disabled.
+    page.goto(live_server + "/admin/medication-import")
+    page.set_input_files('input[type="file"]', str(fx))
+    page.locator("button", has_text="Upload & preview").click()
+    page.wait_for_url(re.compile(r"/admin/medication-import/\d+$"))
+    assert page.locator("button", has_text="Import now").is_disabled()
+    page.locator("button", has_text="Discard this upload").click()
+    page.wait_for_url(re.compile(r"/admin/medication-import$"))
+
+    page.goto(batch_url)
+    page.once("dialog", lambda d: d.accept())
+    page.locator("button", has_text="Undo this import").click()
+    page.wait_for_load_state()
+    assert "Undone" in page.locator("body").inner_text()
+    page.goto(patient_url + "/medications")
+    assert "Timolol 0.5%" not in page.locator("#medsSection").inner_text()
