@@ -1684,6 +1684,15 @@ def migration_043_create_rx_lab_orders(conn):
     conn.execute(text("CREATE INDEX IF NOT EXISTS ix_rx_lab_orders_rx "
         "ON rx_lab_orders (rx_id)"))
 
+def migration_058_recall_status(conn):
+    """Adds the worklist status to patient_recalls (table from the v2.86 recall import; the recall_actions history table is
+    new and created by create_all()). Existing recalls start 'open'. Idempotent."""
+    if not _table_exists(conn, "patient_recalls"):
+        return  # brand-new database; create_all() builds the table with this column.
+    _add_column_if_missing(conn, "patient_recalls", "status", "VARCHAR(10) DEFAULT 'open'")
+    conn.execute(text("UPDATE patient_recalls SET status = 'open' WHERE status IS NULL"))
+
+
 # Ordered list of (id, function). Adding new migrations: append, never edit past entries.
 COLUMN_MIGRATIONS = [
     ("001_appointment_columns", migration_001_appointment_columns),
@@ -1727,6 +1736,7 @@ COLUMN_MIGRATIONS = [
     ("046_create_appointment_resource_selections", migration_046_create_appointment_resource_selections),
     ("047_vitreous_and_cd_ratio", migration_047_vitreous_and_cd_ratio),
     ("048_ros_and_social_history", migration_048_ros_and_social_history),
+    ("058_recall_status", migration_058_recall_status),
 ]
 def migration_055_seed_ros_catalog(conn):
     """Review-of-Systems decision-support catalog (ros_master / ros_icd10_test_mapping

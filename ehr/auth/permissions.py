@@ -173,3 +173,9 @@ MEDICATION_EDIT = EXAM_EDIT
 PCP_LETTER_EDIT = EXAM_EDIT
 PCP_LETTER_EXCLUDE = EXAM_SIGN
 COMM_TEMPLATE_EDIT = {SYSTEM_ADMINISTRATOR, PRACTICE_ADMINISTRATOR}
+
+
+# Recall worklist (patients due back): everyone who can see patients can see it; recording a contact or closing a recall
+# is front-desk work, so it follows who can edit a patient.
+RECALL_VIEW = ANY_STAFF
+RECALL_WORK = PATIENT_EDIT

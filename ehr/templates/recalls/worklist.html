@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Recall Worklist &mdash; New Path Vision EHR{% endblock %}
+{% block content %}
+<div class="page-header"><div><span class="page-eyebrow">Scheduling</span><h1>Recall Worklist</h1>
+  <p class="page-lede">Patients due back, most overdue first. Record who you contacted, and close a recall once the patient is seen. Informational &mdash; nothing is sent from this page.</p></div></div>
+{% if error %}<div class="alert alert-error" style="margin-bottom:var(--space-4)">{{ error }}</div>{% endif %}
+<div class="stats-grid">
+  <div class="stat-tile"><div class="stat-tile-label">Overdue</div><div class="stat-tile-value">{{ counts.overdue }}</div></div>
+  <div class="stat-tile"><div class="stat-tile-label">Due in 30 days</div><div class="stat-tile-value">{{ counts.soon }}</div></div>
+  <div class="stat-tile"><div class="stat-tile-label">All open recalls</div><div class="stat-tile-value">{{ counts.open }}</div></div>
+</div>
+<form method="get" class="card form-card" style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:end;margin-top:var(--space-4)">
+  <label class="fld">Due<select name="window">{% for k, v in windows.items() %}<option value="{{ k }}" {{ 'selected' if k == window }}>{{ v }}</option>{% endfor %}</select></label>
+  <label class="fld">Status<select name="status">{% for k, v in statuses.items() %}<option value="{{ k }}" {{ 'selected' if k == status }}>{{ v }}</option>{% endfor %}</select></label>
+  <label class="fld">Recall type<select name="rtype"><option value="">All</option>{% for t in types %}<option {{ 'selected' if t == rtype }}>{{ t }}</option>{% endfor %}</select></label>
+  <label class="fld">Name or phone<input name="q" value="{{ q }}"></label>
+  <label class="checkbox-row" style="margin:0"><input type="checkbox" name="hide_booked" value="1" {{ 'checked' if hide_booked }}> Hide patients with an appointment booked</label>
+  <button class="btn btn-secondary" type="submit">Apply</button>
+</form>
+<div class="card" style="margin-top:1rem">
+  <div class="table-responsive"><table id="recallTable"><thead><tr><th>Patient</th><th>Recall</th><th>Due</th><th>Context</th><th>Contact</th><th></th></tr></thead><tbody>
+  {% for r, p in rows %}
+    {% set c = ctx[r.id] %}{% set days = (r.due_date - today).days %}
+    <tr>
+      <td><a href="/patients/{{ p.id }}" class="patient-name-cell">{{ p.last_name }}, {{ p.first_name }}</a>
+        <div class="muted" style="font-size:0.78rem">{{ p.phone or 'no phone' }}{% if p.sms_opt_in %} &middot; texts OK{% endif %}{% if p.email_opt_in %} &middot; email OK{% endif %}</div></td>
+      <td>{{ r.recall_type }}{% if r.interval_months %} <span class="muted">({{ r.interval_months }} mo)</span>{% endif %}</td>
+      <td>{{ r.due_date.strftime('%m/%d/%Y') }}<div>
+        {% if r.status != 'open' %}<span class="badge badge-completed">{{ r.status|title }}</span>
+        {% elif days < 0 %}<span class="badge badge-cancelled">Overdue {{ -days }}d</span>
+        {% elif days == 0 %}<span class="badge badge-completed">Due today</span>
+        {% else %}<span class="badge badge-scheduled">In {{ days }}d</span>{% endif %}</div></td>
+      <td style="font-size:0.82rem">
+        {% if c.booked %}<span class="badge badge-scheduled" title="An appointment is already booked in this system">Booked {{ c.booked.strftime('%m/%d/%Y') }}</span>{% endif %}
+        {% if c.seen %}<span class="badge badge-completed" title="An exam is on file near or after the due date">Exam {{ c.seen }}</span>{% endif %}
+        {% if not c.booked and not c.seen %}<span class="muted">&mdash;</span>{% endif %}
+        {% if r.last_exam_date %}<div class="muted">Last exam (report): {{ r.last_exam_date.strftime('%m/%d/%Y') }}</div>{% elif r.never_examined %}<div class="muted">Never examined (report)</div>{% endif %}</td>
+      <td style="font-size:0.82rem">{% if c.contacts %}{{ c.contacts }}&times;, last {{ c.last_contacted.strftime('%m/%d/%Y') }}{% if c.last_method %} by {{ methods.get(c.last_method, c.last_method)|lower }}{% endif %}{% else %}<span class="muted">Not contacted</span>{% endif %}</td>
+      <td style="min-width:230px">
+        {% if can_work %}
+        {% if r.status == 'open' %}
+        <details><summary class="btn btn-sm btn-secondary" style="cursor:pointer">Log contact</summary>
+          <form method="post" action="/recalls/{{ r.id }}/contact" class="card" style="position:absolute;z-index:5;min-width:260px;margin-top:4px">
+            <input type="hidden" name="next" value="{{ self_url }}">
+            <label class="fld">How<select name="method" required><option value="">Choose&hellip;</option>{% for k, v in methods.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></label>
+            <label class="fld">Note<input name="note" maxlength="255" placeholder="e.g. left voicemail"></label>
+            <button class="btn btn-sm btn-primary" type="submit">Save</button></form></details>
+        <form method="post" action="/recalls/{{ r.id }}/close" style="display:inline"><input type="hidden" name="next" value="{{ self_url }}"><input type="hidden" name="outcome" value="satisfied">
+          <button class="btn btn-sm btn-secondary" type="submit">Mark satisfied</button></form>
+        <details style="display:inline-block"><summary class="btn btn-sm btn-secondary" style="cursor:pointer">Dismiss</summary>
+          <form method="post" action="/recalls/{{ r.id }}/close" class="card" style="position:absolute;z-index:5;min-width:260px;margin-top:4px">
+            <input type="hidden" name="next" value="{{ self_url }}"><input type="hidden" name="outcome" value="dismissed">
+            <label class="fld">Reason*<input name="note" required maxlength="255" placeholder="e.g. moved away"></label>
+            <button class="btn btn-sm btn-primary" type="submit">Dismiss recall</button></form></details>
+        {% else %}
+        <form method="post" action="/recalls/{{ r.id }}/reopen"><input type="hidden" name="next" value="{{ self_url }}"><button class="btn btn-sm btn-secondary" type="submit">Reopen</button></form>
+        {% endif %}{% endif %}
+      </td>
+    </tr>
+  {% else %}<tr><td colspan="6"><div class="empty-state" style="border:0"><strong>No recalls match</strong>Try a wider due-date window or another status.</div></td></tr>{% endfor %}
+  </tbody></table></div>
+  {% include "_pagination.html" %}
+</div>
+{% endblock %}

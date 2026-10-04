@@ -46,7 +46,7 @@
         </a>
 
         <div class="sidebar-section-heading">Scheduling</div>
-        <div class="sidebar-group{% if request.url.path.startswith('/appointments') %} open{% endif %}">
+        <div class="sidebar-group{% if request.url.path.startswith('/appointments') or request.url.path.startswith('/recalls') %} open{% endif %}">
           <button type="button" class="sidebar-expand-toggle" data-group>
             <span class="sidebar-icon">&#128197;</span><span class="sidebar-label">Appointments</span><span class="sidebar-caret">&#9656;</span>
           </button>
@@ -56,6 +56,7 @@
             <a href="/appointments/day">Day</a>
             <a href="/appointments/board">Providers</a>
             <a href="/appointments/waitlist">Waitlist</a>
+            <a href="/recalls">Recall Worklist</a>
             <a href="/appointments/reminders">Reminders</a>
             <a href="/appointments/">List</a>
           </div>
