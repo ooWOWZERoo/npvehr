@@ -5458,3 +5458,32 @@ Unit tests (`tests/test_patient_merge.py`: the linked tables found from the meta
 | --- | --- |
 | Schema | New table: patient_merge_events. |
 | Patients | Merge Patient is real: duplicate detection and search, compare with preview, field choices, confirmed merge, history and undo (administrators). |
+
+## 122. Dilated Exam Field (v2.95)
+
+### 122.1 Request
+
+The diabetic-retinopathy PCP letter (§116) depends on a dilated macular/fundus exam having been done, but the app had no record of it; the clinician confirmed it on the letter form from memory. This round records it on the exam.
+
+### 122.2 What was built
+
+* **Two new nullable columns on `eye_exams`** (migration 059, with a down-migration): `dilated_exam_performed` (tri-state like the ROS answers: blank = not recorded, Yes, No) and `dilation_note` (free text up to 255 characters: the drops used, or why not dilated). Existing exams read "not recorded".
+* **New Exam form**: in the Slit lamp & fundus step, a "Dilated fundus / macular exam performed" Yes/No/not-recorded choice and a note field. Optional; saving never depends on it.
+* **Exam page**: a "Dilated exam" line (Yes / No / Not recorded, with the note).
+* **PCP letter**: an exam recorded as **not dilated no longer prompts** for the letter (the measure requires a dilated exam); a manual letter for it still opens, with a warning, and the confirmation stays unticked. A dilated exam prompts and the letter form's "dilated exam performed" confirmation is **pre-ticked** with "Recorded on the exam". An exam with nothing recorded (every exam from before this field) still prompts and the clinician confirms as before, so nothing that used to be flagged goes silent by default.
+
+### 122.3 Schema and limits
+
+Two columns added to an existing table (the established add-column migration pattern; existing rows unaffected). Not built: marking existing exams as dilated in bulk, a link from the exam's dilation to billing codes (e.g. fundus-photo or dilation supplies), or any requirement that the field be filled; a signed exam can't be edited, so a wrong value there is handled with an addendum like any other signed-record correction.
+
+### 122.4 Verified
+
+Unit test (a not-dilated exam never prompts; dilated and not-recorded do), migration test (059 adds both columns to an old table, existing rows NULL, rerun safe), and an end-to-end test (not dilated: recorded, shown, no prompt, manual letter warns; dilated: prompt and pre-ticked confirmation; blank: prompts, unticked). Full suite green.
+
+**Version 2.95 change log (relative to v2.94):**
+
+| Area | Change |
+| --- | --- |
+| Schema | eye_exams.dilated_exam_performed and dilation_note (migration 059). |
+| Exam form / page | Records and shows whether a dilated fundus/macular exam was performed, with a note. |
+| PCP letter | Not-dilated exams don't prompt; dilated exams pre-tick the confirmation. |

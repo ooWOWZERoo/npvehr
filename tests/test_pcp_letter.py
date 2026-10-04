@@ -23,8 +23,9 @@ def db():
         engine.dispose()
 
 
-def _exam(codes, dob="1960-05-01", pid=1, eid=10):
-    return SimpleNamespace(id=eid, patient_id=pid, diagnosis_codes=codes, patient=SimpleNamespace(date_of_birth=dob))
+def _exam(codes, dob="1960-05-01", pid=1, eid=10, dilated=None):
+    return SimpleNamespace(id=eid, patient_id=pid, diagnosis_codes=codes, patient=SimpleNamespace(date_of_birth=dob),
+                           dilated_exam_performed=dilated)
 
 
 def test_code_parsing_gives_severity_and_edema_only_when_the_code_says_so():
@@ -77,3 +78,10 @@ def test_directory_validation_helpers(db):
     assert svc.valid_npi("1234567890") and svc.valid_npi("") and not svc.valid_npi("12345")
     p = OutsidePractitioner(first_name="Pat", last_name="Sample", credentials="MD", practice_name="Sample Family Care", fax="7175550100")
     assert svc.practitioner_label(p) == "Pat Sample, MD" and "fax 7175550100" in svc.recipient_snapshot(p)
+
+
+def test_an_exam_recorded_as_not_dilated_never_prompts_but_unrecorded_and_dilated_do(db):
+    now = datetime(2026, 6, 1)
+    assert svc.candidate(db, _exam("E11.3211", dilated=False), now) is None            # recorded as not dilated: outside the measure
+    assert svc.candidate(db, _exam("E11.3211", dilated=True), now) is not None
+    assert svc.candidate(db, _exam("E11.3211", dilated=None), now) is not None         # not recorded (older exams): the clinician confirms on the letter

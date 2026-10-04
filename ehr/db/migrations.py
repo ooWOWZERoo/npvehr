@@ -1684,6 +1684,15 @@ def migration_043_create_rx_lab_orders(conn):
     conn.execute(text("CREATE INDEX IF NOT EXISTS ix_rx_lab_orders_rx "
         "ON rx_lab_orders (rx_id)"))
 
+def migration_059_dilated_exam(conn):
+    """Dilated-exam record on eye_exams: dilated_exam_performed (tri-state BOOLEAN, NULL = not recorded) and a short note.
+    Existing exams stay NULL (not recorded). Idempotent."""
+    if not _table_exists(conn, "eye_exams"):
+        return  # brand-new database; create_all() builds the table with these columns.
+    _add_column_if_missing(conn, "eye_exams", "dilated_exam_performed", "BOOLEAN")
+    _add_column_if_missing(conn, "eye_exams", "dilation_note", "VARCHAR")
+
+
 def migration_058_recall_status(conn):
     """Adds the worklist status to patient_recalls (table from the v2.86 recall import; the recall_actions history table is
     new and created by create_all()). Existing recalls start 'open'. Idempotent."""
@@ -1737,6 +1746,7 @@ COLUMN_MIGRATIONS = [
     ("047_vitreous_and_cd_ratio", migration_047_vitreous_and_cd_ratio),
     ("048_ros_and_social_history", migration_048_ros_and_social_history),
     ("058_recall_status", migration_058_recall_status),
+    ("059_dilated_exam", migration_059_dilated_exam),
 ]
 def migration_055_seed_ros_catalog(conn):
     """Review-of-Systems decision-support catalog (ros_master / ros_icd10_test_mapping
@@ -1908,6 +1918,11 @@ def down_048_ros_and_social_history(conn):
         for col in ("tobacco_use_status", "alcohol_use_status", "social_history_notes"):
             conn.execute(text(f"ALTER TABLE patients DROP COLUMN {col}"))
 
+def down_059_dilated_exam(conn):
+    if _table_exists(conn, "eye_exams"):
+        for col in ("dilated_exam_performed", "dilation_note"):
+            conn.execute(text(f"ALTER TABLE eye_exams DROP COLUMN {col}"))
+
 # Sparse by design -- see this section's own docstring above. Extend this
 # alongside any new migration that a reviewer has actually confirmed is safe
 # to reverse (a plain ADD COLUMN or CREATE TABLE with no data-seeding and
@@ -1922,6 +1937,7 @@ DOWN_MIGRATIONS = {
     "046_create_appointment_resource_selections": down_046_create_appointment_resource_selections,
     "047_vitreous_and_cd_ratio": down_047_vitreous_and_cd_ratio,
     "048_ros_and_social_history": down_048_ros_and_social_history,
+    "059_dilated_exam": down_059_dilated_exam,
     "053_seed_services": down_053_seed_services,
 }
 

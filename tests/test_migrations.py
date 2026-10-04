@@ -316,3 +316,16 @@ def test_recall_status_column_is_added_to_an_existing_table_and_rerun_is_safe(fr
         mig.migration_058_recall_status(conn)                                  # re-run is a no-op
     with fresh_engine.connect() as conn:
         assert conn.execute(text("SELECT status FROM patient_recalls")).scalar() == "open"
+
+
+def test_dilated_exam_columns_are_added_to_an_existing_eye_exams_table_and_rerun_is_safe(fresh_engine):
+    """Migration 059: an eye_exams table from before the dilation field gains both columns, existing rows read NULL (not recorded)."""
+    with fresh_engine.begin() as conn:
+        conn.execute(text("CREATE TABLE eye_exams (id INTEGER PRIMARY KEY, patient_id INTEGER)"))
+        conn.execute(text("INSERT INTO eye_exams (patient_id) VALUES (1)"))
+    for _ in range(2):                                                         # second run is a no-op
+        with fresh_engine.begin() as conn:
+            mig.migration_059_dilated_exam(conn)
+    with fresh_engine.connect() as conn:
+        row = conn.execute(text("SELECT dilated_exam_performed, dilation_note FROM eye_exams")).one()
+        assert tuple(row) == (None, None)

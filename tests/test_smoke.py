@@ -4837,3 +4837,42 @@ def test_merge_duplicate_patients_compare_confirm_merge_and_undo(logged_in_page,
     fd.wait_for_url(f"{live_server}/")
     assert fd.goto(live_server + "/patients/merge").status == 403
     other.close()
+
+
+def test_dilated_exam_field_is_recorded_shown_and_drives_the_pcp_letter_prompt(logged_in_page, live_server):
+    """Dilated-exam field: the exam form records Yes / No / not recorded plus a note; the exam page shows it; an exam recorded as
+    NOT dilated never prompts for the diabetic-retinopathy PCP letter (and its manual letter form warns), a dilated one prompts and
+    pre-ticks the dilated confirmation, and an exam with nothing recorded still prompts with the box left for the clinician."""
+    page = logged_in_page
+
+    def save_exam(dilated, note=""):
+        page.goto(live_server + "/exams/new")
+        page.select_option('select[name="patient_id"]', label="Wilson, David")
+        page.select_option('select[name="provider_id"]', index=0)
+        page.fill("#diagnosis_codes", "E11.3211")
+        if dilated:
+            page.select_option("#dilated_exam_performed", dilated)
+        if note:
+            page.fill("#dilation_note", note)
+        page.locator('button[type="submit"]', has_text="Save Exam").click()
+        page.wait_for_url(re.compile(r"/exams/\d+$"))
+        return page.url
+
+    not_dilated = save_exam("No", "patient declined drops (sample)")
+    row = page.locator("#dilatedRow").inner_text()
+    assert row.startswith("No") and "patient declined drops (sample)" in row
+    assert page.locator("#pcpLetterBanner").count() == 0                                  # not dilated: outside the measure, no prompt
+    page.goto(not_dilated + "/pcp-letter")                                               # a manual letter still opens, with a warning
+    assert "not dilated" in page.locator(".alert-warning").inner_text() and not page.locator("#dilated").is_checked()
+
+    dilated = save_exam("Yes", "tropicamide 1% OU (sample)")
+    assert page.locator("#dilatedRow").inner_text().startswith("Yes")
+    assert "Diabetic retinopathy: communicate with the managing physician" in page.locator("#pcpLetterBanner").inner_text()
+    page.goto(dilated + "/pcp-letter")
+    assert page.locator("#dilated").is_checked() and "Recorded on the exam" in page.locator("body").inner_text()
+
+    unrecorded = save_exam("")
+    assert "Not recorded" in page.locator("#dilatedRow").inner_text()
+    assert page.locator("#pcpLetterBanner").count() == 1                                  # nothing recorded: still prompts (older exams)
+    page.goto(unrecorded + "/pcp-letter")
+    assert not page.locator("#dilated").is_checked()

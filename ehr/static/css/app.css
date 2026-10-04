@@ -928,3 +928,5 @@ a.tile:hover { text-decoration: none; }
 .med-note-info { background: var(--primary-soft); color: var(--ink-strong); }
 .med-note-warn { background: var(--warn-bg); color: var(--warn-ink); }
 .med-review { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
+.dilation-row { display: grid; grid-template-columns: minmax(220px, 1fr) 2fr; gap: var(--space-3); margin-top: var(--space-4); }
+@media (max-width: 640px) { .dilation-row { grid-template-columns: 1fr; } }
