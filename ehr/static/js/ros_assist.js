@@ -19,6 +19,9 @@
     endocrine: "Endocrine", skin: "Integumentary"
   };
 
+  var SYSTEM_TO_SELECT = {};
+  Object.keys(SELECT_TO_SYSTEM).forEach(function (code) { SYSTEM_TO_SELECT[SELECT_TO_SYSTEM[code]] = code; });
+
   function el(tag, cls, text) {
     var n = document.createElement(tag);
     if (cls) n.className = cls;
@@ -35,7 +38,7 @@
     return out;
   }
 
-  var catalog = null, promptsById = {}, details = {}, tags = {};
+  var catalog = null, promptsById = {}, details = {}, tags = {}, conflicts = {};
 
   function build(data) {
     var list = host.querySelector("[data-ros-systems]");
@@ -47,10 +50,12 @@
       sum.appendChild(el("span", "ros-system-name", sys.system));
       var tag = el("span", "ros-system-tag", "ROS: Yes"); tag.hidden = true;
       sum.appendChild(tag);
+      var conflict = el("span", "ros-conflict", "Summary answer is No, but a finding is ticked"); conflict.hidden = true;
+      sum.appendChild(conflict);
       d.appendChild(sum);
       var ul = el("ul", "ros-prompts");
       sys.prompts.forEach(function (p) {
-        promptsById[p.id] = p;
+        promptsById[p.id] = p; p.system = sys.system;
         var li = el("li"), label = el("label", "ros-prompt");
         var cb = document.createElement("input");
         cb.type = "checkbox"; cb.value = String(p.id);
@@ -63,7 +68,7 @@
       });
       d.appendChild(ul);
       list.appendChild(d);
-      details[sys.system] = d; tags[sys.system] = tag;
+      details[sys.system] = d; tags[sys.system] = tag; conflicts[sys.system] = conflict;
     });
     syncSystems();
     host.hidden = !list.children.length;
@@ -110,8 +115,37 @@
     });
   }
 
-  host.addEventListener("change", function (e) { if (e.target.matches("input[data-ros-assist]")) renderSuggestions(); });
-  form.addEventListener("change", function (e) { if (e.target.name && e.target.name.indexOf("ros_") === 0) syncSystems(); });
+  // A ticked finding is a deliberate positive. If that system's Yes/No summary is still blank it becomes Yes (blank is
+  // not an answer); a "No" is never overwritten -- the mismatch is flagged instead -- and nothing is ever reversed.
+  function selectFor(system) {
+    var code = SYSTEM_TO_SELECT[system];
+    return code ? form.querySelector('select[name="ros_' + code + '"]') : null;
+  }
+
+  function reconcileSummary(cb) {
+    var p = promptsById[cb.value];
+    var sel = p && cb.checked ? selectFor(p.system) : null;
+    if (sel && sel.value === "") {
+      sel.value = "Yes";
+      sel.dispatchEvent(new Event("change", { bubbles: true }));     // so progress, the system tag and any other listener update
+    }
+  }
+
+  function syncConflicts() {
+    Object.keys(conflicts).forEach(function (system) {
+      var sel = selectFor(system);
+      var ticked = details[system].querySelector('input[data-ros-assist]:checked');
+      conflicts[system].hidden = !(sel && sel.value === "No" && ticked);
+    });
+  }
+
+  host.addEventListener("change", function (e) {
+    if (!e.target.matches("input[data-ros-assist]")) return;
+    reconcileSummary(e.target);
+    renderSuggestions();
+    syncConflicts();
+  });
+  form.addEventListener("change", function (e) { if (e.target.name && e.target.name.indexOf("ros_") === 0) { syncSystems(); syncConflicts(); } });
 
   fetch("/admin/ros/catalog.json", { credentials: "same-origin", headers: { Accept: "application/json" } })
     .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })

@@ -5301,3 +5301,36 @@ Unit tests (`tests/test_pcp_letter.py`: code parsing, suggestion, who is due and
 | Exam | Advisory banner and "PCP letter" button for diabetic-retinopathy communication; printable letter; sent record; documented exclusions. |
 | Directory | Shared Outside Providers directory and a per-patient primary-care link. |
 | Admin | Communication Templates editor with a required-facts guard. |
+
+## 117. Decision: the Eight Legacy ROS Dropdowns and the Catalog Findings (v2.90)
+
+### 117.1 The question
+
+Since the ROS catalog (§109-§111) the exam form has two records of the same thing: the eight legacy Yes/No/blank summary dropdowns on `eye_exams` (constitutional, cardiovascular, respiratory, gastrointestinal, neurological, musculoskeletal, endocrine, skin) and the catalog findings ticked beneath them. They were deliberately not synchronised (§111), with "revisit if confusing". The to-do list asked for a decision.
+
+### 117.2 Decision
+
+**Keep both records, make them agree where that is safe, and surface any disagreement rather than resolve it silently.**
+
+* **Finding -> blank summary becomes Yes.** Ticking a catalog finding is a deliberate positive; if that system's summary answer is still blank (not an answer) it is set to Yes, firing the normal change handling (step progress, system tag). Unticking never reverses it.
+* **A "No" is never overwritten.** If the clinician answered No and ticks a finding anyway, both stay as entered; the form flags it ("Summary answer is No, but a finding is ticked") and the exam page marks that system's findings "Summary answer is Negative". The clinician decides which is right.
+* **Summary -> findings stays one-way and unchanged:** a Yes opens that system's panel (as since §110); it never ticks prompts, since "Yes" does not say which prompts apply, and a Yes with nothing ticked remains valid.
+* Only the eight mapped systems are affected; the other five catalog systems have no summary dropdown.
+
+Why not full two-way sync: it would force one source of truth onto data with different meanings (a coarse "any positive?" vs. specific findings), would erase a clinician's own No on a tick, and would need a schema or data migration for exams already signed. Why not leave as is: the most common mismatch (findings recorded, summary left blank, so the exam page shows "Not reviewed") was a real inconsistency with no benefit.
+
+### 117.3 Scope
+
+Client-side form change (`ros_assist.js`, one CSS rule) plus a note on the exam detail page; **no schema, route or data change**, and existing exams are untouched. Server-side the legacy columns and the stored findings are independent exactly as before.
+
+### 117.4 Verified
+
+End-to-end test: a blank summary becomes Yes on ticking and stays Yes on unticking; a No is not overwritten, the form flags the mismatch and clears the flag when the answer changes; the saved exam page shows the disagreement. The existing ROS suggestion/persistence tests are unchanged and pass. Full suite green.
+
+**Version 2.90 change log (relative to v2.89):**
+
+| Area | Change |
+| --- | --- |
+| Exam form | Ticking a ROS finding fills a blank summary Yes/No with Yes; a No is never overwritten and the mismatch is flagged. |
+| Exam page | A system's findings are marked when its summary answer is Negative. |
+| Schema | None. |
