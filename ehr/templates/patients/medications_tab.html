@@ -1,0 +1,122 @@
+{% extends "patients/_workspace.html" %}
+{% macro review_banner(label, kind, rv, count) %}
+  {% set st = rv.state %}
+  {% if st == 'never' %}<div class="alert alert-info" style="margin-bottom:var(--space-3)"><strong>{{ label }} not yet reviewed.</strong> An empty list here means <em>unknown</em>, not &ldquo;none&rdquo;.</div>
+  {% elif st == 'stale' %}<div class="alert alert-warning" style="margin-bottom:var(--space-3)"><strong>{{ label }} need review.</strong> Last reviewed {{ rv.review.reviewed_at.strftime('%m/%d/%Y') }}{% if rv.review.outcome == 'none_reported' and count %} as &ldquo;none reported&rdquo;, but items have since been added{% else %} (more than {{ stale_months }} months ago){% endif %}.</div>
+  {% else %}<p class="muted" style="font-size:0.82rem;margin-bottom:var(--space-3)">Reviewed {{ rv.review.reviewed_at.strftime('%m/%d/%Y') }} &mdash; {{ {'no_changes': 'no changes', 'updated': 'list updated', 'none_reported': 'patient reports none'}[rv.review.outcome] }}.</p>{% endif %}
+  {% if can_edit_meds %}
+  <form method="post" action="/patients/{{ patient.id }}/medications/review" style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:var(--space-3)">
+    <input type="hidden" name="kind" value="{{ kind }}">
+    <button name="outcome" value="no_changes" class="btn btn-secondary btn-sm" type="submit">Reviewed &mdash; no changes</button>
+    <button name="outcome" value="updated" class="btn btn-secondary btn-sm" type="submit">Reviewed &mdash; updated</button>
+    {% if not count %}<button name="outcome" value="none_reported" class="btn btn-secondary btn-sm" type="submit">Patient reports none</button>{% endif %}
+  </form>
+  {% endif %}
+{% endmacro %}
+{% block wcontent %}
+{% if error %}<div class="alert alert-error" style="margin-bottom:var(--space-4)">{{ error }}</div>{% endif %}
+{% if not can_edit_meds %}<div class="alert alert-info" style="margin-bottom:var(--space-4)"><strong>View-only access.</strong> You don't have privileges to change this patient's medications or allergies.</div>{% endif %}
+
+<div class="section" id="medsSection">
+  <div class="section-head"><div><span class="page-eyebrow">Clinical</span><h2>Medications</h2>
+    <p class="section-sub">What the patient takes now. Safety warnings use this list once the practice's drug classes are set up.</p></div></div>
+  {{ review_banner('Medications', 'medications', med_review, active_meds|length) }}
+  {% if unclassified and med_classes is not none %}<p class="muted" style="font-size:0.8rem;margin-bottom:var(--space-3)">{{ unclassified|length }} medication(s) match no reviewed drug class, so they can't trigger a safety warning: {{ unclassified|map(attribute='name')|join(', ') }}.</p>{% endif %}
+  {% if active_meds %}
+  <div class="table-responsive"><table><thead><tr><th>Medication</th><th>Strength</th><th>Route / eye</th><th>Frequency</th><th>For</th><th>Class</th><th></th></tr></thead><tbody>
+  {% for m in active_meds %}
+    <tr>
+      <td><strong>{{ m.name }}</strong>{% if m.note %}<div class="muted" style="font-size:0.78rem">{{ m.note }}</div>{% endif %}</td>
+      <td>{{ m.strength or '—' }}</td><td>{{ m.route or '—' }}{% if m.eye %} <span class="badge badge-scheduled">{{ m.eye }}</span>{% endif %}</td>
+      <td>{{ m.frequency or '—' }}</td><td>{{ m.indication or '—' }}</td>
+      <td>{% if med_classes.get(m.id) %}{{ med_classes[m.id]|join(', ') }}{% else %}<span class="muted">not classified</span>{% endif %}</td>
+      <td style="white-space:nowrap">
+        {% if can_edit_meds %}
+        <details style="display:inline-block"><summary class="btn btn-sm btn-secondary" style="cursor:pointer">Edit</summary>
+          <form method="post" action="/patients/{{ patient.id }}/medications/{{ m.id }}/edit" class="card" style="position:absolute;z-index:5;min-width:320px;margin-top:4px">
+            <label class="fld">Medication* <input name="name" required maxlength="160" value="{{ m.name }}"></label>
+            <label class="fld">Strength <input name="strength" maxlength="80" value="{{ m.strength or '' }}"></label>
+            <label class="fld">Route <input name="route" maxlength="40" value="{{ m.route or '' }}"></label>
+            <label class="fld">Eye <select name="eye"><option value="">&mdash;</option>{% for e in ('OD','OS','OU') %}<option {{ 'selected' if m.eye == e }}>{{ e }}</option>{% endfor %}</select></label>
+            <label class="fld">Frequency <input name="frequency" maxlength="80" value="{{ m.frequency or '' }}"></label>
+            <label class="fld">For <input name="indication" maxlength="160" value="{{ m.indication or '' }}"></label>
+            <label class="fld">Started <input type="date" name="start_date" value="{{ m.start_date or '' }}"></label>
+            <label class="fld">Note <input name="note" maxlength="255" value="{{ m.note or '' }}"></label>
+            <button type="submit" class="btn btn-primary btn-sm">Save</button>
+          </form></details>
+        <form method="post" action="/patients/{{ patient.id }}/medications/{{ m.id }}/stop" style="display:inline" onsubmit="return confirm('Mark this medication as stopped?');"><button class="btn btn-sm btn-secondary" type="submit">Stop</button></form>
+        {% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody></table></div>
+  {% else %}<div class="empty-state"><strong>No active medications recorded</strong>{% if med_review.state == 'never' %}Not reviewed yet &mdash; this does not mean the patient takes none.{% else %}Add one below if the patient starts something.{% endif %}</div>{% endif %}
+  {% if can_edit_meds %}
+  <form method="post" action="/patients/{{ patient.id }}/medications/new" class="card form-card" style="margin-top:var(--space-4)"><h3>Add a medication</h3>
+    <div class="form-row cols-3">
+      <div class="form-group"><label>Medication* <input name="name" required maxlength="160" placeholder="e.g. Latanoprost 0.005%"></label></div>
+      <div class="form-group"><label>Strength <input name="strength" maxlength="80"></label></div>
+      <div class="form-group"><label>Route <input name="route" maxlength="40" placeholder="oral, topical, ophthalmic..."></label></div>
+    </div>
+    <div class="form-row cols-3">
+      <div class="form-group"><label>Eye <select name="eye"><option value="">&mdash;</option><option>OD</option><option>OS</option><option>OU</option></select></label></div>
+      <div class="form-group"><label>Frequency <input name="frequency" maxlength="80" placeholder="e.g. once nightly"></label></div>
+      <div class="form-group"><label>For <input name="indication" maxlength="160"></label></div>
+    </div>
+    <div class="form-row cols-2">
+      <div class="form-group"><label>Started <input type="date" name="start_date"></label></div>
+      <div class="form-group"><label>Note <input name="note" maxlength="255"></label></div>
+    </div>
+    <button type="submit" class="btn btn-primary">Add medication</button>
+  </form>
+  {% endif %}
+  {% if stopped_meds %}
+  <details style="margin-top:var(--space-4)"><summary class="muted" style="cursor:pointer">Stopped medications ({{ stopped_meds|length }})</summary>
+    <div class="table-responsive"><table><thead><tr><th>Medication</th><th>Strength</th><th>Stopped</th><th></th></tr></thead><tbody>
+    {% for m in stopped_meds %}<tr><td>{{ m.name }}</td><td>{{ m.strength or '—' }}</td><td>{{ m.stop_date.strftime('%m/%d/%Y') if m.stop_date else '—' }}</td>
+      <td>{% if can_edit_meds %}<form method="post" action="/patients/{{ patient.id }}/medications/{{ m.id }}/restart"><button class="btn btn-sm btn-secondary" type="submit">Restart</button></form>{% endif %}</td></tr>{% endfor %}
+    </tbody></table></div></details>
+  {% endif %}
+</div>
+
+<div class="section" id="allergiesSection" style="margin-top:var(--space-6)">
+  <div class="section-head"><div><span class="page-eyebrow">Clinical</span><h2>Allergies</h2></div></div>
+  {% if patient.allergies %}<div class="alert alert-info" style="margin-bottom:var(--space-3)">Older free-text allergy note on the demographics record: <strong>{{ patient.allergies }}</strong>. Enter each allergy below to structure it; this note is left as it was.</div>{% endif %}
+  {{ review_banner('Allergies', 'allergies', allergy_review, active_allergies|length) }}
+  {% if active_allergies %}
+  <div class="table-responsive"><table><thead><tr><th>Allergen</th><th>Reaction</th><th>Severity</th><th></th></tr></thead><tbody>
+  {% for a in active_allergies %}
+    <tr><td><strong>{{ a.allergen }}</strong>{% if a.note %}<div class="muted" style="font-size:0.78rem">{{ a.note }}</div>{% endif %}</td><td>{{ a.reaction or '—' }}</td>
+      <td>{% if a.severity %}<span class="badge {{ 'badge-cancelled' if a.severity == 'severe' else 'badge-scheduled' }}">{{ a.severity }}</span>{% else %}—{% endif %}</td>
+      <td style="white-space:nowrap">{% if can_edit_meds %}
+        <details style="display:inline-block"><summary class="btn btn-sm btn-secondary" style="cursor:pointer">Edit</summary>
+          <form method="post" action="/patients/{{ patient.id }}/medications/allergies/{{ a.id }}/edit" class="card" style="position:absolute;z-index:5;min-width:300px;margin-top:4px">
+            <label class="fld">Allergen* <input name="allergen" required maxlength="160" value="{{ a.allergen }}"></label>
+            <label class="fld">Reaction <input name="reaction" maxlength="160" value="{{ a.reaction or '' }}"></label>
+            <label class="fld">Severity <select name="severity"><option value="">&mdash;</option>{% for s in ('mild','moderate','severe') %}<option value="{{ s }}" {{ 'selected' if a.severity == s }}>{{ s|title }}</option>{% endfor %}</select></label>
+            <label class="fld">Note <input name="note" maxlength="255" value="{{ a.note or '' }}"></label>
+            <button type="submit" class="btn btn-primary btn-sm">Save</button>
+          </form></details>
+        <form method="post" action="/patients/{{ patient.id }}/medications/allergies/{{ a.id }}/deactivate" style="display:inline" onsubmit="return confirm('Mark this allergy as no longer active?');"><button class="btn btn-sm btn-secondary" type="submit">Deactivate</button></form>
+      {% endif %}</td></tr>
+  {% endfor %}
+  </tbody></table></div>
+  {% else %}<div class="empty-state"><strong>No active allergies recorded</strong>{% if allergy_review.state == 'never' %}Not reviewed yet &mdash; this does not mean the patient has none.{% endif %}</div>{% endif %}
+  {% if can_edit_meds %}
+  <form method="post" action="/patients/{{ patient.id }}/medications/allergies/new" class="card form-card" style="margin-top:var(--space-4)"><h3>Add an allergy</h3>
+    <div class="form-row cols-3">
+      <div class="form-group"><label>Allergen* <input name="allergen" required maxlength="160" placeholder="e.g. Sulfa drugs"></label></div>
+      <div class="form-group"><label>Reaction <input name="reaction" maxlength="160" placeholder="e.g. hives"></label></div>
+      <div class="form-group"><label>Severity <select name="severity"><option value="">&mdash;</option><option value="mild">Mild</option><option value="moderate">Moderate</option><option value="severe">Severe</option></select></label></div>
+    </div>
+    <div class="form-group"><label>Note <input name="note" maxlength="255"></label></div>
+    <button type="submit" class="btn btn-primary">Add allergy</button>
+  </form>
+  {% endif %}
+  {% if inactive_allergies %}
+  <details style="margin-top:var(--space-4)"><summary class="muted" style="cursor:pointer">Inactive allergies ({{ inactive_allergies|length }})</summary>
+    <div class="table-responsive"><table><tbody>{% for a in inactive_allergies %}<tr><td>{{ a.allergen }}</td><td>{{ a.reaction or '—' }}</td>
+      <td>{% if can_edit_meds %}<form method="post" action="/patients/{{ patient.id }}/medications/allergies/{{ a.id }}/reactivate"><button class="btn btn-sm btn-secondary" type="submit">Reactivate</button></form>{% endif %}</td></tr>{% endfor %}</tbody></table></div></details>
+  {% endif %}
+</div>
+{% endblock %}

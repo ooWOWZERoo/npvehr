@@ -1615,3 +1615,5 @@ from ehr.models import ros as _ros  # noqa: E402,F401
 from ehr.models import safety as _safety  # noqa: E402,F401  (registers the safety-flag tables on Base)
 
 from ehr.models import imports as _imports  # noqa: E402,F401  (registers the import-batch and recall tables on Base)
+
+from ehr.models import medications as _medications  # noqa: E402,F401  (registers the medication/allergy/class tables on Base)

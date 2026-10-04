@@ -10,7 +10,7 @@ from ehr.db.migrations import run_column_migrations, run_post_create_all_migrati
 from ehr.db.seed import seed_demo_data
 from ehr.env_info import EHR_ENV
 from ehr.routes import (patients, appointments, exams, prescriptions, admin_scheduling, admin_billing,
-    admin_voice_scribe, admin_ros, admin_safety, admin_imports, admin_ros_import, safety as safety_routes, store_ops, rx_lab_orders, portal, auth as auth_routes)
+    admin_voice_scribe, admin_ros, admin_safety, admin_imports, admin_ros_import, medications as medication_routes, admin_medications, safety as safety_routes, store_ops, rx_lab_orders, portal, auth as auth_routes)
 from ehr.auth.deps import get_current_user, LoginRedirect
 from ehr.auth.portal_deps import PortalLoginRedirect
 from ehr.auth.permissions import (ROLE_LABELS, ANY_STAFF, PATIENT_EDIT, APPOINTMENT_EDIT, EXAM_VIEW, EXAM_EDIT,
@@ -75,6 +75,8 @@ app.include_router(prescriptions.router, dependencies=[Depends(get_current_user)
 app.include_router(admin_scheduling.router, dependencies=[Depends(get_current_user)])
 app.include_router(admin_billing.router, dependencies=[Depends(get_current_user)])
 app.include_router(admin_voice_scribe.router, dependencies=[Depends(get_current_user)])
+app.include_router(medication_routes.router, dependencies=[Depends(get_current_user)])
+app.include_router(admin_medications.router, dependencies=[Depends(get_current_user)])
 app.include_router(admin_ros_import.router, dependencies=[Depends(get_current_user)])
 app.include_router(admin_ros.router, dependencies=[Depends(get_current_user)])
 app.include_router(admin_safety.router, dependencies=[Depends(get_current_user)])

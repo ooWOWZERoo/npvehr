@@ -13,6 +13,8 @@
           <option value="yes" {{ 'selected' if status == 'yes' }}>Yes</option>
           <option value="no" {{ 'selected' if status == 'no' }}>No</option>
         </select>
+        {% set from_meds = (safety_derived or {}).get(ftype.id) %}
+        {% if from_meds %}<span class="{{ 'badge badge-cancelled' if status == 'no' else 'muted' }}" style="font-weight:400;font-size:0.72rem">{% if status == 'no' %}Medication list says otherwise{% else %}Yes, from medication list{% endif %}: {{ from_meds|join(', ') }}. The medication list takes precedence for warnings.</span>{% endif %}
         {% if row and row.recorded_at %}<span class="muted" style="font-weight:400;font-size:0.72rem">Recorded {{ row.recorded_at.strftime('%m/%d/%Y') }}</span>{% endif %}
       </label>
       {% endfor %}

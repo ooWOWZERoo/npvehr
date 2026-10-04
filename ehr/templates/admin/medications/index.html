@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Medication Classes &mdash; Admin{% endblock %}
+{% block content %}
+{% set role = request.state.user.role %}
+{% set can_edit = role in ('system_administrator', 'practice_administrator') %}
+<div class="page-header"><div><span class="page-eyebrow">Administration</span><h1>Medication Classes</h1>
+  <p class="page-lede">The drug classes the safety warnings care about (blood thinners, &hellip;), the generic and brand names in each, and which patient safety flag each class turns on.</p></div></div>
+{% if not can_edit %}<div class="alert alert-info" style="margin-bottom:var(--space-4)"><strong>View-only access.</strong> You don't have privileges to change these &mdash; only a System Administrator or Practice Administrator can edit or sign off classes.</div>{% endif %}
+<div class="alert alert-info" style="margin-bottom:var(--space-4)">
+  Decision support for staff only. A drug name counts toward a class <strong>only after it has been reviewed</strong> with a source citation. The practice's clinicians define these &mdash; none are supplied. Names are matched as plain text against what staff type on the medication list, so spell variants and brand names should be added as separate terms.
+</div>
+{% if error %}<div class="alert alert-error" style="margin-bottom:var(--space-4)">{{ error }}</div>{% endif %}
+{% if can_edit %}
+<div class="card form-card"><h3>Add a class</h3>
+  <form method="post" action="/admin/medications/classes/new">
+    <div class="form-row cols-2">
+      <div class="form-group"><label>Class* <input name="label" required maxlength="120" placeholder="e.g. Anticoagulant / antiplatelet"></label></div>
+      <div class="form-group"><label>Description <input name="description" maxlength="255"></label></div>
+    </div>
+    <button type="submit" class="btn btn-primary">Add class</button>
+  </form>
+</div>
+{% endif %}
+{% for c in classes %}
+<div class="card" style="margin-top:1rem{{ ';opacity:0.65' if not c.is_active }}">
+  <div style="display:flex;justify-content:space-between;align-items:baseline;gap:1rem">
+    <h3 style="margin:0">{{ c.label }} <span class="badge {{ 'badge-completed' if c.is_active else 'badge-cancelled' }}">{{ 'Active' if c.is_active else 'Inactive' }}</span></h3>
+    {% if can_edit %}<form method="post" action="/admin/medications/classes/{{ c.id }}/toggle-active" onsubmit="return confirm('{{ 'Deactivate' if c.is_active else 'Reactivate' }} this class?');"><button class="btn btn-sm btn-secondary" type="submit">{{ 'Deactivate' if c.is_active else 'Reactivate' }}</button></form>{% endif %}
+  </div>
+  {% if c.description %}<p class="muted" style="margin:4px 0 0">{{ c.description }}</p>{% endif %}
+  <p style="margin:var(--space-3) 0 4px"><strong>Turns on flag:</strong>
+    {% for fid in links.get(c.id, []) %}<span class="badge badge-scheduled">{{ flag_label.get(fid, '?') }}</span>
+      {% if can_edit %}<form method="post" action="/admin/medications/classes/{{ c.id }}/links/{{ fid }}/delete" style="display:inline"><button class="btn btn-sm btn-secondary" type="submit" title="Unlink">&times;</button></form>{% endif %}
+    {% else %}<span class="muted">none yet &mdash; this class won't affect any warning until it is linked to a flag.</span>{% endfor %}</p>
+  {% if can_edit %}
+  <form method="post" action="/admin/medications/classes/{{ c.id }}/links/new" style="display:flex;gap:0.5rem;align-items:end;margin-bottom:var(--space-3)">
+    <label class="fld">Link to flag <select name="flag_type_id">{% for f in flags %}<option value="{{ f.id }}">{{ f.label }}</option>{% endfor %}</select></label>
+    <button type="submit" class="btn btn-sm btn-secondary">Link</button>
+  </form>
+  {% endif %}
+  <div class="table-responsive"><table><thead><tr><th>Drug name</th><th>Review</th><th></th></tr></thead><tbody>
+  {% for t in c.terms %}
+    <tr><td>{{ t.term }}</td>
+      <td>{% if t.reviewed %}<span class="badge badge-completed">Reviewed</span> <span class="muted" style="font-size:0.78rem">{{ t.source_citation }}</span>{% else %}<span class="badge badge-cancelled">Unreviewed</span> <span class="muted" style="font-size:0.78rem">not counted</span>{% endif %}</td>
+      <td style="display:flex;gap:0.5rem;flex-wrap:wrap">
+        {% if can_edit %}
+          {% if t.reviewed %}<form method="post" action="/admin/medications/terms/{{ t.id }}/unreview"><button class="btn btn-sm btn-secondary" type="submit">Withdraw review</button></form>
+          {% else %}<form method="post" action="/admin/medications/terms/{{ t.id }}/review" style="display:flex;gap:0.35rem"><input name="source_citation" required maxlength="255" placeholder="Source citation" aria-label="Source citation"><button class="btn btn-sm btn-secondary" type="submit">Mark reviewed</button></form>{% endif %}
+          <form method="post" action="/admin/medications/terms/{{ t.id }}/delete" onsubmit="return confirm('Delete this drug name?');"><button class="btn btn-sm btn-secondary" type="submit">Delete</button></form>
+        {% endif %}</td></tr>
+  {% else %}<tr><td colspan="3"><div class="empty-state" style="border:0"><strong>No drug names yet</strong>Add some below.</div></td></tr>{% endfor %}
+  </tbody></table></div>
+  {% if can_edit %}
+  <form method="post" action="/admin/medications/classes/{{ c.id }}/terms/new" style="display:flex;gap:0.5rem;margin-top:var(--space-3)">
+    <input name="term" required maxlength="400" placeholder="Drug names, comma-separated (generic and brand)" aria-label="Drug names" style="flex:1">
+    <button class="btn btn-sm btn-primary" type="submit">Add names</button>
+  </form>
+  {% endif %}
+</div>
+{% else %}
+<div class="empty-state" style="margin-top:1rem"><strong>No classes yet</strong>The practice's clinicians add the classes they want warnings for.</div>
+{% endfor %}
+{% endblock %}

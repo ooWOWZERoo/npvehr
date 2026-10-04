@@ -5,7 +5,9 @@ exam detail page and the sign step, so they can never disagree:
 
     a rule fires for a patient when
         rule.is_active AND rule.reviewed
-        AND the patient's flag for the rule's flag type is 'yes'
+        AND the patient's flag for the rule's flag type is 'yes' -- answered 'yes' on the chart, OR derived 'yes' by
+            an active medication in a reviewed class term linked to that flag (ehr/services/medications.py);
+            the medication list wins over a manual 'no'
         AND (rule.keyword is blank OR the keyword appears (case-insensitive) in the exam text).
 
 Unreviewed or inactive rules are silent. Unknown flag state (no row) never fires a rule: a missing
@@ -39,11 +41,15 @@ def evaluate(db: Session, patient_id: int, text: Optional[str] = "") -> list:
     """Rules that fire for this patient given `text` (an exam's free text). text=None skips keyword
     filtering and returns every eligible rule with its keyword, for a client that matches live."""
     try:
+        manual_yes = {r[0] for r in db.query(PatientSafetyFlag.flag_type_id)
+                      .filter(PatientSafetyFlag.patient_id == patient_id, PatientSafetyFlag.status == "yes").all()}
+        from ehr.services import medications as med_svc     # a flag the medication list derives as 'yes' counts as yes
+        yes_ids = manual_yes | set(med_svc.derived_flags(db, patient_id))
+        if not yes_ids:
+            return []
         rows = (db.query(SafetyRule, SafetyFlagType)
                 .join(SafetyFlagType, SafetyFlagType.id == SafetyRule.flag_type_id)
-                .join(PatientSafetyFlag, (PatientSafetyFlag.flag_type_id == SafetyRule.flag_type_id)
-                      & (PatientSafetyFlag.patient_id == patient_id))
-                .filter(PatientSafetyFlag.status == "yes", SafetyRule.is_active.is_(True),
+                .filter(SafetyRule.flag_type_id.in_(yes_ids), SafetyRule.is_active.is_(True),
                         SafetyRule.reviewed.is_(True), SafetyFlagType.is_active.is_(True))
                 .order_by(SafetyRule.id).all())
     except Exception:                                  # noqa: BLE001 -- decision support must not break the page

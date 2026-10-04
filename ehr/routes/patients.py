@@ -10,6 +10,7 @@ from ehr.models.database import (get_db, Patient, Appointment, EyeExam, Prescrip
     PatientInsurancePlan, DiagnosticOrder, DiagnosticTest, EyeExamFollowUp, Service, VisitCharge)
 from ehr.models.imports import PatientRecall
 from ehr.services import safety as safety_svc
+from ehr.services import medications as med_svc
 from ehr.services import diagnostic_orders as diag_orders
 from ehr.services import lookback_alerts
 from ehr.services import followup_recommendations
@@ -344,6 +345,7 @@ def patient_detail(request: Request, patient_id: int, db: Session = Depends(get_
             .order_by(Service.category, Service.display_order).all(),
     })
     ctx["safety_flags"] = safety_svc.flags_for_patient(db, patient_id)
+    ctx["safety_derived"] = med_svc.derived_flags(db, patient_id)
     return templates.TemplateResponse(request, "patients/overview.html", ctx)
 
 @router.get("/{patient_id}/photo")
