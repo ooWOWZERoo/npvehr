@@ -5268,3 +5268,36 @@ Unit tests (`tests/test_medications.py`: term matching, nothing derived until re
 | Chart | New Medications & Allergies tab; safety card shows flags derived from the medication list. |
 | Admin | /admin/medications: drug classes, names with citation-gated sign-off, flag links. |
 | Safety | `evaluate()` counts a medication-derived "yes" (medication list wins over a manual "No"). |
+
+## 116. Diabetic-Retinopathy PCP Letter (v2.89)
+
+### 116.1 Request and decisions
+
+From the to-do list: a template letter to a patient's primary-care physician about diabetes findings. The practice's compliance analyst confirmed the scope: the reference is **MIPS Quality #019 / CMS142 (Diabetic Retinopathy: Communication with the Physician Managing Ongoing Diabetes Care)**, which applies to **adults with an active diabetic-retinopathy diagnosis and a dilated macular/fundus exam**, *not* every patient with diabetes; the communication must state the **severity** of the retinopathy and whether **macular edema** is present or absent; an exclusion (patient refusal, medical contraindication) must be documentable; and outside providers belong in **one shared directory, not typed per patient**, with fax stored as digits only. Decisions: prompt only for diabetic retinopathy (not any diabetes); store the PCP in a shared directory linked to the patient; record that a letter was sent. The wording of the measure is the compliance expert's to confirm; this build encodes their description and nothing more.
+
+### 116.2 What was built
+
+* **Advisory banner on the exam page** (never blocking) when the visit's diagnosis codes, or an active Problem List entry, include a diabetic-retinopathy ICD-10 code (E10 / E11 / E13, .31x-.35x), the patient is 18 or older, and no letter has been **sent** and no exclusion documented for that patient in the last 12 months. A draft doesn't satisfy it. The banner reminds staff to resolve the Problem List entry if the retinopathy has resolved. Every exam also has a "PCP letter" button for starting one by hand.
+* **Letter form**: severity (mild / moderate / severe / proliferative) and macular edema (present / absent) are required discrete choices, **suggested from the ICD-10 code** where the code says so (the code's severity digit, and "with" / "without" macular edema) and left blank otherwise; the clinician must also confirm a dilated macular/fundus exam was performed, and the patient needs a PCP on file. The letter is rendered from the practice's template and **saved as a snapshot** (so later template edits never change a prepared letter), then shown as a printable page.
+* **Sent record**: "Mark sent" records how (fax, mail, Direct secure message, phone call, handed to patient), who and when. **The app transmits nothing**; this is a staff attestation.
+* **Exclusions**: a signing clinician can document "patient refusal", "medical contraindication" or "other (explained)", which satisfies the window like a sent letter.
+* **Outside Providers directory** (`/care-providers`): one shared list (name, credentials, practice, NPI, phone, fax, Direct address, address). Fax is reduced to 10 digits and rejected otherwise; an NPI must be 10 digits. A patient's PCP is a link to a directory entry (`/patients/{id}/primary-care`); adding a provider from a patient also assigns it.
+* **Communication Templates** (`/admin/communication-templates`, System/Practice Administrator): edits the letter wording. Only the listed `{placeholders}` are filled in (no template engine, so nothing typed can execute) and the template cannot be saved without `{severity}` and `{macular_edema}`. A neutral default is seeded (migration 057) and never overwritten by a re-run. Edits are audited.
+* Roles: clinical staff (those who can edit an exam) prepare letters and mark them sent; a signer documents exclusions; letters respect record-level authorization (a provider reaches only their own patients; others get a 404).
+
+### 116.3 Schema and limits
+
+Four new tables, no existing table changed: `outside_practitioners`, `patient_primary_care` (a link table, so `patients` is untouched), `communication_templates`, `pcp_communications`. Limits: the visit's CPT/HCPCS code and the exact performance period are not checked (the banner is deliberately over-inclusive and uses a rolling 12 months); there is no field recording that the exam was dilated, so the clinician confirms it on the letter form; no fax, Direct-messaging or NPPES lookup is wired up (the Direct address and NPI are stored for later); diagnoses are read from the free-text diagnosis codes, so a retinopathy that is only described in words won't prompt; this is staff-facing decision support, not quality-reporting submission.
+
+### 116.4 Verified
+
+Unit tests (`tests/test_pcp_letter.py`: code parsing, suggestion, who is due and when the window lapses, template guard, whitelisted rendering, directory validation; migration 057 idempotence in `tests/test_migrations.py`) and an end-to-end test (banner, no letter without a PCP, fax validation, dilated-exam confirmation, rendered letter with severity and edema, draft keeps the banner, marked sent clears it, template guard). Full suite green.
+
+**Version 2.89 change log (relative to v2.88):**
+
+| Area | Change |
+| --- | --- |
+| Schema | New tables: outside_practitioners, patient_primary_care, communication_templates, pcp_communications; migration 057 seeds the default letter. |
+| Exam | Advisory banner and "PCP letter" button for diabetic-retinopathy communication; printable letter; sent record; documented exclusions. |
+| Directory | Shared Outside Providers directory and a per-patient primary-care link. |
+| Admin | Communication Templates editor with a required-facts guard. |

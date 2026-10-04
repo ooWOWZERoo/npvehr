@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}PCP Letter &mdash; New Path Vision EHR{% endblock %}
+{% block content %}
+<div class="page-header no-print"><div><span class="page-eyebrow">Care coordination</span><h1>Letter to the Managing Physician
+  <span class="badge {{ 'badge-completed' if c.status == 'sent' else 'badge-scheduled' }}" style="vertical-align:middle">{{ c.status|title }}</span></h1>
+  <p class="page-lede">{{ patient.last_name }}, {{ patient.first_name }} &mdash; exam {{ exam.exam_date if exam else '' }}</p></div>
+  <div style="display:flex;gap:0.5rem"><a href="/exams/{{ c.exam_id }}" class="btn btn-secondary">Back to exam</a><button type="button" class="btn btn-secondary" onclick="window.print()">Print</button></div></div>
+{% if error %}<div class="alert alert-error no-print" style="margin-bottom:var(--space-4)">{{ error }}</div>{% endif %}
+{% if c.status == 'excluded' %}
+<div class="card"><h3>Documented exclusion</h3><p>No letter was sent: <strong>{{ c.exclusion_reason|replace('_', ' ')|capitalize }}</strong>{% if c.exclusion_note %} &mdash; {{ c.exclusion_note }}{% endif %}.</p></div>
+{% else %}
+<div class="card" id="letterBody">
+  {% if c.recipient_snapshot %}<p class="muted" style="font-size:0.85rem">To: {{ c.recipient_snapshot }}</p>{% endif %}
+  <div style="white-space:pre-wrap;font-family:inherit">{{ c.body_snapshot }}</div>
+</div>
+{% if c.status == 'drafted' and can_edit %}
+<form method="post" action="/pcp-letters/{{ c.id }}/sent" class="card form-card no-print" style="margin-top:var(--space-4)"><h3>Mark as sent</h3>
+  <p class="muted" style="font-size:0.85rem">Once the letter has left the office, record how. This is a record only; the app does not send anything.</p>
+  <div style="display:flex;gap:0.5rem;align-items:end"><label class="fld">How was it sent?<select name="method" required><option value="">Choose&hellip;</option>{% for k, v in SEND_METHODS.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></label>
+  <button type="submit" class="btn btn-primary">Mark sent</button></div>
+</form>
+{% elif c.status == 'sent' %}
+<p class="muted no-print" style="margin-top:var(--space-3)">Marked sent by {{ SEND_METHODS[c.sent_method] }} on {{ c.sent_at.strftime('%m/%d/%Y %I:%M %p') }}.</p>
+{% endif %}{% endif %}
+{% endblock %}

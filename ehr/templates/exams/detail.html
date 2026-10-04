@@ -8,8 +8,10 @@
   <div style="display:flex;gap:0.5rem">
     <a href="/patients/{{ exam.patient_id }}" class="btn btn-secondary btn-sm">Patient</a>
     <a href="/prescriptions/new?patient_id={{ exam.patient_id }}&exam_id={{ exam.id }}" class="btn btn-primary btn-sm">Write Rx</a>
+    <a href="/exams/{{ exam.id }}/pcp-letter" class="btn btn-secondary btn-sm">PCP letter</a>
   </div>
 </div>
+{% include "exams/_pcp_letter_banner.html" %}
 <div class="detail-grid">
   <div class="card"><h3>Visit Info</h3><dl class="dl-grid">
     <dt>Patient</dt><dd><a href="/patients/{{ exam.patient_id }}">{{ exam.patient.last_name }}, {{ exam.patient.first_name }}</a></dd>
