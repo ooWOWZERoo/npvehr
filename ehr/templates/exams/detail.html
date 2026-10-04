@@ -190,7 +190,10 @@
 <div class="card" style="margin-top:1rem"><h3>ROS Findings (catalog)</h3>
   <p class="muted" style="margin-top:-0.5rem;font-size:0.85rem">Positive findings ticked on the exam form. Recorded with the exam and locked once it is signed.</p>
   <dl class="dl-grid">
-    {% for system, prompts in ros_findings %}<dt>{{ system }}</dt><dd>{{ prompts | join('; ') }}</dd>{% endfor %}
+    {% set legacy = {'Constitutional': exam.ros_constitutional, 'Cardiovascular': exam.ros_cardiovascular, 'Respiratory': exam.ros_respiratory,
+                     'Gastrointestinal': exam.ros_gastrointestinal, 'Neurological': exam.ros_neurological, 'Musculoskeletal': exam.ros_musculoskeletal,
+                     'Endocrine': exam.ros_endocrine, 'Integumentary': exam.ros_skin} %}
+    {% for system, prompts in ros_findings %}<dt>{{ system }}</dt><dd>{{ prompts | join('; ') }}{% if legacy.get(system) is sameas false %} <span class="badge badge-cancelled" title="The summary Yes/No for this system was recorded as Negative while a finding was ticked">Summary answer is Negative</span>{% endif %}</dd>{% endfor %}
   </dl>
 </div>
 {% endif %}

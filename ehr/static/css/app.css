@@ -904,6 +904,8 @@ a.tile:hover { text-decoration: none; }
 .ros-rule-count { margin-left: auto; font-size: 0.72rem; color: var(--ink-muted); }
 .ros-suggestions { margin-top: var(--space-3); display: grid; gap: var(--space-2); }
 .ros-suggestions[hidden], .ros-system-tag[hidden] { display: none; }
+.ros-conflict { font-size: 0.68rem; font-weight: 700; letter-spacing: 0.04em; background: var(--warn-bg); color: var(--warn-ink); border-radius: 999px; padding: 0.1rem 0.5rem; margin-left: 0.4rem; }
+.ros-conflict[hidden] { display: none; }
 .ros-suggest { background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--primary); border-radius: 10px; padding: var(--space-3) var(--space-4); }
 .ros-suggest-title { font-weight: 700; margin-bottom: var(--space-1); color: var(--ink); }
 .ros-suggest-row { display: grid; gap: 2px; padding: 0.35rem 0; border-top: 1px solid var(--border); font-size: 0.85rem; }

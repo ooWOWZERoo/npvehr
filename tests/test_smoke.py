@@ -3815,6 +3815,40 @@ def test_ros_catalog_admin_crud_review_signoff_and_permissions(logged_in_page, l
     aud_ctx.close()
 
 
+def test_ticked_ros_finding_fills_a_blank_summary_answer_but_never_overwrites_a_no(logged_in_page, live_server):
+    """Decision on the eight legacy Yes/No ROS dropdowns: a ticked catalog finding is a deliberate positive, so a BLANK summary
+    answer for that system becomes Yes; an explicit No is never overwritten (the mismatch is flagged on the form and on the
+    exam page instead); and nothing is ever reversed when a finding is unticked."""
+    page = logged_in_page
+    page.goto(live_server + "/exams/new")
+    assist = page.locator("#rosAssist")
+    assist.wait_for(state="visible")
+    assist.locator("[data-ros-wrap] > summary").click() if assist.locator("[data-ros-wrap]").get_attribute("open") is None else None
+    endocrine = assist.locator("details.ros-system", has_text="Endocrine")
+    endocrine.locator("summary").click() if endocrine.get_attribute("open") is None else None
+
+    assert page.locator('select[name="ros_endocrine"]').input_value() == ""
+    endocrine.locator("label", has_text="History of diabetes").locator("input").check()
+    assert page.locator('select[name="ros_endocrine"]').input_value() == "Yes"                 # blank became Yes
+    endocrine.locator("label", has_text="History of diabetes").locator("input").uncheck()
+    assert page.locator('select[name="ros_endocrine"]').input_value() == "Yes"                 # never reversed
+
+    page.select_option('select[name="ros_endocrine"]', "No")
+    assert endocrine.locator(".ros-conflict").is_hidden()
+    endocrine.locator("label", has_text="History of diabetes").locator("input").check()
+    assert page.locator('select[name="ros_endocrine"]').input_value() == "No"                  # a No is never overwritten
+    assert endocrine.locator(".ros-conflict").is_visible()                                     # ...the mismatch is flagged
+    page.select_option('select[name="ros_endocrine"]', "Yes")
+    assert endocrine.locator(".ros-conflict").is_hidden()
+    page.select_option('select[name="ros_endocrine"]', "No")
+
+    page.select_option('select[name="patient_id"]', index=0)
+    page.select_option('select[name="provider_id"]', index=0)
+    page.locator('button[type="submit"]', has_text="Save Exam").click()
+    page.wait_for_url(re.compile(r"/exams/\d+$"))
+    assert "summary answer is negative" in page.locator("dd", has_text="History of diabetes").first.inner_text().lower()                              # the exam page shows the disagreement
+
+
 def test_exam_form_ros_suggestions_are_advisory_only_and_never_block_the_form(logged_in_page, live_server):
     """ROS stage 3: the exam form's ROS step lists the catalog's prompts per body system, opens
     a system when the matching Yes/No answer is Yes, and shows the suggested ICD-10/test for any
