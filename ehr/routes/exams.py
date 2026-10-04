@@ -20,6 +20,7 @@ from ehr.services import authz
 from ehr.services import billing_override
 from ehr.services import billing_ledger
 from ehr.services import ros_responses
+from ehr.services import medications as med_svc
 from ehr.services import pcp_letter
 from ehr.services import safety as safety_svc
 
@@ -328,6 +329,8 @@ async def create_exam(request: Request, db: Session = Depends(get_db)):
     # Granular ROS findings ticked in the ROS suggestions panel (ROS plan stage 4). Best-effort
     # and savepoint-guarded: a problem here can never stop the exam itself from saving.
     ros_responses.record_findings(db, exam.id, form.getlist("ros_finding"))
+    # Medication / allergy list reviews confirmed on the form's medications card (best-effort, savepoint-guarded).
+    med_svc.record_exam_reviews(db, exam, form, request.state.user.id)
     db.commit()
     return RedirectResponse(f"/exams/{exam.id}", status_code=303)
 
@@ -345,7 +348,7 @@ def exam_detail(request: Request, exam_id: int, db: Session = Depends(get_db)):
          "safety_acks": safety_svc.acknowledgements_for_exam(db, exam_id),
          "safety_ack_required": request.query_params.get("safety_ack_required") == "1",
          "pcp_candidate": pcp_letter.candidate(db, e), "pcp_has_letter": pcp_letter.recent_status(db, e.patient_id),
-         "pcp_error": request.query_params.get("pcp_error")})
+         "pcp_error": request.query_params.get("pcp_error"), "med_reviews": med_svc.reviews_for_exam(db, exam_id)})
 
 
 @router.post("/{exam_id}/sign", dependencies=[Depends(require_role(*EXAM_SIGN))])

@@ -2,6 +2,7 @@
 (ehr.services.medications + the safety.evaluate hookup). Fabricated data; throwaway SQLite file, no browser."""
 import os
 import tempfile
+from types import SimpleNamespace
 from datetime import datetime, timedelta
 
 import pytest
@@ -126,3 +127,33 @@ def test_add_edit_stop_allergy_validation_and_audit(db):
     assert med.count_active(db, 1, "allergies") == 0
     tables = {e.table_name for e in db.query(FieldChangeAuditEvent)}
     assert {"patient_medications", "patient_allergies"} <= tables
+
+
+def test_exam_form_reviews_are_recorded_against_the_exam_and_inconsistent_ones_are_ignored(db):
+    exam = SimpleNamespace(id=42, patient_id=1)
+    assert med.record_exam_reviews(db, exam, {"med_review_medications": "none_reported", "med_review_allergies": ""}, 5) == 1
+    db.commit()
+    r = db.query(MedicationListReview).one()
+    assert (r.kind, r.outcome, r.exam_id, r.reviewed_by_user_id) == ("medications", "none_reported", 42, 5)
+    assert [(x.kind, x.outcome) for x, _ in med.reviews_for_exam(db, 42)] == [("medications", "none_reported")]
+    _add(db, 1, "Metformin")
+    # 'none reported' is refused while the list has items; a bogus outcome is ignored; a valid one still records.
+    n = med.record_exam_reviews(db, exam, {"med_review_medications": "none_reported", "med_review_allergies": "bogus"}, 5)
+    assert n == 0
+    assert med.record_exam_reviews(db, exam, {"med_review_medications": "updated", "med_review_allergies": "none_reported"}, 5) == 2
+    assert med.record_exam_reviews(db, exam, {}, 5) == 0
+
+
+def test_exam_card_summary_lists_active_items_and_review_state(db):
+    _add(db, 1, "Latanoprost 0.005%", eye="ou", frequency="nightly")
+    stopped = _add(db, 1, "Old drop"); med.set_medication_status(db, stopped, "stopped", 1)
+    med.add_allergy(db, 1, 1, {"allergen": "Sulfa", "severity": "severe"}); db.commit()
+    s = med.exam_card_summary(db, 1)
+    assert [m["name"] for m in s["medications"]] == ["Latanoprost 0.005%"] and s["medications"][0]["eye"] == "OU"
+    assert s["allergies"] == [{"allergen": "Sulfa", "reaction": None, "severity": "severe"}]
+    assert s["medications_state"] == "never" and s["medications_reviewed_at"] is None
+    med.record_review(db, 1, "medications", "no_changes", 1); db.commit()
+    s = med.exam_card_summary(db, 1)
+    assert s["medications_state"] == "current" and s["allergies_state"] == "never"
+    assert med.exam_card_summary(db, 2) == {"medications": [], "allergies": [], "medications_state": "never", "medications_reviewed_at": None,
+                                            "allergies_state": "never", "allergies_reviewed_at": None}

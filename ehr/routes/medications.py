@@ -4,7 +4,7 @@ MEDICATION_EDIT (clinical staff); everyone with access to the chart can view. No
 from datetime import date
 
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from ehr.auth import csrf
@@ -42,6 +42,16 @@ def tab(request: Request, patient_id: int, db: Session = Depends(get_db)):
         "stale_months": med_svc.STALE_MONTHS, "today": date.today(),
     })
     return templates.TemplateResponse(request, "patients/medications_tab.html", ctx)
+
+
+@router.get("/summary.json")
+def summary(request: Request, patient_id: int, db: Session = Depends(get_db)):
+    """Read by the New Exam form's medications card. Patient-scoped: a provider only reaches their own patients (404 otherwise)."""
+    p = _get_patient_or_404(db, patient_id, request.state.user)
+    if not p:
+        return JSONResponse({"detail": "Not found"}, status_code=404)
+    return JSONResponse({**med_svc.exam_card_summary(db, patient_id), "can_edit": request.state.user.role in MEDICATION_EDIT},
+                        headers={"Cache-Control": "no-store"})
 
 
 async def _guard(request, db, patient_id):

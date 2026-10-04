@@ -185,3 +185,44 @@ def review_status(db: Session, patient_id: int, kind: str, now: Optional[datetim
     if r.outcome == "none_reported" and count_active(db, patient_id, kind):
         return {"review": r, "state": "stale"}
     return {"review": r, "state": "current"}
+
+
+def record_exam_reviews(db: Session, exam, form, user_id: int) -> int:
+    """Records the reviews a clinician confirmed on the New Exam form's medications card (form fields
+    med_review_medications / med_review_allergies = an outcome), linked to the exam just saved. Best-effort and
+    savepoint-guarded like the ROS findings: a problem here can never stop the exam itself from saving. Returns how many
+    reviews were recorded (an inconsistent request, e.g. 'none reported' for a list with items, is ignored)."""
+    n = 0
+    for kind in ("medications", "allergies"):
+        outcome = (form.get(f"med_review_{kind}") or "").strip()
+        if not outcome:
+            continue
+        try:
+            with db.begin_nested():
+                if record_review(db, exam.patient_id, kind, outcome, user_id, exam_id=exam.id):
+                    n += 1
+        except Exception:                              # noqa: BLE001 -- never block saving an exam
+            log.exception("Could not record %s review for exam %s", kind, exam.id)
+    return n
+
+
+def reviews_for_exam(db: Session, exam_id: int) -> list:
+    """[(review, 'First Last' or None)] recorded at this exam, for the exam page."""
+    from ehr.models.database import User
+    rows = (db.query(MedicationListReview, User).outerjoin(User, User.id == MedicationListReview.reviewed_by_user_id)
+            .filter(MedicationListReview.exam_id == exam_id).order_by(MedicationListReview.id).all())
+    return [(r, (f"{u.first_name} {u.last_name}".strip() if u else None)) for r, u in rows]
+
+
+def exam_card_summary(db: Session, patient_id: int) -> dict:
+    """Everything the exam form's card needs, in one small payload."""
+    meds = active_medications(db, patient_id)
+    allergies = (db.query(PatientAllergy).filter(PatientAllergy.patient_id == patient_id, PatientAllergy.status == "active")
+                 .order_by(PatientAllergy.allergen).all())
+    out = {"medications": [{"name": m.name, "strength": m.strength, "route": m.route, "eye": m.eye, "frequency": m.frequency} for m in meds],
+           "allergies": [{"allergen": a.allergen, "reaction": a.reaction, "severity": a.severity} for a in allergies]}
+    for kind in ("medications", "allergies"):
+        st = review_status(db, patient_id, kind)
+        out[f"{kind}_state"] = st["state"]
+        out[f"{kind}_reviewed_at"] = st["review"].reviewed_at.strftime("%m/%d/%Y") if st["review"] else None
+    return out

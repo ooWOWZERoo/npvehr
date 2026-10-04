@@ -45,6 +45,7 @@
         <label class="fld">Provider*<select name="provider_id" required>{% for p in providers %}<option value="{{ p.id }}">Dr. {{ p.last_name }}</option>{% endfor %}</select></label>
         <label class="fld">Exam date*<input name="exam_date" type="date" value="{{ today }}" required></label>
       </div>
+      <div class="med-card" id="medsCard" hidden aria-live="polite"></div>
       <div class="hero-field voice-scribe-field">
         <label class="sr-only" for="chief_complaint">Chief complaint</label>
         <textarea name="chief_complaint" id="chief_complaint" placeholder="Chief complaint, in the patient's words&hellip;"></textarea>
@@ -1456,5 +1457,6 @@ function removeReturnVisit2() {
 <script src="/static/js/exam_room.js"></script>
 <script src="/static/js/ros_assist.js"></script>
 <script src="/static/js/safety_banner.js"></script>
+<script src="/static/js/exam_meds_card.js"></script>
 <script src="/static/js/voice_scribe.js"></script>
 {% endblock %}
