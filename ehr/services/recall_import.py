@@ -37,7 +37,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from ehr.models.database import Base, Patient
-from ehr.models.imports import DataImportBatch, DataImportBatchPatient, PatientRecall
+from ehr.models.imports import DataImportBatch, DataImportBatchPatient, PatientRecall, RecallAction
 
 MAX_FILE_BYTES = 4_000_000          # stays under Vercel's request-body limit
 HEADERS = {"scheduled recall date": "recall_date", "next appt date": "next_appt", "last exam date": "last_exam",
@@ -339,6 +339,13 @@ def _patients_with_other_records(db: Session, patient_ids: list) -> set:
     return held
 
 
+def _delete_recalls(db: Session, criterion) -> None:
+    """Removes the worklist history (contacts, closures) of the recalls matching `criterion`; a bulk delete skips the cascade."""
+    ids = [r[0] for r in db.query(PatientRecall.id).filter(criterion).all()]
+    for i in range(0, len(ids), 500):
+        db.query(RecallAction).filter(RecallAction.recall_id.in_(ids[i:i + 500])).delete(synchronize_session=False)
+
+
 def undo_batch(db: Session, batch: DataImportBatch) -> tuple:
     """Removes the patients this batch created that have no other records, plus their recalls. Patients that existed
     before the import, or have since gained clinical/scheduling records, are never touched. Returns (removed, kept)."""
@@ -347,12 +354,14 @@ def undo_batch(db: Session, batch: DataImportBatch) -> tuple:
     removable = [pid for pid in created if pid not in held]
     for i in range(0, len(removable), 500):
         chunk = removable[i:i + 500]
+        _delete_recalls(db, PatientRecall.patient_id.in_(chunk))
         db.query(PatientRecall).filter(PatientRecall.patient_id.in_(chunk)).delete(synchronize_session=False)
         from ehr.models.safety import PatientSafetyFlag
         db.query(PatientSafetyFlag).filter(PatientSafetyFlag.patient_id.in_(chunk)).delete(synchronize_session=False)
         db.query(DataImportBatchPatient).filter(DataImportBatchPatient.patient_id.in_(chunk)).delete(synchronize_session=False)
         db.query(Patient).filter(Patient.id.in_(chunk)).delete(synchronize_session=False)
     # Recalls this batch added to patients that already existed.
+    _delete_recalls(db, PatientRecall.import_batch_id == batch.id)
     db.query(PatientRecall).filter(PatientRecall.import_batch_id == batch.id).delete(synchronize_session=False)
     batch.status, batch.patients_undone, batch.patients_kept_on_undo = "undone", len(removable), len(held)
     return len(removable), len(held)

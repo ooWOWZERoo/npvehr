@@ -63,6 +63,7 @@ class PatientRecall(Base):
     due_date: Mapped[date] = mapped_column(Date)
     last_exam_date: Mapped[Optional[date]] = mapped_column(Date)
     never_examined: Mapped[bool] = mapped_column(Boolean, default=False)    # the report said "Never"
+    status: Mapped[str] = mapped_column(String(10), default="open", server_default="open")   # open | satisfied | dismissed
     next_appt_date: Mapped[Optional[date]] = mapped_column(Date)
     import_batch_id: Mapped[Optional[int]] = mapped_column(ForeignKey("data_import_batches.id", ondelete="SET NULL"))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
@@ -79,3 +80,18 @@ class DataImportBatchRecord(Base):
     record_table: Mapped[str] = mapped_column(String(60))
     record_id: Mapped[int] = mapped_column()
     __table_args__ = (Index("ix_import_batch_records_batch", "batch_id", "record_table"),)
+
+
+class RecallAction(Base):
+    """What staff did about a recall: a contact attempt, closing it as satisfied or dismissed, or reopening it. Append-only
+    history; PatientRecall.status holds the current state so the worklist stays a simple query. Nothing here sends anything:
+    a 'contacted' row is staff recording that they reached out by the stated method."""
+    __tablename__ = "recall_actions"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    recall_id: Mapped[int] = mapped_column(ForeignKey("patient_recalls.id", ondelete="CASCADE"))
+    action: Mapped[str] = mapped_column(String(10))            # contacted | satisfied | dismissed | reopened
+    method: Mapped[Optional[str]] = mapped_column(String(10))  # phone | email | text | mail | portal | in_person (contacted only)
+    note: Mapped[Optional[str]] = mapped_column(String(255))
+    user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    __table_args__ = (Index("ix_recall_actions_recall", "recall_id", "created_at"),)

@@ -4664,3 +4664,94 @@ def test_medication_list_import_preview_attestation_chart_unreviewed_and_undo(lo
     assert "Undone" in page.locator("body").inner_text()
     page.goto(patient_url + "/medications")
     assert "Timolol 0.5%" not in page.locator("#medsSection").inner_text()
+
+
+def test_recall_worklist_log_contact_close_dismiss_reopen_and_roles(logged_in_page, live_server):
+    """Recall worklist (recalls loaded from the fabricated sample report): open recalls are listed with their due status, a contact
+    attempt is recorded, a recall can be marked satisfied (leaves the open list, shows under Satisfied, can be reopened), dismissing
+    needs a reason (enforced server-side), and a role that can't do front-desk work sees the list without the action buttons."""
+    from pathlib import Path
+    fx = Path(__file__).parent / "fixtures"
+    page = logged_in_page
+    page.goto(live_server + "/admin/imports")
+    page.set_input_files('input[type="file"]', str(fx / "recall_sample.csv"))
+    page.locator("button", has_text="Upload & preview").click()
+    page.wait_for_url(re.compile(r"/admin/imports/\d+$"))
+    batch_url = page.url
+    page.check("#attest")
+    page.fill('input[name="reason"]', "Fabricated sample for automated test")
+    page.locator("button", has_text="Import now").click()
+    page.wait_for_load_state()
+
+    page.goto(live_server + "/recalls?q=Samplesmith")
+    rows = page.locator("#recallTable tbody tr")
+    assert rows.count() == 2 and "overdue" in page.locator("#recallTable").inner_text().lower()
+    assert "Not contacted" in rows.first.inner_text()
+    first = rows.first
+    first.locator("summary", has_text="Log contact").click()
+    first.locator('select[name="method"]').select_option("phone")
+    first.locator('form[action$="/contact"] input[name="note"]').fill("left voicemail (sample)")
+    first.locator("button", has_text="Save").click()
+    page.wait_for_load_state()
+    assert "1×" in page.locator("#recallTable tbody tr").first.inner_text() and "by phone" in page.locator("#recallTable tbody tr").first.inner_text()
+
+    assert page.url.endswith("/recalls?q=Samplesmith")                                      # actions return to the same filtered view
+    # Mark satisfied: it leaves the open list, appears under Satisfied, and can be reopened.
+    page.locator("#recallTable tbody tr").first.locator("button", has_text="Mark satisfied").click()
+    page.wait_for_load_state()
+    assert page.locator("#recallTable tbody tr").count() == 1
+    page.goto(live_server + "/recalls?q=Samplesmith&status=satisfied&window=all")
+    assert page.locator("#recallTable tbody tr").count() == 1 and "satisfied" in page.locator("#recallTable").inner_text().lower()
+    page.locator("button", has_text="Reopen").click()
+    page.wait_for_load_state()
+    page.goto(live_server + "/recalls?q=Samplesmith")
+    assert page.locator("#recallTable tbody tr").count() == 2
+
+    # Dismissing needs a reason, enforced on the server even if the browser's own check is bypassed.
+    row = page.locator("#recallTable tbody tr").first
+    row.locator("summary", has_text="Dismiss").click()
+    page.evaluate("document.querySelectorAll('input[name=note][required]').forEach(e => e.required = false)")
+    row.locator("button", has_text="Dismiss recall").click()
+    page.wait_for_load_state()
+    assert "Give a reason for dismissing a recall" in page.locator(".alert-error").inner_text()
+    assert page.locator("#recallTable tbody tr").count() == 2
+
+    # The front desk can work the list; a read-only auditor can see it but not act on it.
+    fd_ctx = page.context.browser.new_context()
+    fd = fd_ctx.new_page()
+    fd.goto(live_server + "/login")
+    fd.fill("#email", "frontdesk@newpathvision.example")
+    fd.fill("#password", "ChangeMe123!")
+    fd.click("button[type=submit]")
+    fd.wait_for_url(f"{live_server}/")
+    fd.goto(live_server + "/recalls?q=Samplesmith")
+    assert fd.locator("button", has_text="Mark satisfied").count() == 2
+    fd_ctx.close()
+    page.goto(live_server + "/admin/users/new")
+    page.fill("#first_name", "Recall")
+    page.fill("#last_name", "Auditor")
+    page.fill("#email", "recall.auditor@newpathvision.example")
+    page.select_option("#role", "read_only_auditor")
+    page.fill("#password", "ChangeMe123!")
+    page.locator('button[type="submit"]', has_text="Create User").click()
+    page.wait_for_load_state("networkidle")
+    aud_ctx = page.context.browser.new_context()
+    aud = aud_ctx.new_page()
+    aud.goto(live_server + "/login")
+    aud.fill("#email", "recall.auditor@newpathvision.example")
+    aud.fill("#password", "ChangeMe123!")
+    aud.click("button[type=submit]")
+    aud.wait_for_url(f"{live_server}/")
+    aud.goto(live_server + "/recalls?q=Samplesmith")
+    assert aud.locator("#recallTable tbody tr").count() == 2 and aud.locator("button", has_text="Mark satisfied").count() == 0
+    token = aud.locator('meta[name="csrf-token"]').get_attribute("content")
+    denied = aud.request.post(live_server + "/recalls/1/close", form={"outcome": "satisfied", "csrf_token": token})
+    assert denied.status == 403                                                            # and the server refuses it too
+    aud_ctx.close()
+
+    page.goto(batch_url)
+    page.once("dialog", lambda d: d.accept())
+    page.locator("button", has_text="Undo this import").click()
+    page.wait_for_load_state()
+    page.goto(live_server + "/recalls?q=Samplesmith")
+    assert page.locator("#recallTable tbody tr").count() == 1 and "No recalls match" in page.locator("#recallTable").inner_text()

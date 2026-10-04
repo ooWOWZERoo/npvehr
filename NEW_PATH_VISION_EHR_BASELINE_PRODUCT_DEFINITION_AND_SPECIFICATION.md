@@ -5398,3 +5398,35 @@ Unit tests (`tests/test_medication_import.py`: matching and skip reasons, ambigu
 | Admin | `/admin/medication-import`: upload, preview, test-data attestation, import, undo, template (System Administrator). |
 | Medication list | Imported medications are marked "imported" and never count as a review. |
 | Schema | None. |
+
+## 120. Recall Worklist (v2.93)
+
+### 120.1 Request
+
+The recall import (§113) loads due-back dates and shows them on each chart, but gave staff no way to work through them. This round adds the worklist and the "mark satisfied" action that §113 listed as future work.
+
+### 120.2 What was built
+
+* **`/recalls` ("Scheduling > Recall Worklist")**: open recalls, most overdue first, 50 per page. Filters: due window (overdue and next 30 days by default; overdue only; next 90 days; any), status (open, satisfied, dismissed, all), recall type, name or phone, and "hide patients with an appointment booked". Headline tiles: overdue, due in 30 days, all open.
+* **Context beside each recall**, to help decide whether anyone needs calling: an **appointment already booked** in this system (scheduled, checked-in or in-progress, from today on), an **exam on file** near or after the due date (within 60 days before it, or later), the report's last-exam date, the patient's phone and text/email opt-in markers, and the contact history (count, last date and method). Both badges are advisory; they never close a recall by themselves.
+* **Actions** (front-desk work, i.e. those who can edit a patient): **Log contact** (phone, text, email, mail, portal or in person, plus a note), **Mark satisfied**, **Dismiss** (a reason is required, enforced on the server), and **Reopen**. Actions return to the same filtered view. Roles that can view patients but not edit them (e.g. a read-only auditor) see the list without the buttons, and the server refuses their actions.
+* **History and status**: every action is a row in a new append-only `recall_actions` table (who, when, what, how, note); `patient_recalls` gains a `status` (open, satisfied, dismissed; migration 058 adds the column to existing databases, with every existing recall starting open). Closing and reopening are also written to the field-change audit. The patient's Recalls tab shows the status and links here.
+* Record-level authorization applies like everywhere else: a provider sees only their own patients' recalls, an unlinked provider account sees none.
+* Undoing a recall import (§113) now also removes the worklist history of the recalls it removes.
+
+### 120.3 Not built
+
+Nothing is sent: no reminder, text, email or letter is generated, and the opt-in markers are information for staff, not a trigger. No mail-merge or CSV export of the list (it would be a new path for patient data to leave the app). Recalls are not created automatically from exams or appointments, and a booked appointment or newer exam does not close a recall on its own.
+
+### 120.4 Verified
+
+Unit tests (`tests/test_recalls.py`: windows, status, type and search filters and ordering, headline counts, provider scoping and the fail-closed unlinked provider, booked/seen context with a cancelled appointment ignored, hide-booked, contact/close/dismiss/reopen rules and audit) plus a migration test (058 adds the column to an old table, rerun is safe). End-to-end: import the fabricated sample, log a contact, mark satisfied, find it under Satisfied, reopen, dismissal without a reason refused by the server, front desk can act, an auditor sees no buttons and gets a 403 posting directly, then undo the import. A bug found while testing: a template variable named `next_url` collided with the pagination helper's, so actions lost the filters; it is now `self_url` and the test asserts the filtered view is kept. Full suite green.
+
+**Version 2.93 change log (relative to v2.92):**
+
+| Area | Change |
+| --- | --- |
+| Schema | New table recall_actions; patient_recalls.status (migration 058). |
+| Scheduling | Recall Worklist at /recalls with filters, context badges, log contact, mark satisfied, dismiss, reopen. |
+| Chart | Recalls tab shows each recall's status and links to the worklist. |
+| Recall import | Undo also removes worklist history for removed recalls. |

@@ -303,3 +303,16 @@ def test_pcp_letter_template_seed_is_idempotent_and_never_overwrites_an_edit(fre
     with fresh_engine.connect() as conn:
         assert conn.execute(text("SELECT COUNT(*) FROM communication_templates")).scalar() == 1
         assert conn.execute(text("SELECT body FROM communication_templates")).scalar() == "edited {severity} {macular_edema}"
+
+
+def test_recall_status_column_is_added_to_an_existing_table_and_rerun_is_safe(fresh_engine):
+    """Migration 058: a patient_recalls table from before the worklist (no status column) gains it with every row 'open'."""
+    with fresh_engine.begin() as conn:
+        conn.execute(text("CREATE TABLE patient_recalls (id INTEGER PRIMARY KEY, patient_id INTEGER, recall_type VARCHAR(80), due_date DATE)"))
+        conn.execute(text("INSERT INTO patient_recalls (patient_id, recall_type, due_date) VALUES (1, '12 Month Adult', '2026-01-01')"))
+    with fresh_engine.begin() as conn:
+        mig.migration_058_recall_status(conn)
+    with fresh_engine.begin() as conn:
+        mig.migration_058_recall_status(conn)                                  # re-run is a no-op
+    with fresh_engine.connect() as conn:
+        assert conn.execute(text("SELECT status FROM patient_recalls")).scalar() == "open"
