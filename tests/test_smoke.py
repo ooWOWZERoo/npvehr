@@ -4561,3 +4561,46 @@ def test_diabetic_retinopathy_pcp_letter_directory_send_record_and_template_guar
     page.locator("button", has_text="Save template").click()
     page.wait_for_load_state()
     assert "{nonsense}" in page.locator(".alert-error").inner_text()
+
+
+def test_exam_form_medications_card_shows_lists_flags_unreviewed_and_records_review_with_the_exam(logged_in_page, live_server):
+    """Medications card on the New Exam form: for the selected patient it shows the active medications and allergies,
+    says an unreviewed list is unknown (not none), offers 'patient reports none' only for an empty list, and a review
+    confirmed on the form is recorded against the saved exam (shown on the exam page). Advisory: saving never depends on it."""
+    page = logged_in_page
+    page.goto(live_server + "/exams/new")
+    page.select_option('select[name="patient_id"]', label="Wilson, David")
+    card = page.locator("#medsCard")
+    card.wait_for(state="visible")
+    text = card.inner_text().lower()
+    assert "medications not yet reviewed" in text and "allergies not yet reviewed" in text and "none recorded" in text
+    assert card.locator("button", has_text="Patient reports none").count() == 2
+    card.locator("button", has_text="Patient reports none").first.click()                    # medications: patient reports none
+    assert "✓ Patient reports none" in card.inner_text() and "recorded when you save" in card.inner_text().lower()
+    card.locator("button", has_text="✓ Patient reports none").click()                  # toggles off again...
+    assert "✓" not in card.inner_text()
+    card.locator("button", has_text="Patient reports none").first.click()                    # ...and on
+    page.select_option('select[name="provider_id"]', index=0)
+    page.locator('button[type="submit"]', has_text="Save Exam").click()
+    page.wait_for_url(re.compile(r"/exams/\d+$"))
+    body = page.locator("body").inner_text()
+    assert "Reviewed at this visit" in body and "Medications" in body and "patient reports none" in body
+    assert "Allergies —" not in body                                                    # only what was confirmed is recorded
+    patient_href = page.locator("dd a[href^='/patients/']").first.get_attribute("href")
+
+    # Add a medication on the chart; a new exam's card now lists it, offers no 'none', and flags the list as needing review.
+    page.goto(live_server + patient_href + "/medications")
+    page.fill('#medsSection input[name="name"]', "Sample card medication")
+    page.locator('#medsSection button[type="submit"]', has_text="Add medication").click()
+    page.wait_for_load_state()
+    page.goto(live_server + "/exams/new?" + "patient_id=" + patient_href.rstrip("/").split("/")[-1])
+    card = page.locator("#medsCard")
+    card.wait_for(state="visible")
+    text = card.inner_text()
+    assert "Sample card medication" in text and "medications need review" in text.lower()
+    assert card.locator("button", has_text="Patient reports none").count() == 1               # allergies only (still empty)
+    card.locator("button", has_text="Reviewed — updated").first.click()
+    page.select_option('select[name="provider_id"]', index=0)
+    page.locator('button[type="submit"]', has_text="Save Exam").click()
+    page.wait_for_url(re.compile(r"/exams/\d+$"))
+    assert "list updated" in page.locator("body").inner_text()

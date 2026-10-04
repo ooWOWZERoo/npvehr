@@ -1,6 +1,6 @@
 # New Path Vision EHR — Master Build Backlog
 
-**Status:** Living tracking document. **Baseline as of:** spec v2.90 / research doc v2.24 (2026-09-30).
+**Status:** Living tracking document. **Baseline as of:** spec v2.91 / research doc v2.24 (2026-09-30).
 
 ## Purpose and how to use this document
 
@@ -254,7 +254,7 @@ A few `§18.2`/`§18.3` items above (record linkage, provider management, prescr
 - [ ] **Compliance advisories on reviewed ROS rules** — advisory (never blocking) when a test is ordered with no supporting ICD-10 per the *reviewed* rules. Prototype logic: scratchpad `ros_plugin.py` `evaluate()`. Blocked on stage 1.
 - [ ] **Routine → medical visit switch** offered from ROS positives (billing-adjacent; coder approves the logic first; `cpt_mapper` already models both flows). **Proposal drafted** in `ROUTINE_TO_MEDICAL_SWITCH_PROPOSAL.md` (trigger options, audited switch, nine coder questions); nothing built until the coder signs it off.
 - [x] **PCP communication letter** — built v2.89 (spec §116) for **diabetic retinopathy** (MIPS #019 as the practice's compliance analyst described it): advisory banner, letter from an editable template with required severity + macular-edema, shared Outside Providers directory, sent record, exclusions. **Still to do:** have the compliance expert confirm the wording and the 12-month rule; fax/Direct delivery and NPPES lookup (none wired); a field recording that the exam was dilated; CPT-code check on the denominator.
-- [x] **Patient medication list** — built v2.88 (spec §115, design in `PATIENT_MEDICATION_LIST_DESIGN.md`): medications + allergies tab with review events, practice-defined drug classes with citation-gated sign-off, flags derived from the list (list wins over a manual No). **Still to do:** the clinicians load and sign off their drug classes (none ship); phase 3 exam-form medications card and stale-list banner; optional CSV import of medication lists; allergy-driven warnings; interaction checking (needs a licensed source).
+- [x] **Patient medication list** — built v2.88, exam-form card v2.91 (spec §115, §118, design in `PATIENT_MEDICATION_LIST_DESIGN.md`): medications + allergies tab with review events, practice-defined drug classes with citation-gated sign-off, flags derived from the list (list wins over a manual No). **Still to do:** the clinicians load and sign off their drug classes (none ship); optional CSV import of medication lists; allergy-driven warnings; interaction checking (needs a licensed source).
 - [x] **Bulk import of ROS prompts/rules** from CSV/XLS — built v2.87 (spec §114): `/admin/ros/import` with preview, undo, template and catalog export; everything lands Unreviewed. Hand the exported sheet to the stage-1 reviewer.
 - [x] **Decided** (v2.90, spec §117): keep both records; a ticked finding fills a *blank* summary with Yes, a **No is never overwritten** (mismatch flagged on the form and exam page), nothing is reversed, summary Yes still only opens the panel. No schema change.
 

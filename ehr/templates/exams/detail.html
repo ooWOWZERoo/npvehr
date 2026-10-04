@@ -12,6 +12,8 @@
   </div>
 </div>
 {% include "exams/_pcp_letter_banner.html" %}
+{% if med_reviews %}<p class="muted" style="font-size:0.82rem;margin-bottom:var(--space-3)">Reviewed at this visit:
+  {% for r, who in med_reviews %}{{ r.kind|capitalize }} &mdash; {{ {'no_changes': 'no changes', 'updated': 'list updated', 'none_reported': 'patient reports none'}[r.outcome] }}{% if who %} ({{ who }}){% endif %}{{ '; ' if not loop.last }}{% endfor %}.</p>{% endif %}
 <div class="detail-grid">
   <div class="card"><h3>Visit Info</h3><dl class="dl-grid">
     <dt>Patient</dt><dd><a href="/patients/{{ exam.patient_id }}">{{ exam.patient.last_name }}, {{ exam.patient.first_name }}</a></dd>

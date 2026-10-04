@@ -917,3 +917,14 @@ a.tile:hover { text-decoration: none; }
 .safety-banner[hidden] { display: none; }
 .safety-banner ul { margin: var(--space-2) 0; padding-left: 1.2rem; }
 .exam-main .safety-banner { position: sticky; top: var(--space-2); z-index: 8; box-shadow: 0 6px 18px var(--shadow-pop); }
+.med-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: var(--space-3) var(--space-4); margin: var(--space-3) 0; display: grid; gap: var(--space-2); }
+.med-card[hidden] { display: none; }
+.med-head { display: flex; justify-content: space-between; align-items: center; gap: var(--space-3); }
+.med-label { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-muted); margin-top: var(--space-2); }
+.med-chips { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.med-chip { background: var(--primary-soft); color: var(--ink-strong); border-radius: 999px; padding: 0.15rem 0.6rem; font-size: 0.82rem; }
+.med-chip-severe { background: var(--danger-bg); color: var(--danger-ink); font-weight: 600; }
+.med-note { margin: 0; padding: 0.35rem 0.6rem; font-size: 0.82rem; border-radius: 8px; }
+.med-note-info { background: var(--primary-soft); color: var(--ink-strong); }
+.med-note-warn { background: var(--warn-bg); color: var(--warn-ink); }
+.med-review { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }

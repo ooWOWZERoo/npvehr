@@ -5334,3 +5334,35 @@ End-to-end test: a blank summary becomes Yes on ticking and stays Yes on unticki
 | Exam form | Ticking a ROS finding fills a blank summary Yes/No with Yes; a No is never overwritten and the mismatch is flagged. |
 | Exam page | A system's findings are marked when its summary answer is Negative. |
 | Schema | None. |
+
+## 118. Exam-Form Medications Card (v2.91)
+
+### 118.1 Request
+
+Phase 3 of the medication-list design (§115, `PATIENT_MEDICATION_LIST_DESIGN.md`): bring the patient's medications and allergies onto the New Exam form so the clinician sees them while charting, and can confirm a review for the visit without leaving the form.
+
+### 118.2 What was built
+
+* **A "Medications & allergies" card in the Intake step**, below the patient/provider/date row. It follows the selected patient (and refreshes if the patient is changed): active medications (name, strength, eye, frequency) and active allergies as compact chips, with severe allergies highlighted. Entries are shown as plain text.
+* **Plain statements of review status**, per list: *not yet reviewed* ("an empty list means unknown, not none"), *needs review* (older than 12 months, or a "none reported" review followed by new items), or *reviewed on <date>*. Ambient banners only; nothing blocks saving or signing.
+* **Review buttons** (for roles that can edit an exam): "Reviewed — no changes", "Reviewed — updated", and "Patient reports none" (offered only while that list is empty). Clicking is a toggle; the choice is submitted with the exam and **recorded against the saved exam** (reviewer, time, item count) only when the exam is saved, so abandoning the form records nothing.
+* **"Review / update"** opens the patient's Medications tab in a new tab; the card refreshes when the clinician returns to the form.
+* The **exam page** states what was reviewed at that visit ("Medications — list updated (Dr. Name)").
+* Server side: `GET /patients/{id}/medications/summary.json` (patient-scoped, provider record-level authorization applies, no-store) and a best-effort, savepoint-guarded hook in exam creation, like the ROS findings, so a problem recording a review can never stop an exam from saving. An inconsistent request ("none reported" for a list with items) is ignored.
+
+### 118.3 Scope
+
+No schema change (uses the review table from §115). Not built: showing the card on the portal or exam detail beyond the reviewed-at line, and any change to which medications fire safety warnings (§115 unchanged).
+
+### 118.4 Verified
+
+Unit tests (`tests/test_medications.py`: reviews recorded against the exam with the reviewer, an inconsistent or bogus outcome ignored, the card summary lists only active items with the right review state) and an end-to-end test (card appears for the chosen patient, "not yet reviewed" wording, "none reported" only for empty lists and toggling, review recorded and shown on the exam page, a medication added on the chart appears on the next exam's card with the list flagged for review). Full suite green.
+
+**Version 2.91 change log (relative to v2.90):**
+
+| Area | Change |
+| --- | --- |
+| Exam form | Medications & allergies card with review status and review-for-this-visit buttons. |
+| Exam page | Shows what was reviewed at the visit. |
+| API | `GET /patients/{id}/medications/summary.json`. |
+| Schema | None. |
