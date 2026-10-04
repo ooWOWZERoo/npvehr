@@ -1,6 +1,6 @@
 # New Path Vision EHR — Master Build Backlog
 
-**Status:** Living tracking document. **Baseline as of:** spec v2.86 / research doc v2.24 (2026-09-30).
+**Status:** Living tracking document. **Baseline as of:** spec v2.87 / research doc v2.24 (2026-09-30).
 
 ## Purpose and how to use this document
 
@@ -255,9 +255,8 @@ A few `§18.2`/`§18.3` items above (record linkage, provider management, prescr
 - [ ] **Routine → medical visit switch** offered from ROS positives (billing-adjacent; coder approves the logic first; `cpt_mapper` already models both flows).
 - [ ] **PCP communication letter** template for diabetes findings (MIPS communication measure as the reference describes it; verify scope with a compliance expert).
 - [ ] **Patient medication list** — structured meds so drug-based safety warnings stop depending on typed-text keywords. Design first; larger.
-- [ ] **Bulk import of ROS prompts/rules** from CSV/XLS (imported rules land Unreviewed; reuse the import-batch pattern).
+- [x] **Bulk import of ROS prompts/rules** from CSV/XLS — built v2.87 (spec §114): `/admin/ros/import` with preview, undo, template and catalog export; everything lands Unreviewed. Hand the exported sheet to the stage-1 reviewer.
 - [ ] **Decide** whether the 8 legacy Yes/No ROS dropdowns sync with the catalog findings (deliberately not synced today).
 
 **In flight**
 - [x] **Recall report import** (`RecallDetails.xls`) — built v2.86 (spec §113): admin upload with preview/confirm and a test-data attestation, new `patient_recalls` table shown on the Recalls tab, undo. **Still to do:** upload the file in the target environment (it holds ~2,467 patients/2,663 recalls); a recall worklist and "mark satisfied" are future work.
-- [~] **PR #56** (ROS stage 5) — waiting on CI; merge when green.
