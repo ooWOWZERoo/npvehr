@@ -1619,3 +1619,5 @@ from ehr.models import imports as _imports  # noqa: E402,F401  (registers the im
 from ehr.models import medications as _medications  # noqa: E402,F401  (registers the medication/allergy/class tables on Base)
 
 from ehr.models import care_coordination as _care_coordination  # noqa: E402,F401  (registers the PCP-letter tables on Base)
+
+from ehr.models import patient_merge as _patient_merge  # noqa: E402,F401  (registers the patient-merge event table on Base)

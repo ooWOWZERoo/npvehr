@@ -179,3 +179,6 @@ COMM_TEMPLATE_EDIT = {SYSTEM_ADMINISTRATOR, PRACTICE_ADMINISTRATOR}
 # is front-desk work, so it follows who can edit a patient.
 RECALL_VIEW = ANY_STAFF
 RECALL_WORK = PATIENT_EDIT
+
+# Merging two patient charts into one (and undoing it): consequential and cross-cutting, so administrators only.
+PATIENT_MERGE = {SYSTEM_ADMINISTRATOR, PRACTICE_ADMINISTRATOR}

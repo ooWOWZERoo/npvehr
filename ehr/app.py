@@ -10,7 +10,7 @@ from ehr.db.migrations import run_column_migrations, run_post_create_all_migrati
 from ehr.db.seed import seed_demo_data
 from ehr.env_info import EHR_ENV
 from ehr.routes import (patients, appointments, exams, prescriptions, admin_scheduling, admin_billing,
-    admin_voice_scribe, admin_ros, admin_safety, admin_imports, admin_medication_import, admin_ros_import, medications as medication_routes, admin_medications, care_coordination, recalls as recall_routes, safety as safety_routes, store_ops, rx_lab_orders, portal, auth as auth_routes)
+    admin_voice_scribe, admin_ros, admin_safety, admin_imports, admin_medication_import, admin_ros_import, medications as medication_routes, admin_medications, care_coordination, patient_merge as patient_merge_routes, recalls as recall_routes, safety as safety_routes, store_ops, rx_lab_orders, portal, auth as auth_routes)
 from ehr.auth.deps import get_current_user, LoginRedirect
 from ehr.auth.portal_deps import PortalLoginRedirect
 from ehr.auth.permissions import (ROLE_LABELS, ANY_STAFF, PATIENT_EDIT, APPOINTMENT_EDIT, EXAM_VIEW, EXAM_EDIT,
@@ -68,6 +68,7 @@ app.include_router(portal.router)
 # of these files. Role-specific restrictions beyond "any authenticated
 # staff member" are layered on top per-route via require_role(...) below,
 # matching the group constants in ehr/auth/permissions.py.
+app.include_router(patient_merge_routes.router, dependencies=[Depends(get_current_user)])   # before patients: /patients/merge must not hit /{patient_id}
 app.include_router(patients.router, dependencies=[Depends(get_current_user)])
 app.include_router(appointments.router, dependencies=[Depends(get_current_user)])
 app.include_router(exams.router, dependencies=[Depends(get_current_user)])
