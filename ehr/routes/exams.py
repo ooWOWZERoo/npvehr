@@ -169,6 +169,7 @@ async def create_exam(request: Request, db: Session = Depends(get_db)):
         ros_respiratory=_b(g("ros_respiratory")), ros_gastrointestinal=_b(g("ros_gastrointestinal")),
         ros_neurological=_b(g("ros_neurological")), ros_musculoskeletal=_b(g("ros_musculoskeletal")),
         ros_endocrine=_b(g("ros_endocrine")), ros_skin=_b(g("ros_skin")), ros_notes=g("ros_notes"),
+        dilated_exam_performed=_b(g("dilated_exam_performed")), dilation_note=(g("dilation_note") or "").strip()[:255] or None,
         assessment=g("assessment"), plan=g("plan"),
         diagnosis_codes=g("diagnosis_codes"),
         refractive_diagnosis=gl("refractive_diagnosis"), refractive_laterality=g("refractive_laterality"),

@@ -983,6 +983,11 @@ class EyeExam(Base):
     ros_endocrine = Column(Boolean)
     ros_skin = Column(Boolean)
     ros_notes = Column(Text)
+    # Whether a dilated fundus/macular examination was performed at this visit: tri-state like the ROS answers (None = not recorded,
+    # True = dilated, False = not dilated) plus a free note (the agent used, or why not). Added so the diabetic-retinopathy PCP
+    # letter (ehr/services/pcp_letter.py) can rely on a recorded fact instead of a clinician's tick-box alone.
+    dilated_exam_performed = Column(Boolean)
+    dilation_note = Column(String)
     assessment = Column(Text); plan = Column(Text)
     diagnosis_codes = Column(String); follow_up_weeks = Column(Integer)
     # The unit follow_up_weeks is expressed in -- Day/Week/Month/Year -- so a

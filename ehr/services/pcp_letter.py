@@ -9,7 +9,8 @@ When a letter is DUE (advisory banner on the exam page, never blocking):
 A letter is only valid with BOTH discrete facts the measure needs: the retinopathy SEVERITY and whether MACULAR EDEMA
 is present or absent, plus the clinician confirming a dilated macular/fundus exam was done. Severity and edema are
 suggested from the ICD-10 code (a clinician confirms or changes them); where the code doesn't say, nothing is guessed.
-The visit's CPT code is not checked (over-inclusive banner, harmless). Nothing is transmitted by this app: 'sent' is a
+An exam recorded as NOT dilated never prompts (exams from before the dilation field existed, and any left blank, still do and
+the clinician confirms on the letter form). The visit's CPT code is not checked (over-inclusive banner, harmless). Nothing is transmitted by this app: 'sent' is a
 staff attestation of how it left the office.
 """
 import re
@@ -83,6 +84,8 @@ def candidate(db: Session, exam, now: Optional[datetime] = None) -> Optional[dic
     """None when no letter is due for this exam, else {'codes', 'severity', 'edema', 'draft'} (draft = an unsent letter
     already started for this exam). Never raises into a page."""
     try:
+        if getattr(exam, "dilated_exam_performed", None) is False:
+            return None                                   # the measure needs a dilated exam; this one was recorded as not dilated
         s = suggestion(db, exam)
         if not s["codes"]:
             return None

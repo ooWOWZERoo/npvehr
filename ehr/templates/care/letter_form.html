@@ -21,7 +21,8 @@
   </div>
   <div class="form-group"><label>Other findings (optional) <textarea name="findings" rows="3" maxlength="2000"></textarea></label></div>
   <div class="form-group"><label>Plan and follow-up <textarea name="plan" rows="3" maxlength="2000">{{ exam.plan or '' }}</textarea></label></div>
-  <div class="checkbox-row"><input type="checkbox" name="dilated" id="dilated"><label for="dilated"><strong>A dilated macular or fundus examination was performed at this visit.</strong></label></div>
+  {% if exam.dilated_exam_performed is sameas false %}<div class="alert alert-warning" style="margin-bottom:var(--space-3)">This exam was recorded as <strong>not dilated</strong>{% if exam.dilation_note %} ({{ exam.dilation_note }}){% endif %}. Only confirm below if that record is wrong.</div>{% endif %}
+  <div class="checkbox-row"><input type="checkbox" name="dilated" id="dilated" {{ 'checked' if exam.dilated_exam_performed is sameas true }}><label for="dilated"><strong>A dilated macular or fundus examination was performed at this visit.</strong>{% if exam.dilated_exam_performed is sameas true %} <span class="muted" style="font-weight:400">Recorded on the exam{% if exam.dilation_note %}: {{ exam.dilation_note }}{% endif %}.</span>{% endif %}</label></div>
   <div style="margin-top:var(--space-4)"><button type="submit" class="btn btn-primary" {{ '' if template_ok else 'disabled' }}>Prepare letter</button>
   {% if not template_ok %}<span class="muted"> The letter template is missing or invalid; an administrator can fix it under Communication Templates.</span>{% endif %}</div>
 </form>
