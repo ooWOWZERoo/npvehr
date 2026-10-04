@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Medication List Import &mdash; Admin{% endblock %}
+{% block content %}
+<div class="page-header"><div><span class="page-eyebrow">Administration</span><h1>Medication List Import</h1>
+  <p class="page-lede">Add medications to existing patients' lists from a spreadsheet (.xls or .csv). You'll see a preview before anything is saved.</p></div></div>
+<div class="alert alert-warning" style="margin-bottom:var(--space-4)">
+  <strong>Test or de-identified data only.</strong> This system is not set up for real patient records. You'll be asked to confirm the file contains test data before an import runs.
+</div>
+<div class="alert alert-info" style="margin-bottom:var(--space-4)">
+  Patients must already exist (matched on last name, first name and date of birth); nothing here creates or changes a patient. An import is <strong>not a review</strong>: each patient's list still needs a clinician to review it.
+</div>
+{% if error %}<div class="alert alert-error" style="margin-bottom:var(--space-4)">{{ error }}</div>{% endif %}
+<div class="card form-card"><h3>Upload a file</h3>
+  <form method="post" action="/admin/medication-import/upload" enctype="multipart/form-data">
+    <div class="form-group"><label>Spreadsheet (.xls or .csv, up to {{ max_mb }} MB) <input type="file" name="file" accept=".xls,.csv" required></label></div>
+    <button type="submit" class="btn btn-primary">Upload &amp; preview</button>
+    <p style="font-size:0.8rem;color:var(--ink-muted);margin-top:0.75rem">One row per medication. Columns (matched by name, any order): {{ columns|join(', ') }}. Eye is OD, OS or OU; Status is active or stopped (blank means active). <a href="/admin/medication-import/template.csv">Download the template</a>. The uploaded file is held only until you import or discard it (and is deleted after 24 hours if you do neither).</p>
+  </form>
+</div>
+<div class="card" style="margin-top:1rem"><h3>Recent imports</h3>
+  <div class="table-responsive"><table><thead><tr><th>#</th><th>File</th><th>When</th><th>Status</th><th>Medications</th><th></th></tr></thead><tbody>
+  {% for b in batches %}
+    <tr><td>{{ b.id }}</td><td>{{ b.file_name or '—' }}</td><td>{{ b.created_at.strftime('%m/%d/%Y %I:%M %p') }}</td>
+      <td><span class="badge {{ 'badge-completed' if b.status == 'imported' else 'badge-cancelled' }}">{{ b.status|title }}</span></td>
+      <td>{{ b.recalls_created }}{% if b.patients_matched %} for {{ b.patients_matched }} patients{% endif %}</td>
+      <td><a href="/admin/medication-import/{{ b.id }}" class="btn btn-sm btn-secondary">{{ 'Preview' if b.status == 'staged' else 'Details' }}</a></td></tr>
+  {% else %}<tr><td colspan="6"><div class="empty-state" style="border:0"><strong>No imports yet</strong>Upload a spreadsheet above.</div></td></tr>
+  {% endfor %}
+  </tbody></table></div>
+</div>
+{% endblock %}

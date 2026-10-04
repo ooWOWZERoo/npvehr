@@ -1,0 +1,10 @@
+LastName,FirstName,DOB,Medication,Strength,Route,Eye,Frequency,For,Start Date,Status,Note
+Smith,Bob,1972-07-22,Timolol 0.5%,0.5%,ophthalmic,OD,twice daily,glaucoma,2024-01-15,active,
+SMITH,BOB,07/22/1972,Metformin,500 mg,oral,,twice daily,,,active,
+Smith,Bob,1972-07-22,Warfarin 5 mg,5 mg,oral,,,,,stopped,
+Brown,Emma,2005-01-12,Cetirizine,10 mg,oral,,daily,,2024-13-45,active,
+Nobody,Nopatient,1999-09-09,Aspirin,,,,,,,,
+Smith,Bob,1972-07-22,,,,,,,,,
+Smith,Bob,1972-07-22,Timolol 0.5%,0.5%,ophthalmic,OD,,,,,
+Brown,Emma,2005-01-12,Ibuprofen,200 mg,oral,XX,as needed,,,maybe,
+Smith,Bob,not a date,Aspirin,,,,,,,,
