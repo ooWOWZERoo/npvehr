@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Outside Providers &mdash; New Path Vision EHR{% endblock %}
+{% block content %}
+<div class="page-header"><div><span class="page-eyebrow">Care coordination</span><h1>Outside Providers</h1>
+  <p class="page-lede">One shared list of primary-care physicians and other outside clinicians. Add a provider once; every patient and letter reuses it.</p></div>
+  {% if patient_id %}<a href="/patients/{{ patient_id }}/primary-care" class="btn btn-secondary">Back to patient</a>{% endif %}</div>
+{% if error %}<div class="alert alert-error" style="margin-bottom:var(--space-4)">{{ error }}</div>{% endif %}
+<form method="get" class="card form-card" style="display:flex;gap:0.5rem;align-items:end">
+  {% if patient_id %}<input type="hidden" name="patient_id" value="{{ patient_id }}">{% endif %}
+  <label class="fld" style="flex:1">Search by name or practice <input name="q" value="{{ q }}"></label>
+  <button class="btn btn-secondary" type="submit">Search</button>
+</form>
+<div class="card" style="margin-top:1rem"><h3>Providers</h3>
+  <div class="table-responsive"><table><thead><tr><th>Name</th><th>Practice</th><th>Phone / fax</th><th>Status</th><th></th></tr></thead><tbody>
+  {% for r in rows %}
+    <tr><td>{{ r.first_name }} {{ r.last_name }}{% if r.credentials %}, {{ r.credentials }}{% endif %}</td><td>{{ r.practice_name or '—' }}</td>
+      <td>{{ r.phone or '—' }} / {{ r.fax or '—' }}</td>
+      <td><span class="badge {{ 'badge-completed' if r.is_active else 'badge-cancelled' }}">{{ 'Active' if r.is_active else 'Inactive' }}</span></td>
+      <td style="display:flex;gap:0.5rem;flex-wrap:wrap">
+        {% if can_edit and patient_id and r.is_active %}<form method="post" action="/patients/{{ patient_id }}/primary-care/assign"><input type="hidden" name="practitioner_id" value="{{ r.id }}"><button class="btn btn-sm btn-primary" type="submit">Use as this patient's PCP</button></form>{% endif %}
+        {% if can_edit %}<a class="btn btn-sm btn-secondary" href="/care-providers/{{ r.id }}/edit">Edit</a>
+        <form method="post" action="/care-providers/{{ r.id }}/toggle-active" onsubmit="return confirm('{{ 'Deactivate' if r.is_active else 'Reactivate' }} this provider?');"><button class="btn btn-sm btn-secondary" type="submit">{{ 'Deactivate' if r.is_active else 'Reactivate' }}</button></form>{% endif %}
+      </td></tr>
+  {% else %}<tr><td colspan="5"><div class="empty-state" style="border:0"><strong>No providers found</strong>Add one below.</div></td></tr>{% endfor %}
+  </tbody></table></div>
+</div>
+{% if can_edit %}
+<div class="card form-card" style="margin-top:1rem"><h3>Add a provider{% if patient_id %} <span class="muted" style="font-size:0.85rem">(also set as this patient's PCP)</span>{% endif %}</h3>
+  <form method="post" action="/care-providers/new">
+    {% if patient_id %}<input type="hidden" name="patient_id" value="{{ patient_id }}">{% endif %}
+    {% set p = none %}{% include "care/_practitioner_fields.html" %}
+    <button type="submit" class="btn btn-primary">Add provider</button>
+  </form>
+</div>
+{% endif %}
+{% endblock %}

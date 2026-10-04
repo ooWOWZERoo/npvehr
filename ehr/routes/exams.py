@@ -20,6 +20,7 @@ from ehr.services import authz
 from ehr.services import billing_override
 from ehr.services import billing_ledger
 from ehr.services import ros_responses
+from ehr.services import pcp_letter
 from ehr.services import safety as safety_svc
 
 router = APIRouter(prefix="/exams", tags=["exams"])
@@ -342,7 +343,9 @@ def exam_detail(request: Request, exam_id: int, db: Session = Depends(get_db)):
          "cpt_summary": cpt_summary, "ros_findings": ros_responses.findings_for_exam(db, exam_id),
          "safety_fired": safety_svc.evaluate(db, e.patient_id, safety_svc.exam_text(e)),
          "safety_acks": safety_svc.acknowledgements_for_exam(db, exam_id),
-         "safety_ack_required": request.query_params.get("safety_ack_required") == "1"})
+         "safety_ack_required": request.query_params.get("safety_ack_required") == "1",
+         "pcp_candidate": pcp_letter.candidate(db, e), "pcp_has_letter": pcp_letter.recent_status(db, e.patient_id),
+         "pcp_error": request.query_params.get("pcp_error")})
 
 
 @router.post("/{exam_id}/sign", dependencies=[Depends(require_role(*EXAM_SIGN))])

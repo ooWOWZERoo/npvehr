@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}PCP Letter &mdash; New Path Vision EHR{% endblock %}
+{% block content %}
+<div class="page-header"><div><span class="page-eyebrow">Care coordination</span><h1>Letter to the Managing Physician</h1>
+  <p class="page-lede">{{ exam.patient.last_name }}, {{ exam.patient.first_name }} &mdash; exam {{ exam.exam_date }}</p></div>
+  <a href="/exams/{{ exam.id }}" class="btn btn-secondary">Back to exam</a></div>
+{% if error %}<div class="alert alert-error" style="margin-bottom:var(--space-4)">{{ error }}</div>{% endif %}
+<div class="alert alert-info" style="margin-bottom:var(--space-4)">Decision support for staff only. This page prepares the letter; nothing is sent from the app. After it leaves the office, mark it sent so the record shows how.</div>
+<div class="card" id="pcpBox" style="margin-bottom:var(--space-4)"><h3>Recipient</h3>
+  {% if pcp %}<p><strong>Dr. {{ pcp.first_name }} {{ pcp.last_name }}{% if pcp.credentials %}, {{ pcp.credentials }}{% endif %}</strong>{% if pcp.practice_name %} &mdash; {{ pcp.practice_name }}{% endif %}<br><span class="muted">Fax {{ pcp.fax or '—' }} &middot; Phone {{ pcp.phone or '—' }}</span></p>
+  <a class="btn btn-sm btn-secondary" href="/patients/{{ exam.patient_id }}/primary-care">Change</a>
+  {% else %}<p>No primary-care provider is on file for this patient.</p><a class="btn btn-primary btn-sm" href="/patients/{{ exam.patient_id }}/primary-care">Choose the primary-care provider</a>{% endif %}
+</div>
+<form method="post" action="/exams/{{ exam.id }}/pcp-letter" class="card form-card"><h3>What the letter must say</h3>
+  {% if sug.codes %}<p class="muted" style="font-size:0.85rem">Suggested from this visit's diagnosis codes ({{ sug.codes|join(', ') }}); confirm or change.</p>{% endif %}
+  <div class="form-row cols-2">
+    <div class="form-group"><label>Retinopathy severity*
+      <select name="severity" required><option value="">Choose&hellip;</option>{% for s in severities %}<option value="{{ s }}" {{ 'selected' if sug.severity == s }}>{{ SEVERITY_LABEL[s] }}</option>{% endfor %}</select></label></div>
+    <div class="form-group"><label>Macular edema*
+      <select name="macular_edema" required><option value="">Choose&hellip;</option><option value="present" {{ 'selected' if sug.edema == 'present' }}>Present</option><option value="absent" {{ 'selected' if sug.edema == 'absent' }}>Absent</option></select></label></div>
+  </div>
+  <div class="form-group"><label>Other findings (optional) <textarea name="findings" rows="3" maxlength="2000"></textarea></label></div>
+  <div class="form-group"><label>Plan and follow-up <textarea name="plan" rows="3" maxlength="2000">{{ exam.plan or '' }}</textarea></label></div>
+  <div class="checkbox-row"><input type="checkbox" name="dilated" id="dilated"><label for="dilated"><strong>A dilated macular or fundus examination was performed at this visit.</strong></label></div>
+  <div style="margin-top:var(--space-4)"><button type="submit" class="btn btn-primary" {{ '' if template_ok else 'disabled' }}>Prepare letter</button>
+  {% if not template_ok %}<span class="muted"> The letter template is missing or invalid; an administrator can fix it under Communication Templates.</span>{% endif %}</div>
+</form>
+{% if prior %}<div class="card" style="margin-top:1rem"><h3>Earlier communications for this patient</h3><ul style="margin:0;padding-left:1.2rem">
+  {% for c in prior %}<li><a href="/pcp-letters/{{ c.id }}">{{ c.created_at.strftime('%m/%d/%Y') }} &mdash; {{ c.status|title }}</a>{% if c.status == 'excluded' %} ({{ c.exclusion_reason|replace('_', ' ') }}){% endif %}</li>{% endfor %}</ul></div>{% endif %}
+{% endblock %}

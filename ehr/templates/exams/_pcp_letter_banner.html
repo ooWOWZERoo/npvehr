@@ -1,0 +1,22 @@
+{# Diabetic-retinopathy PCP letter prompt (spec §116). `pcp_candidate` is None when nothing is due. Advisory only. #}
+{% if pcp_candidate %}
+<div class="alert alert-info" id="pcpLetterBanner" style="margin-bottom:var(--space-4)">
+  <strong>Diabetic retinopathy: communicate with the managing physician.</strong>
+  This visit's diagnosis codes include diabetic retinopathy ({{ pcp_candidate.codes|join(', ') }}) and no letter has been sent or excluded in the last 12 months.
+  A letter states the retinopathy severity and whether macular edema is present, after a dilated macular/fundus exam. If the retinopathy has resolved, mark it Resolved on the Problem List instead.
+  {% if pcp_error %}<div style="color:var(--danger);margin-top:0.35rem">{{ pcp_error }}</div>{% endif %}
+  <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;margin-top:0.5rem">
+    {% if pcp_candidate.draft %}<a class="btn btn-primary btn-sm" href="/pcp-letters/{{ pcp_candidate.draft.id }}">Open the draft letter</a>
+    {% else %}<a class="btn btn-primary btn-sm" href="/exams/{{ exam.id }}/pcp-letter">Prepare letter</a>{% endif %}
+    {% if request.state.user.role in ('system_administrator', 'optometrist_provider') %}
+    <details><summary class="btn btn-secondary btn-sm" style="cursor:pointer">Document an exclusion</summary>
+      <form method="post" action="/exams/{{ exam.id }}/pcp-letter/exclude" class="card" style="margin-top:4px;min-width:300px">
+        <label class="fld">Reason<select name="reason" required><option value="">Choose&hellip;</option><option value="patient_refusal">Patient refusal</option><option value="medical_contraindication">Medical contraindication</option><option value="other">Other (explain)</option></select></label>
+        <label class="fld">Note <input name="note" maxlength="255"></label>
+        <button class="btn btn-sm btn-primary" type="submit">Record exclusion</button></form></details>
+    {% endif %}
+  </div>
+</div>
+{% elif pcp_has_letter %}
+<p class="muted" style="font-size:0.82rem;margin-bottom:var(--space-3)">Diabetic retinopathy communication: <a href="/pcp-letters/{{ pcp_has_letter.id }}">{{ pcp_has_letter.status|title }} {{ (pcp_has_letter.sent_at or pcp_has_letter.created_at).strftime('%m/%d/%Y') }}</a>.</p>
+{% endif %}

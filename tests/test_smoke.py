@@ -4450,3 +4450,80 @@ def test_medication_list_allergies_review_classes_and_derived_safety_flag(logged
     assert page.locator("#medsSection tr", has_text="Warfarin 5 mg (sample)").count() == 1 and "Stopped medications (1)" in page.locator("#medsSection").inner_text()
     page.goto(patient_url)
     assert "from medication list" not in page.locator("#safetyFlagsCard").inner_text()
+
+
+def test_diabetic_retinopathy_pcp_letter_directory_send_record_and_template_guard(logged_in_page, live_server):
+    """Diabetic-retinopathy PCP letter (fabricated provider): an exam with a retinopathy code shows an advisory banner; the
+    letter needs a primary-care provider (shared directory, fax validated), the discrete severity + macular-edema facts and
+    a dilated-exam confirmation; it is prepared from the template, marked sent with how, which clears the banner; and the
+    admin template can't be saved without the two facts the letter exists to communicate."""
+    page = logged_in_page
+    page.goto(live_server + "/exams/new")
+    page.select_option('select[name="patient_id"]', index=0)
+    page.select_option('select[name="provider_id"]', index=0)
+    page.fill("#diagnosis_codes", "E11.3211")
+    page.locator('button[type="submit"]', has_text="Save Exam").click()
+    page.wait_for_url(re.compile(r"/exams/\d+$"))
+    exam_url = page.url
+    assert "Diabetic retinopathy: communicate with the managing physician" in page.locator("#pcpLetterBanner").inner_text()
+
+    # Without a primary-care provider the letter can't be prepared.
+    page.locator("#pcpLetterBanner a", has_text="Prepare letter").click()
+    page.wait_for_load_state()
+    assert page.locator('select[name="severity"]').input_value() == "mild" and page.locator('select[name="macular_edema"]').input_value() == "present"
+    page.check("#dilated")
+    page.locator("button", has_text="Prepare letter").click()
+    page.wait_for_load_state()
+    assert "Choose the patient's primary-care provider first" in page.locator("body").inner_text()
+
+    # Shared directory: a bad fax is refused; a good one is saved, normalised to digits, and set as the patient's PCP.
+    page.locator("#pcpBox a", has_text="Choose the primary-care provider").click()
+    page.locator("a", has_text="Choose or add provider").click()
+    page.wait_for_load_state()
+    page.fill('input[name="first_name"]', "Pat")
+    page.fill('input[name="last_name"]', "Samplepcp")
+    page.fill('input[name="fax"]', "555")
+    page.locator("button", has_text="Add provider").click()
+    page.wait_for_load_state()
+    assert "10 digits" in page.locator("body").inner_text()
+    page.fill('input[name="first_name"]', "Pat")
+    page.fill('input[name="last_name"]', "Samplepcp")
+    page.fill('input[name="fax"]', "(717) 555-0100")
+    page.locator("button", has_text="Add provider").click()
+    page.wait_for_url(re.compile(r"/patients/\d+/primary-care$"))
+    assert "Samplepcp" in page.locator("#pcpCurrent").inner_text() and "7175550100" in page.locator("#pcpCurrent").inner_text()
+
+    # The letter needs the dilated-exam confirmation, then is prepared from the template.
+    page.goto(exam_url + "/pcp-letter")
+    page.locator("button", has_text="Prepare letter").click()
+    page.wait_for_load_state()
+    assert "Confirm that a dilated macular or fundus exam was performed" in page.locator("body").inner_text()
+    page.check("#dilated")
+    page.fill('textarea[name="plan"]', "Return in 4 months (sample plan)")
+    page.locator("button", has_text="Prepare letter").click()
+    page.wait_for_url(re.compile(r"/pcp-letters/\d+$"))
+    letter = page.locator("#letterBody").inner_text()
+    assert "Dear Dr. Pat Samplepcp" in letter and "Mild non-proliferative" in letter and "Macular edema: Present" in letter and "Return in 4 months (sample plan)" in letter
+    letter_url = page.url
+    page.goto(exam_url)
+    assert "Open the draft letter" in page.locator("#pcpLetterBanner").inner_text()          # a draft doesn't satisfy it
+
+    # Marking it sent (with how) clears the banner and leaves a record.
+    page.goto(letter_url)
+    page.select_option('select[name="method"]', "fax")
+    page.locator("button", has_text="Mark sent").click()
+    page.wait_for_load_state()
+    assert "Marked sent by Fax" in page.locator("body").inner_text()
+    page.goto(exam_url)
+    assert page.locator("#pcpLetterBanner").count() == 0 and "Diabetic retinopathy communication" in page.locator("body").inner_text()
+
+    # Admin template: can't drop the two facts the letter is for, or use an unknown placeholder.
+    page.goto(live_server + "/admin/communication-templates")
+    page.fill('textarea[name="body"]', "Dear {pcp_name}, nothing useful here. {severity}")
+    page.locator("button", has_text="Save template").click()
+    page.wait_for_load_state()
+    assert "{macular_edema}" in page.locator(".alert-error").inner_text()
+    page.fill('textarea[name="body"]', "Dear {pcp_name}, {severity} {macular_edema} {nonsense}")
+    page.locator("button", has_text="Save template").click()
+    page.wait_for_load_state()
+    assert "{nonsense}" in page.locator(".alert-error").inner_text()

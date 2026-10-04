@@ -290,3 +290,16 @@ def test_safety_flag_type_seed_has_no_rules_and_is_idempotent(fresh_engine):
         mig.migration_056_seed_safety_flag_types(conn)
     with fresh_engine.connect() as conn:
         assert conn.execute(text("SELECT COUNT(*) FROM safety_flag_types")).scalar() == 4
+
+
+def test_pcp_letter_template_seed_is_idempotent_and_never_overwrites_an_edit(fresh_engine):
+    """Migration 057 seeds one neutral default letter body; re-running it must not duplicate it or undo an edit."""
+    _run_all_migrations(fresh_engine)
+    with fresh_engine.begin() as conn:
+        assert conn.execute(text("SELECT COUNT(*) FROM communication_templates")).scalar() == 1
+        conn.execute(text("UPDATE communication_templates SET body = 'edited {severity} {macular_edema}'"))
+    with fresh_engine.begin() as conn:
+        mig.migration_057_seed_pcp_letter_template(conn)
+    with fresh_engine.connect() as conn:
+        assert conn.execute(text("SELECT COUNT(*) FROM communication_templates")).scalar() == 1
+        assert conn.execute(text("SELECT body FROM communication_templates")).scalar() == "edited {severity} {macular_edema}"

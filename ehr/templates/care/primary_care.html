@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Primary Care Provider &mdash; New Path Vision EHR{% endblock %}
+{% block content %}
+<div class="page-header"><div><span class="page-eyebrow">Care coordination</span><h1>Primary Care Provider</h1>
+  <p class="page-lede">{{ patient.last_name }}, {{ patient.first_name }}</p></div><a href="/patients/{{ patient.id }}" class="btn btn-secondary">Patient</a></div>
+<div class="card" id="pcpCurrent">
+  {% if current %}
+  <h3>{{ current.first_name }} {{ current.last_name }}{% if current.credentials %}, {{ current.credentials }}{% endif %}</h3>
+  <dl class="dl-grid"><dt>Practice</dt><dd>{{ current.practice_name or '—' }}</dd><dt>Phone</dt><dd>{{ current.phone or '—' }}</dd><dt>Fax</dt><dd>{{ current.fax or '—' }}</dd>
+    <dt>Direct address</dt><dd>{{ current.direct_address or '—' }}</dd>
+    <dt>Address</dt><dd>{{ [current.street_line_1, current.street_line_2, current.city, current.state, current.postal_code]|select|join(', ') or '—' }}</dd></dl>
+  {% if can_edit %}<form method="post" action="/patients/{{ patient.id }}/primary-care/clear" style="margin-top:var(--space-3)" onsubmit="return confirm('Remove this patient\'s primary-care provider?');"><button class="btn btn-sm btn-secondary" type="submit">Remove</button></form>{% endif %}
+  {% else %}<div class="empty-state" style="border:0"><strong>No primary-care provider on file</strong>Choose one from the shared list, or add a new one.</div>{% endif %}
+</div>
+{% if can_edit %}<p style="margin-top:var(--space-4)"><a class="btn btn-primary" href="/care-providers?patient_id={{ patient.id }}">{{ 'Change' if current else 'Choose or add' }} provider</a></p>{% endif %}
+{% endblock %}

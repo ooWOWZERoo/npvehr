@@ -167,3 +167,9 @@ def require_role(*allowed_roles):
 
 # Patient medication and allergy lists: clinical staff who can edit an exam; class/term admin reuses the SAFETY_RULES_* sets.
 MEDICATION_EDIT = EXAM_EDIT
+
+# PCP communication letter (diabetic retinopathy): staff who can edit an exam draft and mark letters sent; only a signer
+# documents an exclusion (patient refusal / contraindication); the practice's administrators edit the letter wording.
+PCP_LETTER_EDIT = EXAM_EDIT
+PCP_LETTER_EXCLUDE = EXAM_SIGN
+COMM_TEMPLATE_EDIT = {SYSTEM_ADMINISTRATOR, PRACTICE_ADMINISTRATOR}

@@ -1798,6 +1798,28 @@ def migration_056_seed_safety_flag_types(conn):
                          {"c": code, "l": label, "d": desc, "o": (i + 1) * 10, "a": True})
 
 
+def migration_057_seed_pcp_letter_template(conn):
+    """Default body for the diabetic-retinopathy PCP letter (table in ehr/models/care_coordination.py, created by
+    create_all()). Plain neutral wording with placeholders; the practice edits it in /admin/communication-templates.
+    Idempotent: inserted only when the code is absent, so an edited template is never overwritten."""
+    if not _table_exists(conn, "communication_templates"):
+        return
+    if conn.execute(text("SELECT 1 FROM communication_templates WHERE code = 'pcp_diabetic_retinopathy'")).first():
+        return
+    body = ("Dear {pcp_name},\n\n"
+            "Your patient {patient_name} (date of birth {dob}) was seen in our office on {exam_date} and had a dilated "
+            "macular/fundus examination. Findings relevant to the ongoing management of the patient's diabetes:\n\n"
+            "  Diabetic retinopathy severity: {severity}\n"
+            "  Macular edema: {macular_edema}\n\n"
+            "{findings}\n\n"
+            "Plan and follow-up: {plan}\n\n"
+            "Please contact our office if you have any questions.\n\n"
+            "Sincerely,\n{provider_name}")
+    conn.execute(text("INSERT INTO communication_templates (code, title, body, updated_at) VALUES (:c, :t, :b, :u)"),
+                 {"c": "pcp_diabetic_retinopathy", "t": "PCP letter: diabetic retinopathy findings", "b": body,
+                  "u": datetime.utcnow()})
+
+
 POST_CREATE_ALL_MIGRATIONS = [
     ("002_seed_appointment_types", migration_002_seed_appointment_types),
     ("003_seed_diagnostic_tests", migration_003_seed_diagnostic_tests),
@@ -1814,6 +1836,7 @@ POST_CREATE_ALL_MIGRATIONS = [
     ("054_seed_voice_scribe_corrections", migration_054_seed_voice_scribe_corrections),
     ("055_seed_ros_catalog", migration_055_seed_ros_catalog),
     ("056_seed_safety_flag_types", migration_056_seed_safety_flag_types),
+    ("057_seed_pcp_letter_template", migration_057_seed_pcp_letter_template),
 ]
 
 # ---------------------------------------------------------------------------

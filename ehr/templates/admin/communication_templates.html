@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Communication Templates &mdash; Admin{% endblock %}
+{% block content %}
+<div class="page-header"><div><span class="page-eyebrow">Administration</span><h1>Communication Templates</h1>
+  <p class="page-lede">The wording of the letter to a patient's managing physician about diabetic retinopathy findings.</p></div></div>
+{% if error %}<div class="alert alert-error" style="margin-bottom:var(--space-4)">{{ error }}</div>{% endif %}
+{% if saved %}<div class="alert alert-info" style="margin-bottom:var(--space-4)">Saved. New letters use this wording; letters already prepared keep the text they were written with.</div>{% endif %}
+<div class="card form-card"><h3>{{ tpl.title if tpl else 'Template' }}</h3>
+  <form method="post" action="/admin/communication-templates">
+    <div class="form-group"><label>Letter body <textarea name="body" rows="18" required maxlength="6000" style="font-family:var(--font-mono, monospace)">{{ tpl.body if tpl else '' }}</textarea></label></div>
+    <p class="muted" style="font-size:0.82rem">Placeholders filled in for each letter: {% for t in tokens %}<code>{{ '{' ~ t ~ '}' }}</code> {% endfor %}. The letter must include <code>{severity}</code> and <code>{macular_edema}</code>: they are the two facts it exists to communicate. Have your compliance expert review the wording.</p>
+    <button type="submit" class="btn btn-primary">Save template</button>
+  </form>
+</div>
+{% endblock %}
