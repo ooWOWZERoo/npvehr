@@ -21,6 +21,10 @@
       background: radial-gradient(1200px 600px at 15% -10%, var(--primary-soft), transparent 60%), var(--canvas);
     }
     .login-shell { display: grid; grid-template-columns: 1.1fr 1fr; gap: var(--space-7); align-items: center; width: 100%; max-width: 960px; }
+    .login-logo { display: block; width: min(360px, 100%); height: auto; margin-bottom: var(--space-5); }
+    .login-logo-dark { display: none; }
+    [data-theme="dark"] .login-logo-light { display: none; }
+    [data-theme="dark"] .login-logo-dark { display: block; }
     .login-hero h2 { font-size: clamp(2rem, 4.5vw, 3.2rem); line-height: 1.05; letter-spacing: -0.03em; margin: var(--space-3) 0; color: var(--ink-strong); }
     .login-hero p { color: var(--ink-muted); font-size: 1rem; max-width: 40ch; margin: 0; }
     .login-card {
@@ -37,7 +41,9 @@
 <body class="login-body">
   <div class="login-shell">
   <div class="login-hero">
-    <span class="page-eyebrow">New Path Vision EHR</span>
+    <img class="login-logo login-logo-light" src="/static/img/npv-logo-on-light.png" width="900" height="204" alt="New Path Vision">
+    <img class="login-logo login-logo-dark" src="/static/img/npv-logo-on-dark.png" width="900" height="207" alt="" aria-hidden="true">
+    <span class="page-eyebrow">Electronic Health Record</span>
     <h2>Every eye exam, one calm workspace.</h2>
     <p>Charts, scheduling, and the exam room in a single place built for the way optometry actually runs.</p>
   </div>
