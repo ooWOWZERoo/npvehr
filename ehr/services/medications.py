@@ -27,7 +27,7 @@ log = logging.getLogger(__name__)
 STALE_MONTHS = 12
 MED_FIELDS = ["name", "strength", "route", "frequency", "eye", "indication", "status", "start_date", "stop_date", "note"]
 ALLERGY_FIELDS = ["allergen", "reaction", "severity", "status", "note"]
-EYES = ("OD", "OS", "OU")
+EYES = ("OD", "OS", "OU", "PO")                   # PO = by mouth / systemic (oral medications)
 SEVERITIES = ("mild", "moderate", "severe")
 
 
@@ -94,6 +94,20 @@ def add_medication(db: Session, patient_id: int, user_id: int, form) -> Optional
     db.add(m)
     db.flush()
     field_audit.record_field_changes(db, "patient_medications", m.id, {}, {"name": name, "status": "active"}, user_id)
+    return m
+
+
+def add_resolved_medication(db: Session, patient_id: int, user_id: int, values: dict, indication=None, note=None, start_date=None) -> PatientMedication:
+    """Create a medication from the guided intake. `values` is the output of drug_catalog.resolve_selection (already
+    validated); the text columns are always filled so the record reads the same with or without the catalog link."""
+    m = PatientMedication(patient_id=patient_id, name=values["name"], strength=values["strength"], route=values["route"],
+                          frequency=values["frequency"], eye=values["eye"], indication=_clean(indication, 160), status="active",
+                          start_date=_date(start_date), source="staff", note=_clean(note, 255), recorded_by_user_id=user_id,
+                          drug_id=values["drug_id"], dosage_id=values["dosage_id"], frequency_id=values["frequency_id"],
+                          drug_rxcui=values["drug_rxcui"], is_custom=values["is_custom"])
+    db.add(m)
+    db.flush()
+    field_audit.record_field_changes(db, "patient_medications", m.id, {}, {"name": m.name, "status": "active", "eye": m.eye}, user_id)
     return m
 
 

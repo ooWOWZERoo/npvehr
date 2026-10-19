@@ -4412,6 +4412,18 @@ def test_ros_bulk_import_preview_unreviewed_landing_export_and_undo(logged_in_pa
     assert page.locator("tr", has_text="Sample thyroid history").count() == 0
 
 
+def _add_custom_medication(page, name, frequency=None, eye="OU"):
+    """Adds a medication through the guided intake's Add Custom path (free text), then waits for the tab to reload."""
+    page.fill("#medName", name)
+    page.locator(".med-combo-custom").click()
+    if frequency:
+        page.fill("#medFreqText", frequency)
+    page.select_option("#medEye", eye)
+    with page.expect_navigation():                                         # the tab reloads on success (same URL)
+        page.click("#medSubmit")
+    page.wait_for_load_state()
+
+
 def test_medication_list_allergies_review_classes_and_derived_safety_flag(logged_in_page, live_server):
     """Medication & allergy lists (fabricated entries): an unreviewed list reads as unknown, medications and allergies are
     added/stopped/reviewed, a medication matches no class until the admin adds, links and signs off a drug class, and then the
@@ -4426,10 +4438,7 @@ def test_medication_list_allergies_review_classes_and_derived_safety_flag(logged
     assert "Medications not yet reviewed" in body and "Allergies not yet reviewed" in body
     assert page.locator('button:has-text("Patient reports none")').count() == 2           # empty lists can be marked 'none'
 
-    page.fill('#medsSection input[name="name"]', "Warfarin 5 mg (sample)")
-    page.fill('#medsSection input[name="frequency"]', "daily")
-    page.locator('#medsSection button[type="submit"]', has_text="Add medication").click()
-    page.wait_for_load_state()
+    _add_custom_medication(page, "Warfarin 5 mg (sample)", frequency="daily")
     row = page.locator("#medsSection tr", has_text="Warfarin 5 mg (sample)")
     assert row.count() == 1 and "not classified" in row.inner_text()
     assert page.locator('#medsSection button:has-text("Patient reports none")').count() == 0   # not offered once something is listed
@@ -4590,9 +4599,7 @@ def test_exam_form_medications_card_shows_lists_flags_unreviewed_and_records_rev
 
     # Add a medication on the chart; a new exam's card now lists it, offers no 'none', and flags the list as needing review.
     page.goto(live_server + patient_href + "/medications")
-    page.fill('#medsSection input[name="name"]', "Sample card medication")
-    page.locator('#medsSection button[type="submit"]', has_text="Add medication").click()
-    page.wait_for_load_state()
+    _add_custom_medication(page, "Sample card medication")
     page.goto(live_server + "/exams/new?" + "patient_id=" + patient_href.rstrip("/").split("/")[-1])
     card = page.locator("#medsCard")
     card.wait_for(state="visible")
@@ -4777,9 +4784,7 @@ def test_merge_duplicate_patients_compare_confirm_merge_and_undo(logged_in_page,
     keep_id = make()
     dup_id = make("(610) 555-0177")
     page.goto(f"{live_server}/patients/{dup_id}/medications")
-    page.fill('#medsSection input[name="name"]', "Sample merge medication")
-    page.locator('#medsSection button[type="submit"]', has_text="Add medication").click()
-    page.wait_for_load_state()
+    _add_custom_medication(page, "Sample merge medication")
 
     page.goto(live_server + "/patients/merge")
     assert "Same name and date of birth" in page.locator("#dupTable").inner_text()
@@ -4908,3 +4913,163 @@ def test_logo_appears_on_portal_pages_and_prescription_print(logged_in_page, liv
     assert staff.locator(".hdr img[alt='New Path Vision']").count() == 1
     resp = staff.request.get(f"{live_server}/static/img/npv-logo-on-light.png")
     assert resp.status == 200
+
+
+def _csrf_header(page):
+    return {"X-CSRF-Token": page.locator('meta[name="csrf-token"]').get_attribute("content")}
+
+
+def _named_patient_id(page, live_server, last, first):
+    page.goto(f"{live_server}/patients/?last_name={last}&first_name={first}")
+    page.locator("table a.patient-name-cell").first.click()
+    page.wait_for_load_state()
+    return int(page.url.split("?")[0].rstrip("/").split("/")[-1])
+
+
+def test_medication_intake_api_contract_validation_and_security(logged_in_page, live_server, drug_catalog_seed):
+    """The REST endpoints behind the intake: min search length, dosage/frequency chaining, PO rules, CSRF, 401, patient scope."""
+    import json
+    import urllib.error
+    import urllib.request
+    page = logged_in_page
+    api = page.request
+    base = f"{live_server}/api/v1"
+    drop, pill, nodose = (drug_catalog_seed[n] for n in ("Zzdrop Ophthalmic Test", "Zzpill Oral Test", "Zznodose Test"))
+
+    # Signed out: a status, not an HTML login redirect.
+    try:
+        urllib.request.urlopen(f"{base}/drugs/search?q=zzd")
+        raise AssertionError("expected 401")
+    except urllib.error.HTTPError as e:
+        assert e.code == 401 and json.loads(e.read())["detail"] == "Not authenticated"
+
+    # Search: under 3 characters is refused server-side; a match returns route facts.
+    assert api.get(f"{base}/drugs/search?q=zz").status == 422
+    r = api.get(f"{base}/drugs/search?q=ZZPILL")
+    body = r.json()
+    assert r.status == 200 and [d["name"] for d in body["results"]] == ["Zzpill Oral Test"]
+    assert body["results"][0]["is_oral"] is True and body["results"][0]["route_group"] == "oral"
+    assert api.get(f"{base}/drugs/search?q=%25%25%25").json()["results"] == []                    # LIKE wildcards are literal
+
+    # Dosages belong to their drug; an unknown drug is 404.
+    labels = [d["label"] for d in api.get(f"{base}/drugs/{drop}/dosages").json()["dosages"]]
+    assert labels == ["0.005% ophthalmic solution", "0.01% ophthalmic solution"]
+    assert api.get(f"{base}/drugs/{nodose}/dosages").json()["dosages"] == []
+    assert api.get(f"{base}/drugs/999999/dosages").status == 404
+
+    # Frequencies: the drug's own route group comes first.
+    f_eye = api.get(f"{base}/drugs/{drop}/frequencies").json()
+    assert f_eye["preferred_group"] == "ophthalmic" and f_eye["frequencies"][0]["route_group"] == "ophthalmic" and f_eye["frequencies"][0]["preferred"]
+    f_oral = api.get(f"{base}/drugs/{pill}/frequencies").json()
+    assert f_oral["preferred_group"] == "oral" and f_oral["frequencies"][0]["route_group"] == "oral"
+    assert any(not f["preferred"] for f in f_oral["frequencies"])                                 # the rest follow, not dropped
+
+    pid = _named_patient_id(page, live_server, "Johnson", "Alice")      # not used by the other medication tests
+    url = f"{base}/patients/{pid}/medications"
+    drop_dose = api.get(f"{base}/drugs/{drop}/dosages").json()["dosages"][0]["id"]
+    pill_dose = api.get(f"{base}/drugs/{pill}/dosages").json()["dosages"][0]["id"]
+    freq = f_eye["frequencies"][0]["id"]
+    hdr = _csrf_header(page)
+
+    ok = {"is_custom": False, "drug_id": drop, "dosage_id": drop_dose, "frequency_id": freq, "eye": "OD"}
+    assert api.post(url, data=ok).status == 403                                                    # no CSRF header
+    created = api.post(url, data=ok, headers=hdr)
+    assert created.status == 201
+    m = created.json()
+    assert (m["name"], m["strength"], m["eye"], m["is_custom"], m["drug_id"]) == ("Zzdrop Ophthalmic Test", "0.005% ophthalmic solution", "OD", False, drop)
+
+    # An oral drug is always PO, whatever the client sent; PO is refused for an eye drop; a stranger's dosage is refused.
+    forced = api.post(url, data={**ok, "drug_id": pill, "dosage_id": pill_dose, "eye": "OD"}, headers=hdr)
+    assert forced.status == 201 and forced.json()["eye"] == "PO" and forced.json()["route"] == "oral"
+    assert api.post(url, data={**ok, "eye": "PO"}, headers=hdr).status == 422
+    assert api.post(url, data={**ok, "dosage_id": pill_dose}, headers=hdr).status == 422
+    assert api.post(url, data={**ok, "frequency_id": None}, headers=hdr).status == 422
+    assert api.post(url, data={**ok, "eye": ""}, headers=hdr).status == 422
+    assert api.post(url, data={**ok, "eye": "XX"}, headers=hdr).status == 422
+
+    # Custom entry: any text, no catalog link, NULL relational keys; a name is still required.
+    custom = api.post(url, data={"is_custom": True, "name": "Zz custom thing", "dosage_text": "two puffs", "frequency_text": "every full moon", "eye": "PO"}, headers=hdr)
+    c = custom.json()
+    assert custom.status == 201 and c["is_custom"] is True and c["drug_id"] is None and c["strength"] == "two puffs" and c["frequency"] == "every full moon"
+    assert api.post(url, data={"is_custom": True, "name": "  ", "eye": "OU"}, headers=hdr).status == 422
+    assert api.post(f"{base}/patients/99999999/medications", data=ok, headers=hdr).status == 404
+
+
+def test_medication_intake_combobox_debounce_chain_eye_rules_and_custom_entry(logged_in_page, live_server, drug_catalog_seed):
+    """Drives the real component: 3-char/300 ms search, locked-until-chosen chain, oral forces PO, Add Custom -> free text."""
+    page = logged_in_page
+    pid = _named_patient_id(page, live_server, "Davis", "Carol")        # not used by the other medication tests
+    searches = []
+    page.on("request", lambda r: searches.append(r.url) if "/api/v1/drugs/search" in r.url else None)
+    page.goto(f"{live_server}/patients/{pid}/medications")
+
+    # Initial state: everything after the name is locked.
+    assert page.locator("#medDosage").is_disabled() and page.locator("#medFreq").is_disabled()
+    assert page.locator("#medEye").is_disabled() and page.locator("#medSubmit").is_disabled()
+    assert page.locator("#medBackToList").is_hidden() and page.locator("#medDosageText").is_hidden()   # custom-only controls
+
+    # Under 3 characters: no request, but the custom escape hatch is already offered.
+    page.fill("#medName", "zz")
+    page.wait_for_timeout(600)
+    assert searches == []
+    assert page.locator(".med-combo-custom").inner_text().endswith("Add Custom: zz")
+
+    # Typing quickly debounces to one request, sent only after the pause.
+    page.fill("#medName", "")
+    searches.clear()
+    page.locator("#medName").press_sequentially("zzdrop", delay=60)
+    assert searches == []                                                    # nothing mid-burst
+    page.locator(".med-combo-option", has_text="Zzdrop Ophthalmic Test").wait_for()
+    assert len(searches) == 1
+    page.locator(".med-combo-option", has_text="Zzdrop Ophthalmic Test").click()
+
+    # Eye unlocks with the name; dosage unlocks with the drug; frequency only after a dosage.
+    page.wait_for_function("!document.getElementById('medDosage').disabled")        # dosages load from the API
+    assert page.locator("#medEye").is_enabled() and page.locator("#medFreq").is_disabled()
+    assert page.locator('#medEye option[value="PO"]').is_disabled()          # PO withheld for an eye drop
+    page.select_option("#medDosage", label="0.005% ophthalmic solution")
+    page.wait_for_function("!document.getElementById('medFreq').disabled")
+    assert page.locator("#medFreq option").nth(1).inner_text().startswith("Once daily")
+    assert page.locator("#medSubmit").is_disabled()                          # frequency + eye still missing
+    page.select_option("#medFreq", index=2)
+    page.select_option("#medEye", "OS")
+    assert page.locator("#medSubmit").is_enabled()
+
+    # Changing the name starts over.
+    page.fill("#medName", "zzdrop edited")
+    assert page.locator("#medDosage").is_disabled() and page.locator("#medSubmit").is_disabled()
+
+    # An oral drug forces and locks PO.
+    page.fill("#medName", "zzpill")
+    page.locator(".med-combo-option", has_text="Zzpill Oral Test").click()
+    assert page.locator("#medEye").input_value() == "PO" and page.locator("#medEye").is_disabled()
+    page.wait_for_function("!document.getElementById('medDosage').disabled")
+    page.select_option("#medDosage", label="10 mg oral tablet")
+    page.wait_for_function("!document.getElementById('medFreq').disabled")
+    page.select_option("#medFreq", index=1)
+    with page.expect_navigation():
+        page.click("#medSubmit")
+    row = page.locator("#medsSection tr", has_text="Zzpill Oral Test")
+    assert row.count() == 1 and "10 mg oral tablet" in row.inner_text() and "PO" in row.inner_text()
+
+    # A catalog drug with no dosages offers a way into custom entry; custom turns the selects into free text.
+    page.fill("#medName", "zznodose")
+    page.locator(".med-combo-option", has_text="Zznodose Test").click()
+    page.locator("#medDosageNote button", has_text="Enter dosage manually").wait_for()
+    assert page.locator("#medDosage").is_disabled()
+    page.locator("#medDosageNote button", has_text="Enter dosage manually").click()
+    assert page.locator("#medDosageText").is_visible() and page.locator("#medFreqText").is_visible()
+    assert page.locator("#medDosage").is_hidden() and page.locator("#medFreq").is_hidden()
+    assert page.locator('#medEye option[value="PO"]').is_enabled()           # custom: any modifier
+    page.fill("#medDosageText", "a smidge")
+    page.fill("#medFreqText", "whenever")
+    page.select_option("#medEye", "OD")
+    with page.expect_navigation():
+        page.click("#medSubmit")
+    row = page.locator("#medsSection tr", has_text="Zznodose Test")
+    assert row.count() == 1 and "a smidge" in row.inner_text()
+
+    # No catalog match at all: the Add Custom row is still there, labelled with the query.
+    page.fill("#medName", "qqqqnotadrug")
+    page.locator(".med-combo-custom", has_text="Add Custom: qqqqnotadrug").wait_for()
+    assert "No match" in page.locator("#medNameStatus").inner_text()

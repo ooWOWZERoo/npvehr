@@ -29,6 +29,9 @@ DEMO_EMAIL = "admin@newpathvision.example"
 DEMO_PASSWORD = "ChangeMe123!"
 
 
+_LIVE_DB: dict = {}   # path of the live server's throwaway SQLite file, for fixtures that seed reference data
+
+
 def _free_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind(("127.0.0.1", 0))
@@ -63,6 +66,7 @@ def live_server():
 
         subprocess.run([sys.executable, "-m", "ehr.db.seed"], cwd=REPO_ROOT, env=env, check=True)
 
+        _LIVE_DB["path"] = db_path
         port = _free_port()
         proc = subprocess.Popen(
             [sys.executable, "-m", "uvicorn", "ehr.app:app", "--host", "127.0.0.1", "--port", str(port)],
@@ -91,3 +95,32 @@ def logged_in_page(live_server, page):
     page.click("button[type=submit]")
     page.wait_for_url(f"{live_server}/")
     return page
+
+
+@pytest.fixture(scope="session")
+def drug_catalog_seed(live_server):
+    """Clearly-labelled TEST drugs in the live server's catalog (the app seeds no drug data -- the catalog comes from RxNorm
+    or an administrator). Returns {name: drug id}. Names are prefixed 'Zz' so they can never be mistaken for real drugs."""
+    import sqlite3
+    con = sqlite3.connect(_LIVE_DB["path"])
+    try:
+        ids = {}
+        for name, route, dosages in (
+            ("Zzdrop Ophthalmic Test", "ophthalmic", ["0.005% ophthalmic solution", "0.01% ophthalmic solution"]),
+            ("Zzpill Oral Test", "oral", ["5 mg oral tablet", "10 mg oral tablet"]),
+            ("Zznodose Test", "ophthalmic", []),
+        ):
+            row = con.execute("SELECT id FROM drug_catalog WHERE name = ?", (name,)).fetchone()
+            if row:
+                ids[name] = row[0]
+                continue
+            cur = con.execute("INSERT INTO drug_catalog (name, name_lower, default_route, source, is_active, created_at) "
+                              "VALUES (?, ?, ?, 'manual', 1, datetime('now'))", (name, name.lower(), route))
+            ids[name] = cur.lastrowid
+            for label in dosages:
+                con.execute("INSERT INTO drug_dosages (drug_id, label) VALUES (?, ?)", (cur.lastrowid, label))
+        con.commit()
+        return ids
+    finally:
+        con.close()
+

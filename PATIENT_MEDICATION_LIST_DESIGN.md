@@ -56,3 +56,25 @@ Roles: edit = `EXAM_EDIT` roles (clinical staff); class/term admin + review = th
 2. Conflict rule in §3 — derived "yes" wins over a manual "no" (recommended), or manual always wins?
 3. Stale-review window default: 12 months, or practice-specific (e.g. every visit)?
 4. Should structured **allergies** ride along in phase 1 (same shape: allergen, reaction, severity, status), or stay free-text for now?
+
+## 9. Guided medication intake (v2.99) -- catalog, REST API, and the RxNorm decision
+
+**What it is.** The Medications tab's "Add a medication" form is now a four-field chain: Medication (autocomplete) -> Dosage -> Frequency, plus Eye. A technician picks from a catalog or uses **Add Custom** to type anything. The older free-text columns remain the record of what was entered, so history never depends on the catalog.
+
+**Tables (all new, nothing existing altered except nullable columns on `patient_medications`):** `drug_catalog` (generic/brand name, usual route, `rxcui` for RxNorm rows, `source` rxnorm|manual), `drug_dosages` (many per drug), `drug_frequencies` (the practice's pick list grouped ophthalmic/oral/topical/any, seeded with plain dosing wording). `patient_medications` gains nullable `drug_id`, `dosage_id`, `frequency_id` (real FKs, `ON DELETE SET NULL`), `drug_rxcui`, and `is_custom`; custom entries leave the keys NULL. Migrations 060 (columns, after `create_all` so the referenced tables exist) and 061 (frequency seed) are idempotent; 060 has no down-migration (SQLite cannot drop FK columns and old code ignores them).
+
+**REST contract** (`ehr/routes/medication_intake_api.py`; the UI calls only these; JSON; errors are `{"detail": ...}`; 401 signed out, 403 role or missing `X-CSRF-Token`, 404 unknown drug or patient outside the caller's access, 422 validation):
+
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /api/v1/drugs/search?q=` | 3+ characters (enforced server-side); prefix matches first; max 15; LIKE wildcards are literal |
+| `GET /api/v1/drugs/{id}/dosages` | that drug's dosages, each with `is_oral` |
+| `GET /api/v1/drugs/{id}/frequencies[?dosage_id=]` | the pick list, the drug's route group (plus "any") first, flagged `preferred`, nothing dropped |
+| `POST /api/v1/patients/{id}/medications` | add a catalog pick or custom entry; clinical-staff roles only; audited |
+
+**Rules enforced on the server:** a dosage must belong to the chosen drug; an **oral drug always records eye = PO and route = oral** (whatever the client sent); PO is refused for ophthalmic/topical drugs; a custom entry may use any eye value and needs only a name and eye.
+
+**UI behaviour:** search debounced 300 ms, only from 3 characters, stale responses ignored; Dosage unlocks after a drug, Frequency after a dosage, Eye once a name exists; **Add Custom** is the last row of the list at all times and turns Dosage/Frequency into free text; a catalog drug with no dosages on file offers "Enter dosage manually".
+
+**Catalog source -- decision.** The practice chose a **public drug source (NLM RxNorm / RxNav)** over a curated starter list. This is the app's first outbound integration, so, deliberately: only the typed drug-name text would ever be sent (never patient data), results are copied into the local tables (the intake itself only ever reads our database), and a lookup failure degrades to the local catalog plus Add Custom. **Not built yet:** the RxNorm loader. RxNav was unreachable from the development sandbox (network policy), and the loader must be written and checked against the live API rather than guessed. Until it runs, the catalog is empty (the app ships no drug data) and Add Custom is the working path.
+

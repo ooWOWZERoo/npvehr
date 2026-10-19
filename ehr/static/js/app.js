@@ -151,6 +151,41 @@
   window.NPV = window.NPV || {};
   window.NPV.recordRecentPatient = recordRecentPatient;
 
+  // Shared helpers for JSON-API screens (first used by the medication intake): a trailing-edge debounce, and a fetch wrapper
+  // that sends the session CSRF token (X-CSRF-Token) on writes and rejects with the server's {"detail"} message.
+  window.NPV.debounce = function (fn, ms) {
+    var t = null;
+    var wrapped = function () {
+      var args = arguments, self = this;
+      clearTimeout(t);
+      t = setTimeout(function () { fn.apply(self, args); }, ms);
+    };
+    wrapped.cancel = function () { clearTimeout(t); };
+    return wrapped;
+  };
+  window.NPV.api = function (method, url, body, signal) {
+    var meta = document.querySelector('meta[name="csrf-token"]');
+    var headers = { Accept: "application/json" };
+    var opts = { method: method, credentials: "same-origin", headers: headers, signal: signal };
+    if (body !== undefined && body !== null) {
+      headers["Content-Type"] = "application/json";
+      opts.body = JSON.stringify(body);
+    }
+    if (method !== "GET" && meta) headers["X-CSRF-Token"] = meta.getAttribute("content");
+    return fetch(url, opts).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (data) {
+        if (!r.ok) {
+          var d = data && data.detail;
+          var msg = typeof d === "string" ? d : (Array.isArray(d) && d.length ? d[0].msg : "Request failed (" + r.status + ").");
+          var err = new Error(msg);
+          err.status = r.status;
+          throw err;
+        }
+        return data;
+      });
+    });
+  };
+
   function renderRecentPatients() {
     var container = document.getElementById("sidebarRecentPatients");
     if (!container) return;

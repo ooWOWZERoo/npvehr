@@ -5575,3 +5575,36 @@ Screenshots of the running app (portal sign-in, home in light, dark and mobile, 
 | Patient portal | Logo (theme-paired) in the top bar and on the sign-in, register and check-email cards. |
 | Printing | Logo on the Rx print page; print-only letterhead on the PCP letter, app chrome hidden when printing it. |
 | CSS | Shared `brand-logo-*` and `print-only` classes. |
+
+## 126. Guided Medication Intake (v2.99)
+
+### 126.1 Request
+
+A reactive intake for clinical technicians: an autocomplete Medication field (300 ms debounce, from 3 characters), then Dosage, then Frequency, plus an Eye modifier (OU/OD/OS/PO, forced to PO for oral drugs), and an "Add Custom" escape hatch that turns Dosage and Frequency into free text. Powered by explicit REST endpoints that the page itself consumes, with safe migrations supporting both relational keys and free-text fallback.
+
+### 126.2 What was built
+
+* **Catalog tables**: `drug_catalog`, `drug_dosages`, `drug_frequencies` (design doc §9). Frequencies are seeded with plain dosing wording grouped by route; the app ships **no drug data**.
+* **Patient medication history**: `patient_medications` gains nullable `drug_id`, `dosage_id`, `frequency_id` (FKs, `ON DELETE SET NULL`), `drug_rxcui` and `is_custom` (migration 060, applied after `create_all`; 061 seeds frequencies). Existing rows are untouched; the name/strength/frequency text is always stored too, so a custom entry or a later catalog edit never changes history. The eye column now also accepts **PO** (by mouth / systemic).
+* **REST API** (`/api/v1`): drug search, dosages, frequencies, and add-medication, with 401 JSON for signed-out callers, CSRF via `X-CSRF-Token` on writes, role and record-level checks, and server-side enforcement of every rule (min 3 characters; dosage must belong to the drug; oral => PO; PO refused for eye/topical drugs).
+* **UI**: the Medications tab's Add form is replaced by the combobox chain (keyboard navigable, ARIA combobox roles, theme-aware). Shared `NPV.debounce` and `NPV.api` helpers added to `app.js`. The edit form gains the PO option.
+* Add Custom stays available at all times; custom entries record `is_custom` and leave the relational keys NULL.
+
+### 126.3 Not built / limits
+
+* **The RxNorm loader.** RxNorm was chosen as the catalog source, but the NLM service is blocked from the development environment's network, so the loader has not been written or checked against the live API. Until it runs, the catalog is empty and technicians use Add Custom. It will send only drug-name search text, and copy results into the local tables.
+* No admin screen yet for manual catalog entries or the frequency list; editing an existing medication is still the free-text form; safety rules still match on the medication name text.
+
+### 126.4 Verified
+
+Migration test (060 on an old table leaves rows intact with NULL links, real FK enforced, rerun-safe; 061 seeds once and never duplicates or overwrites an administrator's row); an API contract test (401, min length, wildcards literal, dosage chaining, preferred frequencies, CSRF, oral forced to PO, PO refused for an eye drop, wrong-drug dosage refused, custom entry NULL keys, patient scope); an end-to-end component test (no request under 3 characters, one request after the debounce, locked-until-chosen chain, name edit resets, oral locks PO, no-dosage drug falls back to custom, Add Custom row always present); three older tests moved to the new form. Full suite green (196).
+
+**Version 2.99 change log (relative to v2.98):**
+
+| Area | Change |
+| --- | --- |
+| Schema | Three catalog tables; five nullable/defaulted columns on patient_medications (migrations 060, 061). |
+| API | `/api/v1` drug search, dosages, frequencies, add-medication. |
+| UI | Guided medication intake replaces the Add form; PO eye option. |
+| Not yet | RxNorm loader; admin catalog screen. |
+
