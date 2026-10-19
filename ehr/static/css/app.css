@@ -383,6 +383,12 @@ tr:hover td { background: var(--primary-soft); }
 .sidebar { width: var(--sidebar-width); background: var(--chrome); color: var(--on-chrome); display: flex; flex-direction: column; flex-shrink: 0; transition: width 0.15s ease; }
 .sidebar-header { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-4) var(--space-3); overflow: hidden; }
 .sidebar-brand-text { font-family: var(--font-display); font-weight: 600; font-size: 1rem; white-space: nowrap; letter-spacing: 0.01em; }
+/* Brand logo (cream wordmark version, made for the dark green chrome). The full logo fills the header; the collapsed rail shows the eye mark alone. */
+.sidebar-brand { display: block; width: 100%; line-height: 0; }
+.sidebar-brand:hover { text-decoration: none; }
+.sidebar-logo { display: block; height: auto; }
+.sidebar-logo-full { width: 100%; max-width: 200px; }
+.sidebar-logo-mark { display: none; width: 34px; margin: 0 auto; }
 .sidebar-nav { flex: 1; overflow-y: auto; overflow-x: hidden; padding: var(--space-2) 0; }
 .sidebar-link, .sidebar-expand-toggle { display: flex; align-items: center; gap: var(--space-3); width: 100%; padding: 0.6rem 0.9rem; color: rgba(255,255,255,0.88); background: none; border: none; font-size: 0.85rem; text-align: left; cursor: pointer; font-family: var(--font-body); white-space: nowrap; }
 .sidebar-link:hover, .sidebar-expand-toggle:hover { background: rgba(255,255,255,0.08); text-decoration: none; color: #fff; }
@@ -411,6 +417,7 @@ tr:hover td { background: var(--primary-soft); }
   .sidebar { position: sticky; top: 0; height: 100vh; align-self: flex-start; }
   .app-shell.sidebar-collapsed .sidebar { width: var(--sidebar-collapsed-width); }
   .app-shell.sidebar-collapsed .sidebar-brand-text,
+  .app-shell.sidebar-collapsed .sidebar-logo-full,
   .app-shell.sidebar-collapsed .sidebar-label,
   .app-shell.sidebar-collapsed .sidebar-caret,
   .app-shell.sidebar-collapsed .sidebar-subnav,
@@ -418,6 +425,7 @@ tr:hover td { background: var(--primary-soft); }
   .app-shell.sidebar-collapsed .sidebar-static-sublinks,
   .app-shell.sidebar-collapsed .sidebar-subnav-heading,
   .app-shell.sidebar-collapsed .sidebar-section-heading { display: none; }
+  .app-shell.sidebar-collapsed .sidebar-logo-mark { display: block; }
 }
 
 .topbar { background: var(--chrome); color: var(--on-chrome); display: flex; align-items: center; gap: var(--space-4); padding: 0 var(--space-4); height: 56px; }

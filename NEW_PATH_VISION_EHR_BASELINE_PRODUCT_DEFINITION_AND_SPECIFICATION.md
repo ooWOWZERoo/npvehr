@@ -5487,3 +5487,31 @@ Unit test (a not-dilated exam never prompts; dilated and not-recorded do), migra
 | Schema | eye_exams.dilated_exam_performed and dilation_note (migration 059). |
 | Exam form / page | Records and shows whether a dilated fundus/macular exam was performed, with a note. |
 | PCP letter | Not-dilated exams don't prompt; dilated exams pre-tick the confirmation. |
+
+## 123. Logo on Login and Sidebar (v2.96)
+
+### 123.1 Request
+
+The practice supplied four versions of the New Path Vision logo. Use them on the login screen and at the top left of the main EHR page, choosing the combination that looks best.
+
+### 123.2 What was built
+
+* **Sidebar (top left of every signed-in page)**: the cream wordmark on a transparent background, sitting on the dark-green sidebar and linking home. When the sidebar is collapsed to its narrow rail, it switches to the eye mark alone.
+* **Login screen**: the horizontal logo with the tagline in the light theme; the cream wordmark in the dark theme. It sits above the existing hero text and stacks cleanly on mobile.
+* **Assets** (`ehr/static/img/`): `npv-logo-on-dark.png`, `npv-logo-on-light.png`, `npv-mark-on-dark.png`. The supplied images had opaque white backgrounds, so each was converted to a transparent PNG and trimmed.
+* **Not used**: the stacked logo (too tall for the sidebar and the login hero) and the fourth variant (poor contrast on the dark green).
+
+### 123.3 Limits
+
+The browser-tab favicon is still the old placeholder, and the patient portal and printed headers do not yet carry the logo.
+
+### 123.4 Verified
+
+Screenshots of the running app in light, dark, collapsed-sidebar and mobile layouts, and the full end-to-end suite.
+
+**Version 2.96 change log (relative to v2.95):**
+
+| Area | Change |
+| --- | --- |
+| Static assets | Three transparent logo PNGs added. |
+| Sidebar / login | Placeholder mark replaced by the supplied logo, with dark-theme and collapsed variants. |
