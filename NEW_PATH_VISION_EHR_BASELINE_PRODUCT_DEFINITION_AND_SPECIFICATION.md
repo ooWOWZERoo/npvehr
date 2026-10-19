@@ -5515,3 +5515,30 @@ Screenshots of the running app in light, dark, collapsed-sidebar and mobile layo
 | --- | --- |
 | Static assets | Three transparent logo PNGs added. |
 | Sidebar / login | Placeholder mark replaced by the supplied logo, with dark-theme and collapsed variants. |
+
+## 124. Favicon from the Eye Mark (v2.97)
+
+### 124.1 Request
+
+Use the eye mark from the supplied logo as the browser-tab icon, replacing the old placeholder.
+
+### 124.2 What was built
+
+* The eye mark sits on a dark-green rounded square, so it stays visible on both light and dark browser tabs (the mark itself is cream and would vanish on a light tab).
+* Files in `ehr/static/`: `favicon-32.png`, `favicon-192.png`, `favicon.ico` (16/32/48), and `apple-touch-icon.png` (180px, square, for iOS home-screen shortcuts). The old placeholder `favicon.svg` is removed.
+* All seven page templates that declared an icon (staff app, login, patient portal pages, prescription print) now point at the new files.
+
+### 124.3 Limits
+
+Raster icons only, so there is no scalable SVG version. The logo is still not on the patient portal pages or the printed prescription/letter headers.
+
+### 124.4 Verified
+
+Previewed the icon at 192px, 32px and on a dark tab strip; the full end-to-end suite, plus a test that each declared icon file is served.
+
+**Version 2.97 change log (relative to v2.96):**
+
+| Area | Change |
+| --- | --- |
+| Static assets | Eye-mark favicon (PNG, ICO, Apple touch icon); placeholder SVG removed. |
+| Templates | Seven templates point at the new icons. |

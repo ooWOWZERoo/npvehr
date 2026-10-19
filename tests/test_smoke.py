@@ -4876,3 +4876,16 @@ def test_dilated_exam_field_is_recorded_shown_and_drives_the_pcp_letter_prompt(l
     assert page.locator("#pcpLetterBanner").count() == 1                                  # nothing recorded: still prompts (older exams)
     page.goto(unrecorded + "/pcp-letter")
     assert not page.locator("#dilated").is_checked()
+
+
+def test_every_declared_favicon_is_served(live_server, page):
+    """Each icon a page declares must exist (a 404 icon is silent in the browser)."""
+    import re
+    page.goto(f"{live_server}/login")
+    hrefs = page.eval_on_selector_all(
+        "link[rel~=icon], link[rel=apple-touch-icon]", "els => els.map(e => e.getAttribute('href'))")
+    assert any(h.endswith("favicon-32.png") for h in hrefs) and any(h.endswith("apple-touch-icon.png") for h in hrefs)
+    for href in hrefs:
+        assert re.match(r"^/static/", href), href
+        resp = page.request.get(f"{live_server}{href}")
+        assert resp.status == 200 and resp.headers["content-type"].startswith("image/"), (href, resp.status)
