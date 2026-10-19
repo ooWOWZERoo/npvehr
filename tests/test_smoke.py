@@ -4889,3 +4889,22 @@ def test_every_declared_favicon_is_served(live_server, page):
         assert re.match(r"^/static/", href), href
         resp = page.request.get(f"{live_server}{href}")
         assert resp.status == 200 and resp.headers["content-type"].startswith("image/"), (href, resp.status)
+
+
+def test_logo_appears_on_portal_pages_and_prescription_print(logged_in_page, live_server, page):
+    """Portal sign-in + signed-in top bar, and the printed Rx header, carry the logo image."""
+    page.goto(f"{live_server}/portal/login")
+    assert page.locator("img.brand-logo[alt='New Path Vision']").count() == 1
+    page.fill("input[name=email]", "carol@example.com")
+    page.click("button[type=submit]")
+    page.goto(page.locator("a[href*='/portal/login/']").first.get_attribute("href"))
+    page.wait_for_url(f"{live_server}/portal/")
+    assert page.locator(".portal-topbar img.brand-logo[alt='New Path Vision']").count() == 1
+    assert page.locator(".portal-topbar").get_by_text("Patient Portal").count() >= 1
+
+    staff = logged_in_page
+    staff.goto(f"{live_server}/patients")
+    staff.goto(f"{live_server}/prescriptions/1/print")
+    assert staff.locator(".hdr img[alt='New Path Vision']").count() == 1
+    resp = staff.request.get(f"{live_server}/static/img/npv-logo-on-light.png")
+    assert resp.status == 200

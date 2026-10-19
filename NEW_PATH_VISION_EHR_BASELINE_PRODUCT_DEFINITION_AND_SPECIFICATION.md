@@ -5542,3 +5542,36 @@ Previewed the icon at 192px, 32px and on a dark tab strip; the full end-to-end s
 | --- | --- |
 | Static assets | Eye-mark favicon (PNG, ICO, Apple touch icon); placeholder SVG removed. |
 | Templates | Seven templates point at the new icons. |
+
+## 125. Logo on the Patient Portal and Printed Headers (v2.98)
+
+### 125.1 Request
+
+Carry the New Path Vision logo onto the patient portal and the printed headers, and show how to reach the portal.
+
+### 125.2 What was built
+
+* **Patient portal**: the signed-in top bar shows the logo (linking to the portal home) beside a "Patient Portal" label; the sign-in, create-account and check-your-email cards show the logo above the same label. Light theme uses the tagline logo and dark theme the cream wordmark, switching with the theme toggle. It wraps cleanly on a phone.
+* **Prescription print page**: the text title is replaced by the logo above the prescription type.
+* **PCP letter**: a print-only letterhead logo appears at the top of the letter when printed (not on screen, where the page header already identifies it). Printing this page also hides the staff sidebar and top bar, which previously printed alongside the letter.
+* Shared CSS classes in `app.css` (`brand-logo-*`, `print-only`) so a future printed document can reuse them.
+
+### 125.3 Reaching the portal
+
+The portal is at `/portal/login` (staff sign-in is `/login`). A patient enters the email on file; in any environment not labelled production the "check your email" page shows the one-time sign-in link directly, because no email vendor is wired (§Phase 3). The demo patients (e.g. `alice@example.com`) work on a seeded database. In production the link is not displayed, so portal sign-in there needs the email vendor first.
+
+### 125.4 Limits
+
+No other printed documents exist yet (no statements or receipts). Pre-existing, unchanged: wide tables on the portal home can overflow on a very narrow phone.
+
+### 125.5 Verified
+
+Screenshots of the running app (portal sign-in, home in light, dark and mobile, and the Rx print page); an end-to-end test that the portal pages and the Rx print page carry the logo; the full suite.
+
+**Version 2.98 change log (relative to v2.97):**
+
+| Area | Change |
+| --- | --- |
+| Patient portal | Logo (theme-paired) in the top bar and on the sign-in, register and check-email cards. |
+| Printing | Logo on the Rx print page; print-only letterhead on the PCP letter, app chrome hidden when printing it. |
+| CSS | Shared `brand-logo-*` and `print-only` classes. |

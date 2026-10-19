@@ -40,7 +40,11 @@
 </head>
 <body class="portal-body">
   <div class="portal-topbar">
-    <span class="portal-brand">New Path Vision &mdash; Patient Portal</span>
+    <a class="portal-brand" href="/portal/" aria-label="New Path Vision Patient Portal home" style="display:flex;align-items:center;gap:var(--space-3);text-decoration:none">
+      <img class="brand-logo brand-logo-light-theme portal-topbar-logo" src="/static/img/npv-logo-on-light.png" width="900" height="204" alt="New Path Vision">
+      <img class="brand-logo brand-logo-dark-theme portal-topbar-logo" src="/static/img/npv-logo-on-dark.png" width="900" height="207" alt="" aria-hidden="true">
+      <span class="portal-card-label" style="margin:0;white-space:nowrap">Patient Portal</span>
+    </a>
     {% set _p = request.url.path %}
     <nav class="portal-nav" aria-label="Patient portal">
       <a href="/portal/" class="{{ 'active' if _p.rstrip('/') == '/portal' }}">Home</a>
