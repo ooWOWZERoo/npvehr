@@ -5643,3 +5643,35 @@ No scheduled refresh (an administrator re-runs the load); no brand-to-generic eq
 | API | `/api/v1/drugs/{id}/dosages` resolves RxNorm drugs on first use and reports `lookup`. |
 | Schema | `drug_catalog_load_events` table; `drug_catalog.resolved_at` (migration 062). |
 
+## 128. Medication Intake Follow-ups (v3.01)
+
+### 128.1 Request
+
+Five follow-ups to the guided medication intake (§126, §127): an admin screen for adding catalog drugs by hand and editing the frequency list; editing an existing medication through the new form; brand-to-generic matching ("Coumadin" finds warfarin); a scheduled refresh of the name list; and a "Not Applicable" choice for the required Eye field.
+
+### 128.2 What was built
+
+* **Eye: Not Applicable.** `NA` is a valid Eye choice for any non-oral drug and any custom entry, shown as "N/A" on the list and exam card. An oral drug is still forced to PO; PO is still refused for eye/topical catalog drugs. Older rows and the import accept it too.
+* **Brand names find the generic.** New table `drug_aliases`. Resolving an ingredient records its RxNorm brands; a brand absent from the name list is looked up live once by exact name, mapped to its generic (a combination brand maps to the combination), and cached. Results show "brand: Coumadin" and the generic is recorded. Verified live: "coumadin" finds warfarin in about 0.7 s the first time and instantly afterwards; resolving warfarin also makes "jantoven" find it.
+* **Edit through the same form.** Each active medication's Edit button opens the four-field form pre-filled; custom and older free-text rows open as custom entries. New `GET`/`PUT /api/v1/patients/{id}/medications/{med_id}` apply the add-time rules, CSRF and patient scope; changes are written to the field-change audit trail. The inline free-text edit popover is gone.
+* **Admin screens** under Administration > Drug Catalog: Browse & add drugs (search by name or source; add by hand with dosages and brand names; per-drug page to change route, dosages and brand names and to deactivate/reactivate; RxNorm names can't be renamed), and Frequencies (add, rename/reorder, hide/show, by route group). Deactivated, never deleted; all changes audited; System/Practice Administrator edit, auditors view.
+* **Scheduled refresh.** `GET /admin/drug-catalog/refresh/run`, run monthly by Vercel Cron (8th, 06:23 UTC, `vercel.json`), authenticated by the cron bearer token like the reminder scan. It adds newly published RxNorm names only, does nothing until an administrator has made the first load, returns 502 on an outage, and records an audit row shown as "Scheduled or command line".
+
+### 128.3 Limits
+
+Brands already present in RxNorm's name list (lasix, tylenol, cosopt) are found directly as brand entries, not redirected to their generic; a partly typed brand that is not in the list finds nothing until it has been looked up in full once; safety rules still match medication name text, so a drug recorded under a generic does not match a class term that lists only its brand.
+
+### 128.4 Tests
+
+Unit tests for brand lookups (generic reuse, combination brands, unknown names, non-brands, outages), search ranking, and the refresh (waits for the first load, adds only new names, failure recorded). End-to-end tests for: NA accepted and shown; a brand finding its generic through the real component; editing a catalog row and an older free-text row (pre-filled, saved in place, audited, cancel); the admin screens (roles, add by hand, duplicate refused, rename, route change forcing PO, dosages and brand names, deactivate/reactivate, RxNorm names read-only, frequencies, audit); and the cron endpoint (403 without the secret, no-op re-run, 502 on outage). The RxNav stand-in replays real captured responses, extended to cover brand lookups. No schema migration was needed (one new table, created automatically).
+
+**Version 3.01 change log (relative to v3.00):**
+
+| Area | Change |
+| --- | --- |
+| Medication form | Eye = NA; brand names find generics; Edit reopens the form pre-filled. |
+| API | `GET`/`PUT /api/v1/patients/{id}/medications/{med_id}`; search returns `via_brand`. |
+| Admin | Browse & add drugs; per-drug editing; Frequencies list. |
+| Schema | New `drug_aliases` table. |
+| Scheduling | Monthly RxNorm refresh (Vercel Cron). |
+
