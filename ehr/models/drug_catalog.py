@@ -34,6 +34,8 @@ class DrugCatalogEntry(Base):
     # RxNorm rows arrive as bare names (from the display-name list) and are resolved on first use: resolved_at is set once the
     # drug's rxcui, route and dosages have been fetched (NULL = not yet tried, or the last try failed). Manual rows leave it NULL.
     resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    # For a brand row (tty 'BN'): when its generic(s) were looked up, so a brand is mapped to its generic only once.
+    generic_checked_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     dosages: Mapped[list["DrugDosage"]] = relationship(back_populates="drug", cascade="all, delete-orphan",

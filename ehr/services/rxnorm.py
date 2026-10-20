@@ -38,10 +38,11 @@ from collections import Counter
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import insert
+from sqlalchemy import insert, update
 from sqlalchemy.orm import Session
 
 from ehr.models.drug_catalog import DrugAlias, DrugCatalogEntry, DrugCatalogLoadEvent, DrugDosage
+from ehr.services import drug_catalog as catalog
 from ehr.services.drug_catalog import Hit
 
 log = logging.getLogger(__name__)
@@ -91,9 +92,21 @@ def usable_name(name) -> Optional[str]:
     return n if n and len(n) <= MAX_NAME and re.match(r"[A-Za-z0-9]", n) else None
 
 
+def fetch_brand_list() -> list:
+    """RxNorm's brand names as [(name, rxcui)] (`allconcepts.json?tty=BN`, ~5,000)."""
+    try:
+        concepts = _get("/allconcepts.json", {"tty": "BN"})["minConceptGroup"]["minConcept"]
+        return [(c["name"], str(c["rxcui"])) for c in concepts if c.get("name") and c.get("rxcui")]
+    except (KeyError, TypeError) as e:
+        raise RxNavError(f"unexpected brand list response: {e}") from e
+
+
 def load_display_names(db: Session, user_id: Optional[int] = None) -> DrugCatalogLoadEvent:
-    """Add every RxNorm display name not already in the catalog. Always records an audit event (ok or failed); the caller
-    commits. Existing rows (RxNorm or manual) are never touched, so administrators' own entries and any resolved drugs stay."""
+    """Add every RxNorm display name and brand name not already in the catalog, and flag which RxNorm rows are brands
+    (tty 'BN', with their RxNorm id) so a brand can later be mapped to its generic. Always records an audit event (ok or
+    failed); the caller commits. Nothing is deleted or overwritten: manual rows and resolved drugs stay as they are, and an
+    existing RxNorm row only gains its brand flag and id when it has neither. If only the brand list can't be fetched, the
+    names still load and the event notes it."""
     version = fetch_version()
     try:
         names = fetch_display_names()
@@ -102,17 +115,55 @@ def load_display_names(db: Session, user_id: Optional[int] = None) -> DrugCatalo
         ev = DrugCatalogLoadEvent(user_id=user_id, status="failed", rxnorm_version=version, error=str(e)[:255])
         db.add(ev)
         return ev
-    have = {lower for (lower,) in db.query(DrugCatalogEntry.name_lower).all()}
+    brand_error = None
+    try:
+        brands = fetch_brand_list()
+    except RxNavError as e:
+        log.warning("RxNorm brand list failed: %s", e)
+        brands, brand_error = [], "Drug names loaded, but the brand list could not be fetched this time."
+    existing = {lower: (id_, tty, rxcui, source) for id_, lower, tty, rxcui, source in
+                db.query(DrugCatalogEntry.id, DrugCatalogEntry.name_lower, DrugCatalogEntry.tty, DrugCatalogEntry.rxcui, DrugCatalogEntry.source).all()}
+    taken_rxcuis = {r for (_, _, r, _) in existing.values() if r}
     now = datetime.utcnow()
-    rows = []
+    rows, flag, added = [], [], {}                                 # added: name_lower -> index in rows, for names inserted below
+
+    def new_row(name, tty=None, rxcui=None):
+        return {"name": name, "name_lower": name.lower(), "source": "rxnorm", "is_active": True, "created_at": now, "tty": tty, "rxcui": rxcui}
+
+    name_keys = set()
     for raw in names:
         n = usable_name(raw)
-        if n and n.lower() not in have:
-            have.add(n.lower())
-            rows.append({"name": n, "name_lower": n.lower(), "source": "rxnorm", "is_active": True, "created_at": now})
+        if n:
+            name_keys.add(n.lower())
+            if n.lower() not in existing and n.lower() not in added:
+                added[n.lower()] = len(rows)
+                rows.append(new_row(n))
+    brand_only = 0
+    for raw, rxcui in brands:
+        n = usable_name(raw)
+        if not n:
+            continue
+        key = n.lower()
+        brand_only += key not in name_keys
+        if rxcui in taken_rxcuis:
+            continue
+        have = existing.get(key)                                   # (id, tty, rxcui, source)
+        if key in added:                                           # a plain name added just above: make it a brand row
+            rows[added[key]]["tty"], rows[added[key]]["rxcui"] = "BN", rxcui
+            taken_rxcuis.add(rxcui)
+        elif have is None:                                         # a brand RxNorm's name list doesn't carry (e.g. Coumadin)
+            added[key] = len(rows)
+            rows.append(new_row(n, "BN", rxcui))
+            taken_rxcuis.add(rxcui)
+        elif have[3] == "rxnorm" and have[1] is None and have[2] is None:   # an existing plain RxNorm row that is really a brand
+            flag.append({"id": have[0], "tty": "BN", "rxcui": rxcui})
+            taken_rxcuis.add(rxcui)
     if rows:
         db.execute(insert(DrugCatalogEntry), rows)
-    ev = DrugCatalogLoadEvent(user_id=user_id, status="ok", names_in_source=len(names), names_added=len(rows), rxnorm_version=version)
+    if flag:
+        db.execute(update(DrugCatalogEntry), flag)
+    ev = DrugCatalogLoadEvent(user_id=user_id, status="ok", names_in_source=len(names) + brand_only, names_added=len(rows),
+                              rxnorm_version=version, error=brand_error)
     db.add(ev)
     return ev
 
@@ -215,6 +266,16 @@ def add_alias(db: Session, drug: DrugCatalogEntry, alias: str) -> bool:
     return True
 
 
+def fetch_generics_for_rxcui(rxcui: str) -> list:
+    """The generic(s) of a brand by RxNorm id: [(name, rxcui, tty)]. A combination brand maps to the combination (MIN), not each
+    ingredient. Raises RxNavError when RxNav can't be reached."""
+    related = _get(f"/rxcui/{rxcui}/related.json?tty=IN+MIN")
+    found = {}
+    for g in related.get("relatedGroup", {}).get("conceptGroup", []) or []:
+        found[g.get("tty")] = [(c["name"], str(c["rxcui"]), g["tty"]) for c in g.get("conceptProperties", []) or [] if c.get("name")]
+    return found.get("MIN") or found.get("IN") or []
+
+
 def fetch_brand_generics(name: str) -> Optional[dict]:
     """Exact-name lookup of a brand: {"brand": name, "generics": [(name, rxcui, tty)]}. None when RxNorm doesn't know the
     name or it isn't a brand; raises RxNavError when RxNav can't be reached."""
@@ -225,12 +286,25 @@ def fetch_brand_generics(name: str) -> Optional[dict]:
     props = _get(f"/rxcui/{rxcui}/properties.json").get("properties") or {}
     if props.get("tty") != "BN":
         return None
-    related = _get(f"/rxcui/{rxcui}/related.json?tty=IN+MIN")
-    found = {}
-    for g in related.get("relatedGroup", {}).get("conceptGroup", []) or []:
-        found[g.get("tty")] = [(c["name"], str(c["rxcui"]), g["tty"]) for c in g.get("conceptProperties", []) or [] if c.get("name")]
-    generics = found.get("MIN") or found.get("IN") or []            # a combination brand maps to the combination, not each ingredient
+    generics = fetch_generics_for_rxcui(rxcui)
     return {"brand": props.get("name") or name, "generics": generics} if generics else None
+
+
+def _attach_generics(db: Session, brand: str, generics: list) -> list:
+    """Find or add the generic catalog rows for a brand and record the brand as an alias of each; returns them as Hits."""
+    hits = []
+    for gname, grxcui, gtty in generics:
+        drug = db.query(DrugCatalogEntry).filter(DrugCatalogEntry.name_lower == gname.lower()).first()
+        if drug is None:
+            taken = db.query(DrugCatalogEntry.id).filter(DrugCatalogEntry.rxcui == grxcui).first()
+            drug = DrugCatalogEntry(name=gname[:MAX_NAME], name_lower=gname.lower()[:MAX_NAME], source="rxnorm", is_active=True,
+                                    rxcui=None if taken else grxcui, tty=gtty)
+            db.add(drug)
+            db.flush()
+        if drug.is_active:
+            add_alias(db, drug, brand)
+            hits.append(Hit(drug, via=brand))
+    return hits
 
 
 def brand_fallback(db: Session, query: str) -> list:
@@ -242,21 +316,49 @@ def brand_fallback(db: Session, query: str) -> list:
     except RxNavError as e:
         log.warning("RxNorm brand lookup for %r failed: %s", query, e)
         return []
-    if not found:
-        return []
-    hits = []
-    for gname, grxcui, gtty in found["generics"]:
-        drug = db.query(DrugCatalogEntry).filter(DrugCatalogEntry.name_lower == gname.lower()).first()
-        if drug is None:
-            taken = db.query(DrugCatalogEntry.id).filter(DrugCatalogEntry.rxcui == grxcui).first()
-            drug = DrugCatalogEntry(name=gname[:MAX_NAME], name_lower=gname.lower()[:MAX_NAME], source="rxnorm", is_active=True,
-                                    rxcui=None if taken else grxcui, tty=gtty)
-            db.add(drug)
-            db.flush()
-        if drug.is_active:
-            add_alias(db, drug, found["brand"])
-            hits.append(Hit(drug, via=found["brand"]))
-    return hits
+    return _attach_generics(db, found["brand"], found["generics"]) if found else []
+
+
+def map_brand(db: Session, drug: DrugCatalogEntry) -> str:
+    """Look up the generic of a brand catalog row, once: records the brand as an alias of its generic(s) (which makes search
+    show the generic, "furosemide -- brand: Lasix", instead of the brand row). Returns 'skipped' (not a brand, or already
+    checked), 'ok', 'none' (RxNorm lists no generic; the brand row stays as it is) or 'unavailable' (RxNav unreachable; not
+    marked checked, so it is tried again later). The caller commits."""
+    if drug.tty != "BN" or drug.generic_checked_at is not None:
+        return "skipped"
+    generics = []
+    if drug.rxcui:
+        try:
+            generics = fetch_generics_for_rxcui(drug.rxcui)
+        except RxNavError as e:
+            log.warning("RxNorm generic lookup for %r failed: %s", drug.name, e)
+            return "unavailable"
+    _attach_generics(db, drug.name, generics)
+    drug.generic_checked_at = datetime.utcnow()
+    return "ok" if generics else "none"
+
+
+MAX_BRAND_LOOKUPS = 3        # per search: brand rows about to be shown that are mapped to their generic live (about 0.3 s each)
+
+
+def search(db: Session, q: str) -> list:
+    """The intake's search: the local catalog by name and brand alias, with each brand row that is about to be shown mapped to its
+    generic first (so "lasix" offers furosemide, not the brand row), and, when nothing local matches at all, a live
+    exact-name brand lookup. Network trouble never fails the search -- it just returns what is already local. The caller
+    commits. Raises ValueError for a query under the minimum length (like catalog.search)."""
+    hits = catalog.search(db, q)
+    ql = q.strip().lower()
+    pending = [h for h in hits if h.via is None and h.drug.tty == "BN" and h.drug.generic_checked_at is None and h.drug.name_lower.startswith(ql)]
+    mapped = False
+    for h in pending[:MAX_BRAND_LOOKUPS]:
+        outcome = map_brand(db, h.drug)
+        if outcome == "unavailable":
+            break                                          # don't wait on a second timeout
+        mapped = mapped or outcome == "ok"
+    if mapped:
+        db.flush()
+        hits = catalog.search(db, q)
+    return hits or brand_fallback(db, q)
 
 
 if __name__ == "__main__":                       # python -m ehr.services.rxnorm  -> load the RxNorm names from the command line

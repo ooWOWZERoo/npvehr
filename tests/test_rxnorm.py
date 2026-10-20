@@ -50,12 +50,15 @@ def test_load_display_names_adds_only_usable_new_names_records_the_event_and_is_
     db.commit()
     ev = rxnorm.load_display_names(db, user_id=None)
     db.commit()
-    assert ev.status == "ok" and ev.rxnorm_version == "05-Oct-2026" and ev.names_in_source == 12 and ev.names_added == 9   # 12 listed, 2 junk, 1 already there
+    # 16 names listed + 3 brands the list lacks = 19 in RxNorm; 2 junk fragments and the administrator's own "Latanoprost" are not added
+    assert ev.status == "ok" and ev.rxnorm_version == "05-Oct-2026" and ev.names_in_source == 19 and ev.names_added == 16
     names = {d.name for d in db.query(DrugCatalogEntry).all()}
     assert "prednisoLONE" in names and "(1,1-dimethylethyl)urea" not in names
     mine = db.query(DrugCatalogEntry).filter(DrugCatalogEntry.name_lower == "latanoprost").one()
     assert (mine.name, mine.source) == ("Latanoprost", "manual")                      # untouched: not duplicated, not overwritten
-    assert all(d.source == "rxnorm" and d.resolved_at is None and d.rxcui is None for d in db.query(DrugCatalogEntry).filter(DrugCatalogEntry.source == "rxnorm"))
+    rx = db.query(DrugCatalogEntry).filter(DrugCatalogEntry.source == "rxnorm").all()
+    assert all(d.resolved_at is None and d.generic_checked_at is None for d in rx)                  # nothing is looked up at load time
+    assert all((d.rxcui is None) == (d.tty is None) for d in rx)                                    # only brand rows carry an id and a type yet
     again = rxnorm.load_display_names(db)
     db.commit()
     assert again.status == "ok" and again.names_added == 0                              # nothing new the second time
@@ -155,7 +158,7 @@ def test_resolving_an_ingredient_records_its_brands_and_a_brand_then_finds_the_g
     assert rxnorm.ensure_resolved(db, drug) == "ok"
     db.commit()
     assert sorted(a.alias for a in db.query(DrugAlias).filter(DrugAlias.drug_id == drug.id)) == ["Coumadin", "Jantoven"]
-    hits = catalog.search(db, "COUMAD")
+    hits = rxnorm.search(db, "COUMAD")                                                  # the Coumadin brand row is mapped to warfarin and hidden
     assert [(h.drug.name, h.via) for h in hits] == [("warfarin", "Coumadin")]
     assert rxnorm.ensure_resolved(db, drug) == "local"                                  # aliases are not re-fetched either
 
@@ -229,3 +232,95 @@ def test_a_failed_scheduled_refresh_is_recorded_and_changes_nothing(db, monkeypa
     ev = rxnorm.scheduled_refresh(db)
     db.commit()
     assert ev.status == "failed" and db.query(DrugCatalogEntry).count() == before
+
+
+# ---------------------------------------------------------------------------------- brand rows in the list -> generics
+def _hits(hits):
+    return [(h.drug.name, h.via) for h in hits]
+
+
+def _offline(monkeypatch):
+    monkeypatch.setattr(rxnorm, "_get", lambda path, params=None: (_ for _ in ()).throw(rxnorm.RxNavError("offline")))
+
+
+def test_the_load_flags_brand_rows_and_adds_brands_the_name_list_lacks_and_is_rerun_safe(db):
+    rxnorm.load_display_names(db)
+    db.commit()
+    lasix = db.query(DrugCatalogEntry).filter(DrugCatalogEntry.name_lower == "lasix").one()
+    coumadin = db.query(DrugCatalogEntry).filter(DrugCatalogEntry.name_lower == "coumadin").one()      # not in RxNorm's name list
+    assert (lasix.tty, lasix.rxcui, coumadin.tty, coumadin.rxcui, coumadin.source) == ("BN", "202991", "BN", "202421", "rxnorm")
+    assert db.query(DrugCatalogEntry).filter(DrugCatalogEntry.name_lower == "furosemide").one().tty is None   # generics stay unflagged
+    assert rxnorm.load_display_names(db).names_added == 0
+
+
+def test_a_later_load_flags_rows_an_earlier_load_added_before_brands_were_known(db, monkeypatch):
+    real = rxnorm.fetch_brand_list
+    monkeypatch.setattr(rxnorm, "fetch_brand_list", lambda: (_ for _ in ()).throw(rxnorm.RxNavError("no brand list")))
+    first = rxnorm.load_display_names(db)
+    db.commit()
+    assert first.status == "ok" and "brand list" in first.error                          # names still loaded, the gap is noted
+    assert db.query(DrugCatalogEntry).filter(DrugCatalogEntry.tty == "BN").count() == 0
+    monkeypatch.setattr(rxnorm, "fetch_brand_list", real)
+    again = rxnorm.load_display_names(db)
+    db.commit()
+    assert again.error is None and again.names_added == 3                              # the three brands the name list lacks
+    assert db.query(DrugCatalogEntry).filter(DrugCatalogEntry.tty == "BN").count() == 7   # ...and the other four existing rows are now flagged
+
+
+def test_a_brand_row_in_the_list_is_replaced_by_its_generic_and_the_mapping_is_remembered(db, monkeypatch):
+    rxnorm.load_display_names(db)
+    db.commit()
+    assert _hits(catalog.search(db, "lasix")) == [("lasix", None)]                      # before mapping: just the brand row
+    assert _hits(rxnorm.search(db, "lasix")) == [("furosemide", "lasix")]               # mapped now; the brand row is hidden
+    db.commit()
+    _offline(monkeypatch)
+    assert _hits(rxnorm.search(db, "lasix")) == [("furosemide", "lasix")]               # remembered: no network needed
+    assert _hits(rxnorm.search(db, "furosemide")) == [("furosemide", None)]
+    assert _hits(rxnorm.search(db, "tylenol")) == [("tylenol", None)]                   # never mapped, and offline: the brand row is still listed
+
+
+def test_a_partly_typed_brand_missing_from_the_name_list_finds_its_generic(db):
+    rxnorm.load_display_names(db)
+    db.commit()
+    assert _hits(rxnorm.search(db, "coum")) == [("warfarin", "Coumadin")]                # "coum" -> Coumadin brand row -> warfarin
+    assert _hits(rxnorm.search(db, "tylen")) == [("acetaminophen", "tylenol")]
+
+
+def test_a_combination_brand_in_the_list_maps_to_the_combination(db):
+    rxnorm.load_display_names(db)
+    db.commit()
+    assert _hits(rxnorm.search(db, "cosopt")) == [("dorzolamide / timolol", "Cosopt")]
+
+
+def test_when_the_service_is_down_a_brand_row_stays_listed_and_is_mapped_next_time(db, monkeypatch):
+    rxnorm.load_display_names(db)
+    db.commit()
+    real = rxnorm._get
+    _offline(monkeypatch)
+    assert _hits(rxnorm.search(db, "lasix")) == [("lasix", None)]                       # an outage never hides or fails the search
+    assert db.query(DrugCatalogEntry).filter(DrugCatalogEntry.name_lower == "lasix").one().generic_checked_at is None
+    monkeypatch.setattr(rxnorm, "_get", real)
+    assert _hits(rxnorm.search(db, "lasix")) == [("furosemide", "lasix")]
+
+
+def test_a_brand_with_no_generic_on_record_stays_listed_and_is_not_rechecked(db, monkeypatch):
+    rxnorm.load_display_names(db)
+    db.commit()
+    monkeypatch.setattr(rxnorm, "fetch_generics_for_rxcui", lambda rxcui: [])
+    drug = db.query(DrugCatalogEntry).filter(DrugCatalogEntry.name_lower == "lasix").one()
+    assert rxnorm.map_brand(db, drug) == "none" and drug.generic_checked_at is not None
+    assert rxnorm.map_brand(db, drug) == "skipped"
+    assert _hits(catalog.search(db, "lasix")) == [("lasix", None)]
+
+
+def test_a_search_maps_at_most_a_few_brand_rows_so_it_stays_quick(db, monkeypatch):
+    for i in range(5):
+        db.add(DrugCatalogEntry(name=f"Zzbrand{i}", name_lower=f"zzbrand{i}", source="rxnorm", is_active=True, tty="BN", rxcui=f"99000{i}"))
+    db.commit()
+    calls = []
+    monkeypatch.setattr(rxnorm, "fetch_generics_for_rxcui", lambda rxcui: calls.append(rxcui) or [])
+    rxnorm.search(db, "zzbrand")
+    assert len(calls) == rxnorm.MAX_BRAND_LOOKUPS
+    rxnorm.search(db, "zzbrand")                                                        # the next search maps the next few
+    assert len(calls) == 5                                                              # all five brands now checked, none twice
+

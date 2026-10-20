@@ -5675,3 +5675,37 @@ Unit tests for brand lookups (generic reuse, combination brands, unknown names, 
 | Schema | New `drug_aliases` table. |
 | Scheduling | Monthly RxNorm refresh (Vercel Cron). |
 
+## 129. Brand Redirects, Partial Brands and Equivalence-Aware Safety Matching (v3.02)
+
+### 129.1 Request
+
+Close the three limits left in §128.3: brands already in RxNorm's name list (lasix, tylenol) were not redirected to their generic; a partly typed brand missing from the list found nothing until looked up in full; and safety rules matched only the medication name text.
+
+### 129.2 What was built
+
+* **Brand rows offer their generic.** The RxNorm load now also fetches RxNorm's brand list and flags brand rows (with their RxNorm ids); brands the name list lacks (about 980, including Coumadin) are added. The first time a brand row is about to be shown (up to three per search, about 0.3 s each) its generic is looked up, the brand is recorded as an alias, and the search then offers "furosemide — brand: lasix" instead of the brand row. A combination brand maps to the combination. A brand with no generic on record, or an RxNorm outage, leaves the brand row listed and never fails the search.
+* **Partial brands are found**: "coum" finds Coumadin and offers warfarin; the exact-name live lookup stays as a fallback.
+* **Safety matching uses generic and brand names.** A medication matches a reviewed class term by its recorded name plus, for a catalog drug (linked by the intake, or an older free-text row whose whole name is a catalog drug or brand), its generic and every known brand name. A term needs listing once, under either name. This only adds names to compare: unreviewed terms, inactive classes and unlinked flags still match nothing, and free text with a strength is not guessed at. It applies to the class labels on the medication list, the derived "Takes a blood thinner"-style flags, and the safety warnings that depend on them.
+* Admin: brand rows carry a "Brand" badge in the drug list. Migration 063 adds `drug_catalog.generic_checked_at`.
+
+### 129.3 Verified against the real service
+
+Through the real app against live RxNav (2026-10-20): the load (names and brands) added 14,593 names in 2.0 s; "lasix" offered furosemide in 0.3 s, then instantly; "coum", "tylen", "cosopt", "xalat", "jantov" and "pred forte" all offered the right generic (Cosopt the combination "dorzolamide / timolol").
+
+### 129.4 Tests
+
+Unit tests for the load (brand rows flagged and missing brands added, safe to re-run, a later load flags rows an earlier one added, brand list failure noted without blocking names), brand mapping (replaced by the generic, remembered offline, outage leaves the row listed and retries, no generic stays listed and isn't rechecked, the per-search cap), and safety equivalence (term lists the brand or the generic or the sibling brand, older free text only on a whole-name match, unreviewed terms and unrelated drugs stay silent, a dangling catalog link never raises, and a safety warning fires through a brand term). An end-to-end test of the redirects in the real component, plus a migration test for 063. The RxNav stand-in's captured responses now include the brand list and each kept brand's generics. Full suite green.
+
+### 129.5 Limits
+
+The brand-to-generic mapping is looked up once and not refreshed; matching is by name, not RxNorm id; a brand RxNorm no longer lists would stay as it was mapped.
+
+**Version 3.02 change log (relative to v3.01):**
+
+| Area | Change |
+| --- | --- |
+| Catalog | Brand list loaded; brand rows flagged and mapped to their generics on first display. |
+| Medication form | Brands in the list offer their generic; partial brands are found. |
+| Safety | Class and flag matching uses generic and brand names of a catalog drug. |
+| Schema | `drug_catalog.generic_checked_at` (migration 063). |
+

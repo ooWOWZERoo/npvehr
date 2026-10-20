@@ -61,7 +61,8 @@ class Hit:
 def search(db: Session, q: str) -> list:
     """Active catalog drugs matching `q` by name or by brand alias (case-insensitive), as Hit rows: names starting with q,
     then aliases starting with q, then names containing q, then aliases containing q; alphabetical within each; max 15.
-    A drug found by both its name and an alias is listed once, under whichever match ranks higher. Raises ValueError below the minimum length so
+    A drug found by both its name and an alias is listed once, under whichever match ranks higher. A brand row that has been
+    mapped to its generic is hidden in favour of the generic. Raises ValueError below the minimum length so
     a caller can't dump the catalog."""
     q = (q or "").strip().lower()
     if len(q) < MIN_QUERY_CHARS:
@@ -77,7 +78,15 @@ def search(db: Session, q: str) -> list:
         rank = 1 if al.alias_lower.startswith(q) else 3
         if d.id not in ranked or rank < ranked[d.id][0] and ranked[d.id][0] != 0:
             ranked[d.id] = (rank, d.name_lower, Hit(d, via=al.alias))
-    return [h for _, _, h in sorted(ranked.values(), key=lambda t: (t[0], t[1]))[:MAX_RESULTS]]
+    ordered = [h for _, _, h in sorted(ranked.values(), key=lambda t: (t[0], t[1]))]
+    # A brand row whose generic has been looked up is replaced by that generic ("furosemide -- brand: Lasix"): hide the brand row
+    # when an active generic carries its name as an alias. (A brand with no generic on record stays listed.)
+    brands = {h.drug.name_lower for h in ordered if h.via is None and h.drug.tty == "BN" and h.drug.generic_checked_at is not None}
+    if brands:
+        redirected = {al for (al,) in db.query(DrugAlias.alias_lower).join(DrugCatalogEntry, DrugCatalogEntry.id == DrugAlias.drug_id)
+                      .filter(DrugAlias.alias_lower.in_(brands), DrugCatalogEntry.is_active.is_(True)).all()}
+        ordered = [h for h in ordered if not (h.via is None and h.drug.tty == "BN" and h.drug.name_lower in redirected)]
+    return ordered[:MAX_RESULTS]
 
 
 def get_drug(db: Session, drug_id: int) -> Optional[DrugCatalogEntry]:

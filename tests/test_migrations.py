@@ -373,3 +373,18 @@ def test_drug_catalog_resolved_at_column_is_added_to_an_existing_table_and_rerun
     with fresh_engine.begin() as conn:                              # a brand-new database (no table yet) is skipped, not an error
         conn.execute(text("DROP TABLE drug_catalog"))
         mig.migration_062_drug_catalog_resolved_at(conn)
+
+
+def test_drug_catalog_generic_checked_at_column_is_added_to_an_existing_table_and_rerun_is_safe(fresh_engine):
+    """Migration 063: a drug_catalog table from before brand mapping gains generic_checked_at (NULL on existing rows); re-run is a no-op."""
+    with fresh_engine.begin() as conn:
+        conn.execute(text("CREATE TABLE drug_catalog (id INTEGER PRIMARY KEY, name VARCHAR(160))"))
+        conn.execute(text("INSERT INTO drug_catalog (name) VALUES ('Some drug')"))
+    for _ in range(2):
+        with fresh_engine.begin() as conn:
+            mig.migration_063_drug_catalog_generic_checked_at(conn)
+    with fresh_engine.connect() as conn:
+        assert tuple(conn.execute(text("SELECT name, generic_checked_at FROM drug_catalog")).one()) == ("Some drug", None)
+    with fresh_engine.begin() as conn:
+        conn.execute(text("DROP TABLE drug_catalog"))
+        mig.migration_063_drug_catalog_generic_checked_at(conn)         # no table yet: skipped, not an error

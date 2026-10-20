@@ -5396,3 +5396,31 @@ def test_scheduled_rxnorm_refresh_endpoint_needs_the_cron_secret_and_reports_out
         urllib.request.urlopen(f"{rxnav_stub}/__fail?on=0").read()
     page.goto(live_server + "/admin/drug-catalog")
     assert page.locator("table tr", has_text="Scheduled or command line").count() >= 2 and page.locator("table tr", has_text="Failed").count() >= 1
+
+
+def test_brands_in_the_name_list_offer_their_generic_and_partial_brands_are_found(logged_in_page, live_server, rxnav_stub):
+    """After the name load: 'lasix' (in RxNorm's list) offers furosemide, 'coum' (a brand the list lacks, added from the brand
+    list) offers warfarin, in the real component; the admin list marks brand rows."""
+    page = logged_in_page
+    api = page.request
+    base = f"{live_server}/api/v1"
+    page.goto(live_server + "/admin/drug-catalog")
+    page.get_by_role("button", name=re.compile("RxNorm")).click()
+    page.wait_for_load_state()
+    assert [(d["name"], d["via_brand"]) for d in api.get(f"{base}/drugs/search?q=lasix").json()["results"]] == [("furosemide", "lasix")]
+    assert [(d["name"], d["via_brand"]) for d in api.get(f"{base}/drugs/search?q=coum").json()["results"]] == [("warfarin", "Coumadin")]
+    assert [(d["name"], d["via_brand"]) for d in api.get(f"{base}/drugs/search?q=tylen").json()["results"]] == [("acetaminophen", "tylenol")]
+    assert [d["name"] for d in api.get(f"{base}/drugs/search?q=furosemide").json()["results"]] == ["furosemide"]
+
+    pid = _named_patient_id(page, live_server, "Wilson", "David")                        # only selects here: records nothing
+    page.goto(f"{live_server}/patients/{pid}/medications")
+    page.fill("#medName", "cosopt")
+    opt = page.locator(".med-combo-option", has_text="brand: Cosopt")
+    opt.wait_for()
+    assert "dorzolamide / timolol" in opt.inner_text() and page.locator(".med-combo-option:not(.med-combo-custom)").count() == 1   # the brand row itself is hidden (only the generic is offered)
+    opt.click()
+    assert page.locator("#medName").input_value() == "dorzolamide / timolol"
+    assert "Cosopt is a brand of dorzolamide / timolol" in page.locator("#medNameStatus").inner_text()
+
+    page.goto(live_server + "/admin/drug-catalog/drugs?q=jantoven")
+    assert page.locator("table tr", has_text="jantoven").locator(".badge", has_text="Brand").count() == 1

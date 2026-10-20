@@ -8,16 +8,61 @@
     "term": [
      "(-)-ambroxide",
      "(1,1-dimethylethyl)urea",
+     "acetaminophen",
      "cajuput oil",
      "dorzolamide / timolol",
+     "furosemide",
+     "lasix",
      "latanoprost",
      "lumigan",
      "metFORMIN",
      "prednisoLONE",
      "prednisoLONE acetate",
      "timolol maleate",
+     "tylenol",
      "warfarin",
      "xalatan"
+    ]
+   }
+  },
+  "/allconcepts.json?tty=BN": {
+   "minConceptGroup": {
+    "minConcept": [
+     {
+      "name": "Cosopt",
+      "rxcui": "216253",
+      "tty": "BN"
+     },
+     {
+      "name": "Coumadin",
+      "rxcui": "202421",
+      "tty": "BN"
+     },
+     {
+      "name": "Jantoven",
+      "rxcui": "405155",
+      "tty": "BN"
+     },
+     {
+      "name": "Lasix",
+      "rxcui": "202991",
+      "tty": "BN"
+     },
+     {
+      "name": "Lumigan",
+      "rxcui": "284771",
+      "tty": "BN"
+     },
+     {
+      "name": "Tylenol",
+      "rxcui": "202433",
+      "tty": "BN"
+     },
+     {
+      "name": "Xalatan",
+      "rxcui": "153159",
+      "tty": "BN"
+     }
     ]
    }
   },
@@ -420,6 +465,30 @@
     "umlscui": ""
    }
   },
+  "/rxcui/153159/related.json?tty=IN+MIN": {
+   "relatedGroup": {
+    "conceptGroup": [
+     {
+      "conceptProperties": [
+       {
+        "language": "ENG",
+        "name": "latanoprost",
+        "rxcui": "43611",
+        "suppress": "N",
+        "synonym": "",
+        "tty": "IN",
+        "umlscui": ""
+       }
+      ],
+      "tty": "IN"
+     },
+     {
+      "tty": "MIN"
+     }
+    ],
+    "rxcui": null
+   }
+  },
   "/rxcui/153159/related.json?tty=SCD+SBD+DF+BN": {
    "relatedGroup": {
     "conceptGroup": [
@@ -518,6 +587,54 @@
     "rxcui": null
    }
   },
+  "/rxcui/202433/related.json?tty=IN+MIN": {
+   "relatedGroup": {
+    "conceptGroup": [
+     {
+      "conceptProperties": [
+       {
+        "language": "ENG",
+        "name": "acetaminophen",
+        "rxcui": "161",
+        "suppress": "N",
+        "synonym": "",
+        "tty": "IN",
+        "umlscui": ""
+       }
+      ],
+      "tty": "IN"
+     },
+     {
+      "tty": "MIN"
+     }
+    ],
+    "rxcui": null
+   }
+  },
+  "/rxcui/202991/related.json?tty=IN+MIN": {
+   "relatedGroup": {
+    "conceptGroup": [
+     {
+      "conceptProperties": [
+       {
+        "language": "ENG",
+        "name": "furosemide",
+        "rxcui": "4603",
+        "suppress": "N",
+        "synonym": "",
+        "tty": "IN",
+        "umlscui": ""
+       }
+      ],
+      "tty": "IN"
+     },
+     {
+      "tty": "MIN"
+     }
+    ],
+    "rxcui": null
+   }
+  },
   "/rxcui/216253/properties.json": {
    "properties": {
     "language": "ENG",
@@ -567,6 +684,54 @@
         "umlscui": ""
        }
       ],
+      "tty": "MIN"
+     }
+    ],
+    "rxcui": null
+   }
+  },
+  "/rxcui/284771/related.json?tty=IN+MIN": {
+   "relatedGroup": {
+    "conceptGroup": [
+     {
+      "conceptProperties": [
+       {
+        "language": "ENG",
+        "name": "bimatoprost",
+        "rxcui": "283810",
+        "suppress": "N",
+        "synonym": "",
+        "tty": "IN",
+        "umlscui": ""
+       }
+      ],
+      "tty": "IN"
+     },
+     {
+      "tty": "MIN"
+     }
+    ],
+    "rxcui": null
+   }
+  },
+  "/rxcui/405155/related.json?tty=IN+MIN": {
+   "relatedGroup": {
+    "conceptGroup": [
+     {
+      "conceptProperties": [
+       {
+        "language": "ENG",
+        "name": "warfarin",
+        "rxcui": "11289",
+        "suppress": "N",
+        "synonym": "",
+        "tty": "IN",
+        "umlscui": ""
+       }
+      ],
+      "tty": "IN"
+     },
+     {
       "tty": "MIN"
      }
     ],

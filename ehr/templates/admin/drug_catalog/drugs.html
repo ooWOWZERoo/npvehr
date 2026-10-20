@@ -28,7 +28,7 @@
   {% if drugs %}
   <div class="table-responsive"><table><thead><tr><th>Drug</th><th>Source</th><th>Route</th><th>Dosages</th><th>Status</th><th></th></tr></thead><tbody>
   {% for d in drugs %}
-    <tr style="{{ 'opacity:0.6' if not d.is_active }}"><td><strong>{{ d.name }}</strong></td>
+    <tr style="{{ 'opacity:0.6' if not d.is_active }}"><td><strong>{{ d.name }}</strong>{% if d.tty == 'BN' %} <span class="badge badge-scheduled">Brand</span>{% endif %}</td>
       <td>{{ 'RxNorm' if d.source == 'rxnorm' else 'By hand' }}</td>
       <td>{{ route_group(d.default_route) or '—' }}</td>
       <td>{{ dose_counts.get(d.id, 0) }}{% if d.source == 'rxnorm' and not d.resolved_at %} <span class="muted" style="font-size:0.78rem">(fetched on first use)</span>{% endif %}</td>

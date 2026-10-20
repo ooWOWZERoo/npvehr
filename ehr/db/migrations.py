@@ -1752,6 +1752,14 @@ def migration_062_drug_catalog_resolved_at(conn):
         return  # brand-new database: create_all() builds the table with this column.
     _add_column_if_missing(conn, "drug_catalog", "resolved_at", "TIMESTAMP")
 
+def migration_063_drug_catalog_generic_checked_at(conn):
+    """drug_catalog.generic_checked_at: when a brand row's generic was looked up (NULL = not yet). Existing rows stay NULL.
+    Idempotent."""
+    if not _table_exists(conn, "drug_catalog"):
+        return  # brand-new database: create_all() builds the table with this column.
+    _add_column_if_missing(conn, "drug_catalog", "generic_checked_at", "TIMESTAMP")
+
+
 # Ordered list of (id, function). Adding new migrations: append, never edit past entries.
 COLUMN_MIGRATIONS = [
     ("001_appointment_columns", migration_001_appointment_columns),
@@ -1798,6 +1806,7 @@ COLUMN_MIGRATIONS = [
     ("058_recall_status", migration_058_recall_status),
     ("059_dilated_exam", migration_059_dilated_exam),
     ("062_drug_catalog_resolved_at", migration_062_drug_catalog_resolved_at),
+    ("063_drug_catalog_generic_checked_at", migration_063_drug_catalog_generic_checked_at),
 ]
 def migration_055_seed_ros_catalog(conn):
     """Review-of-Systems decision-support catalog (ros_master / ros_icd10_test_mapping
