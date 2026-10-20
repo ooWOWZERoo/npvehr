@@ -6,7 +6,7 @@ All responses are JSON. Errors use FastAPI's {"detail": ...} shape: 401 not sign
 drug / patient outside the caller's access, 422 validation. Mutations need the session CSRF token in an X-CSRF-Token header.
 
     GET  /api/v1/drugs/search?q=<text>              minimum 3 characters
-    GET  /api/v1/drugs/{drug_id}/dosages
+    GET  /api/v1/drugs/{drug_id}/dosages            first use of an RxNorm drug fetches its dosages (services/rxnorm.py); see "lookup"
     GET  /api/v1/drugs/{drug_id}/frequencies        drug's own route group first
     POST /api/v1/patients/{patient_id}/medications  add a medication (catalog pick or custom entry); MEDICATION_EDIT only
 """
@@ -23,6 +23,7 @@ from ehr.auth.permissions import MEDICATION_EDIT, require_role
 from ehr.models.database import get_db
 from ehr.routes.patients import _get_patient_or_404
 from ehr.services import drug_catalog as catalog
+from ehr.services import rxnorm
 from ehr.services import medications as med_svc
 
 router = APIRouter(prefix="/api/v1", tags=["medication-intake"])
@@ -61,6 +62,9 @@ class SearchOut(BaseModel):
 class DosagesOut(BaseModel):
     drug_id: int
     dosages: list[DosageOut]
+    # local = nothing to look up; ok = fetched from RxNorm just now; not_found = RxNorm has no entry for this name;
+    # unavailable = RxNorm could not be reached (nothing is cached, so the next pick retries)
+    lookup: Literal["local", "ok", "not_found", "unavailable"] = "local"
 
 
 class FrequenciesOut(BaseModel):
@@ -124,7 +128,10 @@ def drug_dosages(drug_id: int, db: Session = Depends(get_db), user=Depends(get_c
     drug = catalog.get_drug(db, drug_id)
     if not drug:
         return _bad("Drug not found.", 404)
-    return _json(DosagesOut(drug_id=drug.id, dosages=[
+    lookup = rxnorm.ensure_resolved(db, drug)
+    if lookup != "local":
+        db.commit()
+    return _json(DosagesOut(drug_id=drug.id, lookup=lookup, dosages=[
         DosageOut(id=x.id, label=x.label, dose_form=x.dose_form, route=catalog.effective_route(drug, x),
                   is_oral=catalog.is_oral(drug, x)) for x in catalog.dosages_for(db, drug)]))
 

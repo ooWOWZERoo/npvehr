@@ -5073,3 +5073,82 @@ def test_medication_intake_combobox_debounce_chain_eye_rules_and_custom_entry(lo
     page.fill("#medName", "qqqqnotadrug")
     page.locator(".med-combo-custom", has_text="Add Custom: qqqqnotadrug").wait_for()
     assert "No match" in page.locator("#medNameStatus").inner_text()
+
+
+def test_rxnorm_name_load_admin_screen_lazy_dosage_lookup_outage_and_intake(logged_in_page, live_server, rxnav_stub):
+    """End to end against the RxNav stand-in (real captured responses): admin loads names (failure, then success, then a
+    harmless re-run), technicians search them, the first pick fetches strengths, an outage is explained and not cached."""
+    import re
+    import urllib.request
+    page = logged_in_page
+    stub = lambda on: urllib.request.urlopen(f"{rxnav_stub}/__fail?on={on}").read()
+
+    # A non-admin role cannot load names (403 on the screen and on the action).
+    fd_ctx = page.context.browser.new_context()
+    fd = fd_ctx.new_page()
+    fd.goto(live_server + "/login")
+    fd.fill("#email", "frontdesk@newpathvision.example")
+    fd.fill("#password", "ChangeMe123!")
+    fd.click("button[type=submit]")
+    fd.wait_for_url(f"{live_server}/")
+    assert fd.goto(live_server + "/admin/drug-catalog").status == 403
+    assert fd.request.post(live_server + "/admin/drug-catalog/load", form={"csrf_token": "x"}).status == 403
+    fd_ctx.close()
+
+    # An outage: nothing loads, the failure is shown and audited.
+    stub(1)
+    page.goto(live_server + "/admin/drug-catalog")
+    page.get_by_role("button", name="Load drug names from RxNorm").click()
+    page.wait_for_load_state()
+    assert "could not be reached" in page.locator(".alert-error").inner_text()
+    assert page.locator("table tr", has_text="Failed").count() == 1
+    stub(0)
+
+    # Success: names arrive, junk fragments are skipped, a re-run adds nothing and is audited too.
+    page.get_by_role("button", name="Load drug names from RxNorm").click()
+    page.wait_for_load_state()
+    flash = page.locator(".alert-info", has_text="Loaded").first.inner_text()
+    added = int(re.search(r"Loaded (\d+) new", flash).group(1))
+    assert added >= 10 and page.locator("table tr", has_text="Loaded").count() >= 1
+    page.get_by_role("button", name="Check RxNorm for new names").click()
+    page.wait_for_load_state()
+    assert "Loaded 0 new" in page.locator(".alert-info", has_text="Loaded").first.inner_text()
+    api = page.request
+    assert api.get(f"{live_server}/api/v1/drugs/search?q=1,1-dimethyl").json()["results"] == []      # a chemical fragment was not loaded
+    assert [d["name"] for d in api.get(f"{live_server}/api/v1/drugs/search?q=PREDNIS").json()["results"]][:2] == ["prednisoLONE", "prednisoLONE acetate"]   # tall-man casing kept
+
+    # First pick of an RxNorm name fetches its strengths once; afterwards they are served locally.
+    lat = next(d for d in api.get(f"{live_server}/api/v1/drugs/search?q=latanop").json()["results"] if d["name"] == "latanoprost")
+    first = api.get(f"{live_server}/api/v1/drugs/{lat['id']}/dosages").json()
+    assert first["lookup"] == "ok" and [d["label"] for d in first["dosages"]] == ["0.05 MG/ML Ophthalmic Solution", "0.05 MG/ML Ophthalmic Suspension"]
+    assert api.get(f"{live_server}/api/v1/drugs/{lat['id']}/dosages").json()["lookup"] == "local"
+
+    # Through the real component: latanoprost (eye) then warfarin (oral -> PO locked).
+    pid = _named_patient_id(page, live_server, "Smith", "Bob")                      # not used by the other medication tests
+    page.goto(f"{live_server}/patients/{pid}/medications")
+    page.fill("#medName", "latanop")
+    page.locator(".med-combo-option span:text-is('latanoprost')").click()
+    page.wait_for_function("!document.getElementById('medDosage').disabled")
+    page.select_option("#medDosage", label="0.05 MG/ML Ophthalmic Solution")
+    page.wait_for_function("!document.getElementById('medFreq').disabled")
+    page.select_option("#medFreq", index=1)
+    page.select_option("#medEye", "OU")
+    with page.expect_navigation():
+        page.click("#medSubmit")
+    row = page.locator("#medsSection tr", has_text="latanoprost")
+    assert row.count() == 1 and "0.05 MG/ML Ophthalmic Solution" in row.inner_text()
+    page.fill("#medName", "warfarin")
+    page.locator(".med-combo-option span:text-is('warfarin')").click()
+    page.wait_for_function("!document.getElementById('medDosage').disabled")
+    page.select_option("#medDosage", label="warfarin sodium 1 MG Oral Tablet")
+    assert page.locator("#medEye").input_value() == "PO" and page.locator("#medEye").is_disabled()
+
+    # An outage on first pick is explained, offers manual entry, and is NOT cached (the next pick would retry).
+    page.fill("#medName", "zzoutage")
+    page.locator(".med-combo-option span:text-is('Zzoutage Test')").click()
+    note = page.locator("#medDosageNote")
+    note.locator("button", has_text="Enter dosage manually").wait_for()
+    assert "couldn" in note.inner_text() and "reached" in note.inner_text()
+    out = next(d for d in api.get(f"{live_server}/api/v1/drugs/search?q=zzoutage").json()["results"])
+    assert api.get(f"{live_server}/api/v1/drugs/{out['id']}/dosages").json()["lookup"] == "unavailable"
+    assert api.get(f"{live_server}/api/v1/drugs/{out['id']}/dosages").json()["lookup"] == "unavailable"     # still unresolved: retried, not cached

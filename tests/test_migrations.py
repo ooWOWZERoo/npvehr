@@ -358,3 +358,18 @@ def test_medication_catalog_columns_and_frequency_seed_are_safe_on_existing_data
         assert conn.execute(text("SELECT COUNT(*) FROM (SELECT route_group, label FROM drug_frequencies GROUP BY 1, 2 HAVING COUNT(*) > 1)")).scalar() == 0
         assert conn.execute(text("SELECT COUNT(*) FROM drug_frequencies WHERE label = 'Our own wording'")).scalar() == 1
     assert n > 20
+
+
+def test_drug_catalog_resolved_at_column_is_added_to_an_existing_table_and_rerun_is_safe(fresh_engine):
+    """Migration 062: a drug_catalog table from before the RxNorm loader gains resolved_at (NULL on existing rows); re-run is a no-op."""
+    with fresh_engine.begin() as conn:
+        conn.execute(text("CREATE TABLE drug_catalog (id INTEGER PRIMARY KEY, name VARCHAR(160))"))
+        conn.execute(text("INSERT INTO drug_catalog (name) VALUES ('Hand-entered drug')"))
+    for _ in range(2):
+        with fresh_engine.begin() as conn:
+            mig.migration_062_drug_catalog_resolved_at(conn)
+    with fresh_engine.connect() as conn:
+        assert tuple(conn.execute(text("SELECT name, resolved_at FROM drug_catalog")).one()) == ("Hand-entered drug", None)
+    with fresh_engine.begin() as conn:                              # a brand-new database (no table yet) is skipped, not an error
+        conn.execute(text("DROP TABLE drug_catalog"))
+        mig.migration_062_drug_catalog_resolved_at(conn)
