@@ -2,7 +2,7 @@
 
 Two stages, so the medication intake itself only ever reads our own database:
 
-  1. load_display_names(db)  -- an administrator's action (or the command line): copies RxNorm's published list of drug
+  1. load_display_names(db)  -- an administrator's action (or the command line; scheduled_refresh repeats it monthly): copies RxNorm's published list of drug
                                 display names (~13,700: generic, brand and combination names, with tall-man lettering such as
                                 "prednisoLONE") into drug_catalog as bare rows, source='rxnorm'. Re-running only adds names
                                 that are new; nothing is ever deleted or overwritten.
@@ -115,6 +115,15 @@ def load_display_names(db: Session, user_id: Optional[int] = None) -> DrugCatalo
     ev = DrugCatalogLoadEvent(user_id=user_id, status="ok", names_in_source=len(names), names_added=len(rows), rxnorm_version=version)
     db.add(ev)
     return ev
+
+
+def scheduled_refresh(db: Session) -> Optional[DrugCatalogLoadEvent]:
+    """The monthly refresh: add any names RxNorm has published since the last load. It only runs once an administrator has done
+    the first load (an empty catalog is left for them to start on purpose) -- returns None when it skips. The event it records
+    has no user (shown as "Scheduled or command line"). The caller commits."""
+    if not db.query(DrugCatalogEntry.id).filter(DrugCatalogEntry.source == "rxnorm").first():
+        return None
+    return load_display_names(db, None)
 
 
 # ------------------------------------------------------------------------------------- stage 2: one drug

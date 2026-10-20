@@ -4,10 +4,11 @@ pick list. Loading is an explicit administrator action with an audit row each ti
 release); it only ever ADDS names, so existing and manually entered rows are never changed. Edits go to the field-change
 audit trail. Drugs and frequencies are deactivated, never deleted (patient records may point at them). Only the fixed RxNorm
 list request leaves the app -- no patient data."""
+import hmac
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Form, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -15,7 +16,7 @@ from sqlalchemy.orm import Session
 from ehr.auth import csrf
 from ehr.auth.deps import get_current_user
 from ehr.auth.permissions import DRUG_CATALOG_EDIT, DRUG_CATALOG_VIEW, ROLE_LABELS, require_role
-from ehr.env_info import EHR_ENV
+from ehr.env_info import CRON_SECRET, EHR_ENV
 from ehr.models.database import User, get_db
 from ehr.models.drug_catalog import DrugAlias, DrugCatalogEntry, DrugCatalogLoadEvent, DrugDosage, DrugFrequency
 from ehr.services import drug_catalog as catalog
@@ -23,9 +24,30 @@ from ehr.services import field_audit, rxnorm
 from ehr.services import pagination as pg
 
 router = APIRouter(prefix="/admin/drug-catalog", tags=["admin-drug-catalog"])
+# Vercel Cron caller: no session, so this router is included WITHOUT the login dependency and authenticates by bearer token
+# (CRON_SECRET), exactly like the appointment-reminder scan (ehr/routes/appointments.py). See vercel.json's `crons`.
+cron_router = APIRouter(prefix="/admin/drug-catalog", tags=["admin-drug-catalog-cron"])
 templates = Jinja2Templates(directory="ehr/templates")
 templates.env.globals["ehr_env"] = EHR_ENV
 templates.env.globals["ROLE_LABELS"] = ROLE_LABELS
+
+
+@cron_router.get("/refresh/run")
+def scheduled_refresh(request: Request, db: Session = Depends(get_db)):
+    """Monthly refresh of the RxNorm name list (GET: Vercel Cron Jobs always trigger with GET). Adds new names only; skipped until
+    an administrator has done the first load. Not CSRF-protected for the same reason as the reminder scan: no session, no form,
+    a bearer-token service-to-service call. 502 when RxNorm can't be reached, so the failed run shows in Vercel's cron log."""
+    auth = request.headers.get("authorization") or ""
+    if not hmac.compare_digest(auth, f"Bearer {CRON_SECRET}"):
+        return HTMLResponse("Forbidden", status_code=403)
+    ev = rxnorm.scheduled_refresh(db)
+    if ev is None:
+        return JSONResponse({"ok": True, "skipped": "no RxNorm names loaded yet; an administrator starts the first load"})
+    db.commit()
+    body = {"ok": ev.status == "ok", "names_added": ev.names_added, "names_in_source": ev.names_in_source, "rxnorm_version": ev.rxnorm_version}
+    if ev.error:
+        body["error"] = ev.error
+    return JSONResponse(body, status_code=200 if ev.status == "ok" else 502)
 
 
 @router.get("", response_class=HTMLResponse, dependencies=[Depends(require_role(*DRUG_CATALOG_VIEW))])

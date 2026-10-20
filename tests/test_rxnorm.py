@@ -204,3 +204,28 @@ def test_search_ranks_name_prefixes_before_alias_prefixes_and_lists_a_drug_once(
     with pytest.raises(ValueError):
         catalog.search(db, "wa")
     assert rxnorm.add_alias(db, a, "WARFARIN") is False and rxnorm.add_alias(db, a, "Warlock") is False and rxnorm.add_alias(db, a, "Newname") is True
+
+
+# ------------------------------------------------------------------------------------------------ scheduled refresh
+def test_scheduled_refresh_waits_for_an_administrators_first_load_then_adds_only_what_is_new(db):
+    assert rxnorm.scheduled_refresh(db) is None and db.query(DrugCatalogEntry).count() == 0       # nothing loaded yet: it does not start on its own
+    rxnorm.load_display_names(db, user_id=None)
+    db.commit()
+    db.query(DrugCatalogEntry).filter(DrugCatalogEntry.name_lower == "lumigan").delete()           # as if RxNorm had published it since
+    db.commit()
+    ev = rxnorm.scheduled_refresh(db)
+    db.commit()
+    assert ev.status == "ok" and ev.names_added == 1 and ev.user_id is None
+    assert db.query(DrugCatalogEntry).filter(DrugCatalogEntry.name_lower == "lumigan").count() == 1
+    again = rxnorm.scheduled_refresh(db)
+    assert again.names_added == 0
+
+
+def test_a_failed_scheduled_refresh_is_recorded_and_changes_nothing(db, monkeypatch):
+    rxnorm.load_display_names(db)
+    db.commit()
+    before = db.query(DrugCatalogEntry).count()
+    monkeypatch.setattr(rxnorm, "_get", lambda path, params=None: (_ for _ in ()).throw(rxnorm.RxNavError("down")))
+    ev = rxnorm.scheduled_refresh(db)
+    db.commit()
+    assert ev.status == "failed" and db.query(DrugCatalogEntry).count() == before

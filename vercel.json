@@ -9,6 +9,10 @@
     {
       "path": "/appointments/reminders/run",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/admin/drug-catalog/refresh/run",
+      "schedule": "23 6 8 * *"
     }
   ]
 }

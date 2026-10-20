@@ -5374,3 +5374,25 @@ def test_admin_adds_edits_and_deactivates_drugs_and_edits_the_frequency_list(log
     page.goto(f"{live_server}/admin/field-audit")
     audit = page.locator("body").inner_text()
     assert "Zz Compounded Tablets" in audit and "drug_frequencies" in audit and "drug_dosages" in audit
+
+
+def test_scheduled_rxnorm_refresh_endpoint_needs_the_cron_secret_and_reports_outages(logged_in_page, live_server, rxnav_stub):
+    """The monthly refresh endpoint (Vercel Cron): bearer-token only, adds nothing new on a re-run, 502 on an outage, audited."""
+    import urllib.request
+    page = logged_in_page
+    api = page.request
+    url = f"{live_server}/admin/drug-catalog/refresh/run"
+    assert api.get(url).status == 403 and api.get(url, headers={"Authorization": "Bearer wrong"}).status == 403
+    page.goto(live_server + "/admin/drug-catalog")                                                 # the administrator's own first load
+    page.get_by_role("button", name=re.compile("RxNorm")).click()
+    page.wait_for_load_state()
+    ok = api.get(url, headers={"Authorization": "Bearer test-cron-secret"})
+    assert ok.status == 200 and ok.json()["ok"] is True and ok.json()["names_added"] == 0 and "skipped" not in ok.json()
+    urllib.request.urlopen(f"{rxnav_stub}/__fail?on=1").read()
+    try:
+        down = api.get(url, headers={"Authorization": "Bearer test-cron-secret"})
+        assert down.status == 502 and down.json()["ok"] is False
+    finally:
+        urllib.request.urlopen(f"{rxnav_stub}/__fail?on=0").read()
+    page.goto(live_server + "/admin/drug-catalog")
+    assert page.locator("table tr", has_text="Scheduled or command line").count() >= 2 and page.locator("table tr", has_text="Failed").count() >= 1

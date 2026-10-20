@@ -56,6 +56,7 @@ app.include_router(auth_routes.router)
 # no session cookie), authenticated instead via its own CRON_SECRET bearer-
 # token check inside the route body -- see ehr/routes/appointments.py.
 app.include_router(appointments.cron_router)
+app.include_router(admin_drug_catalog.cron_router)   # monthly RxNorm name refresh: bearer-token auth, no session (see vercel.json)
 
 # Patient self-service portal (Phase 4, BUILD_BACKLOG.md 5a): its own
 # passwordless auth (ehr/auth/portal_deps.py), never the staff get_current_user
