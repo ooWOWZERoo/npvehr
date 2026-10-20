@@ -5273,3 +5273,104 @@ def test_an_existing_medication_is_edited_through_the_same_chain(logged_in_page,
     with page.expect_navigation():
         page.click("#medCancelEdit")
     assert "new strength" in page.locator("#medsSection tr", has_text="Zz legacy free text").inner_text()
+
+
+def test_admin_adds_edits_and_deactivates_drugs_and_edits_the_frequency_list(logged_in_page, live_server, drug_catalog_seed):
+    """Drug Catalog admin: add a drug by hand (dosages, brand names), it is found by the intake API; rename, change route
+    (an oral drug then forces PO), deactivate/reactivate; RxNorm names can't be renamed; frequencies add/edit/hide; roles; audit."""
+    page = logged_in_page
+    api = page.request
+    base = f"{live_server}/api/v1"
+    tok = page.locator('meta[name="csrf-token"]').get_attribute("content")
+    post = lambda path, **form: api.post(live_server + path, form={"csrf_token": tok, **form}, max_redirects=0)
+
+    # Roles: front desk can't open or change any of it.
+    fd_ctx = page.context.browser.new_context()
+    fd = fd_ctx.new_page()
+    fd.goto(live_server + "/login")
+    fd.fill("#email", "frontdesk@newpathvision.example")
+    fd.fill("#password", "ChangeMe123!")
+    fd.click("button[type=submit]")
+    fd.wait_for_url(f"{live_server}/")
+    assert fd.goto(live_server + "/admin/drug-catalog/drugs").status == 403 and fd.goto(live_server + "/admin/drug-catalog/frequencies").status == 403
+    assert fd.request.post(live_server + "/admin/drug-catalog/drugs/new", form={"csrf_token": "x", "name": "Zz sneaky"}).status == 403
+    fd_ctx.close()
+
+    # Add by hand through the page.
+    page.goto(live_server + "/admin/drug-catalog/drugs")
+    page.fill('input[name="name"]', "Zz Compounded Drops")
+    page.select_option('select[name="route"]', "ophthalmic")
+    page.fill('textarea[name="dosages"]', "0.01% ophthalmic solution\n0.05% ophthalmic solution\n0.01% ophthalmic solution")      # a repeated line is kept once
+    page.fill('textarea[name="aliases"]', "Zz Brandy")
+    page.get_by_role("button", name="Add drug").click()
+    page.wait_for_load_state()
+    assert page.locator("h1").inner_text().startswith("Zz Compounded Drops") and "Added Zz Compounded Drops" in page.locator(".alert-info").first.inner_text()
+    drug_url = page.url
+    drug_id = int(drug_url.split("?")[0].rstrip("/").split("/")[-1])
+    assert page.locator("table tr", has_text="ophthalmic solution").count() == 2
+
+    # The intake API now finds it by name and by brand, with its dosages and eye-drop route.
+    by_name = api.get(f"{base}/drugs/search?q=zz compounded").json()["results"]
+    assert [(d["name"], d["route_group"], d["via_brand"]) for d in by_name] == [("Zz Compounded Drops", "ophthalmic", None)]
+    assert [(d["name"], d["via_brand"]) for d in api.get(f"{base}/drugs/search?q=zz brandy").json()["results"]] == [("Zz Compounded Drops", "Zz Brandy")]
+    assert [x["label"] for x in api.get(f"{base}/drugs/{drug_id}/dosages").json()["dosages"]] == ["0.01% ophthalmic solution", "0.05% ophthalmic solution"]
+
+    # A duplicate name is refused (case-insensitive) and sends you to the existing drug.
+    dup = post("/admin/drug-catalog/drugs/new", name="zz compounded DROPS")
+    assert dup.status == 303 and f"/drugs/{drug_id}" in dup.headers["location"]
+
+    # Rename (hand-added only) and change the route to oral: the intake now treats it as oral.
+    post(f"/admin/drug-catalog/drugs/{drug_id}/edit", name="Zz Compounded Tablets", route="oral")
+    renamed = api.get(f"{base}/drugs/search?q=zz compounded").json()["results"]
+    assert [(d["name"], d["is_oral"]) for d in renamed] == [("Zz Compounded Tablets", True)]
+
+    # Dosages and brand names: add one, remove one.
+    post(f"/admin/drug-catalog/drugs/{drug_id}/dosages/new", dosages="10 mg tablet")
+    dosages = api.get(f"{base}/drugs/{drug_id}/dosages").json()["dosages"]
+    assert "10 mg tablet" in [x["label"] for x in dosages] and len(dosages) == 3
+    post(f"/admin/drug-catalog/drugs/{drug_id}/dosages/{dosages[0]['id']}/delete")
+    assert len(api.get(f"{base}/drugs/{drug_id}/dosages").json()["dosages"]) == 2
+    page.goto(drug_url.split("?")[0])
+    alias_row = page.locator("table tr", has_text="Zz Brandy")
+    assert alias_row.count() == 1
+    with page.expect_navigation():
+        alias_row.get_by_role("button", name="Remove").click()
+    assert api.get(f"{base}/drugs/search?q=zz brandy").json()["results"] == []
+
+    # Deactivate hides it from searches; reactivate brings it back.
+    post(f"/admin/drug-catalog/drugs/{drug_id}/toggle-active")
+    assert api.get(f"{base}/drugs/search?q=zz compounded").json()["results"] == []
+    assert api.get(f"{base}/drugs/{drug_id}/dosages").status == 404
+    post(f"/admin/drug-catalog/drugs/{drug_id}/toggle-active")
+    assert len(api.get(f"{base}/drugs/search?q=zz compounded").json()["results"]) == 1
+
+    # An RxNorm name can't be renamed (its route, dosages and brand names can still be adjusted). 'coumadin' makes the stand-in
+    # RxNorm service hand back warfarin, which the app then adds to the catalog as an RxNorm row.
+    warf = next(d for d in api.get(f"{base}/drugs/search?q=coumadin").json()["results"] if d["name"] == "warfarin")
+    post(f"/admin/drug-catalog/drugs/{warf['id']}/edit", name="Renamed by mistake", route="oral")
+    page.goto(f"{live_server}/admin/drug-catalog/drugs/{warf['id']}")
+    assert page.locator("h1").inner_text().startswith("warfarin") and page.locator('input[name="name"]').get_attribute("readonly") is not None
+    assert "From RxNorm" in page.locator(".page-lede").inner_text()
+
+    # Frequencies: add a wording to the oral group; it is offered for oral drugs; hide/show; edit the wording.
+    page.goto(live_server + "/admin/drug-catalog/frequencies")
+    page.locator('select[name="route_group"]').first.select_option("oral")
+    page.fill('input[name="label"] >> nth=0', "Zz Twice weekly")
+    page.get_by_role("button", name="Add", exact=True).click()
+    page.wait_for_load_state()
+    pill = drug_catalog_seed["Zzpill Oral Test"]
+    freqs = lambda: api.get(f"{base}/drugs/{pill}/frequencies").json()["frequencies"]
+    mine = next(f for f in freqs() if f["label"] == "Zz Twice weekly")
+    assert mine["route_group"] == "oral" and mine["preferred"] is True
+    assert post("/admin/drug-catalog/frequencies/new", route_group="oral", label="zz TWICE weekly").headers["location"].startswith("/admin/drug-catalog/frequencies?error=")   # duplicate refused
+    post(f"/admin/drug-catalog/frequencies/{mine['id']}/edit", label="Zz Twice a week", sort_order="0")
+    assert freqs()[0]["label"] == "Zz Twice a week"                                    # order 0 puts it first in the oral group
+    post(f"/admin/drug-catalog/frequencies/{mine['id']}/toggle-active")
+    assert all(f["label"] != "Zz Twice a week" for f in freqs())
+    post(f"/admin/drug-catalog/frequencies/{mine['id']}/toggle-active")
+    assert any(f["label"] == "Zz Twice a week" for f in freqs())
+
+    # Every change is in the field-change audit trail.
+    page.goto(f"{live_server}/admin/field-audit")
+    audit = page.locator("body").inner_text()
+    assert "Zz Compounded Tablets" in audit and "drug_frequencies" in audit and "drug_dosages" in audit

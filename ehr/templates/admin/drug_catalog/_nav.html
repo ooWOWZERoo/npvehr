@@ -1,0 +1,8 @@
+<p style="display:flex;gap:var(--space-2);flex-wrap:wrap;margin:0 0 var(--space-4)">
+  <a href="/admin/drug-catalog" class="btn btn-sm btn-secondary{{ ' active' if tab == 'load' }}">Load from RxNorm</a>
+  <a href="/admin/drug-catalog/drugs" class="btn btn-sm btn-secondary{{ ' active' if tab == 'drugs' }}">Browse &amp; add drugs</a>
+  <a href="/admin/drug-catalog/frequencies" class="btn btn-sm btn-secondary{{ ' active' if tab == 'freq' }}">Frequencies</a>
+</p>
+{% if flash %}<div class="alert alert-info" style="margin-bottom:var(--space-4)">{{ flash }}</div>{% endif %}
+{% if error %}<div class="alert alert-error" style="margin-bottom:var(--space-4)">{{ error }}</div>{% endif %}
+{% if not can_edit %}<div class="alert alert-info" style="margin-bottom:var(--space-4)"><strong>View-only access.</strong> Only a System Administrator or Practice Administrator can change the drug catalog.</div>{% endif %}
