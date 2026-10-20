@@ -10,6 +10,7 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
 from ehr.models.database import Base, FieldChangeAuditEvent
+from ehr.models.drug_catalog import DrugAlias, DrugCatalogEntry
 from ehr.models.medications import (MedicationClass, MedicationClassTerm, MedicationListReview, PatientMedication,
                                     SafetyFlagClassLink)
 from ehr.models.safety import PatientSafetyFlag, SafetyFlagType, SafetyRule
@@ -157,3 +158,68 @@ def test_exam_card_summary_lists_active_items_and_review_state(db):
     assert s["medications_state"] == "current" and s["allergies_state"] == "never"
     assert med.exam_card_summary(db, 2) == {"medications": [], "allergies": [], "medications_state": "never", "medications_reviewed_at": None,
                                             "allergies_state": "never", "allergies_reviewed_at": None}
+
+
+# ----------------------------------------------------------------------------- generic / brand equivalence in matching
+def _catalog(db):
+    """warfarin (generic) with brands Coumadin and Jantoven; the two brands as their own rows (as RxNorm's list carries them)."""
+    g = DrugCatalogEntry(name="warfarin", name_lower="warfarin", source="rxnorm", tty="IN", is_active=True)
+    c = DrugCatalogEntry(name="Coumadin", name_lower="coumadin", source="rxnorm", tty="BN", is_active=True)
+    j = DrugCatalogEntry(name="Jantoven", name_lower="jantoven", source="rxnorm", tty="BN", is_active=True)
+    t = DrugCatalogEntry(name="timolol", name_lower="timolol", source="rxnorm", tty="IN", is_active=True)
+    db.add_all([g, c, j, t]); db.flush()
+    db.add_all([DrugAlias(drug_id=g.id, alias="Coumadin", alias_lower="coumadin"), DrugAlias(drug_id=g.id, alias="Jantoven", alias_lower="jantoven"),
+                DrugAlias(drug_id=t.id, alias="Betimol", alias_lower="betimol")])
+    db.commit()
+    return {"warfarin": g, "coumadin": c, "jantoven": j, "timolol": t}
+
+
+def _linked(db, pid, name, drug, **kw):
+    m = med.add_medication(db, pid, 1, {"name": name, **kw})
+    m.drug_id = drug.id
+    db.commit()
+    return m
+
+
+def test_a_term_listing_only_the_brand_matches_a_patient_recorded_under_the_generic(db):
+    d = _catalog(db)
+    _setup_class(db, terms=("coumadin",))
+    m = _linked(db, 1, "warfarin", d["warfarin"])
+    assert med.derived_flags(db, 1) == {_flag(db).id: ["warfarin"]}                      # the display name is still what was recorded
+    assert med.classify(db, [m])[m.id] == ["Anticoagulant"]
+    assert [w["warning"] for w in safety.evaluate(db, 1, "")] == ["Bleeding risk"]
+
+
+def test_a_term_listing_only_the_generic_matches_a_patient_recorded_under_a_brand_and_brands_match_each_other(db):
+    d = _catalog(db)
+    _setup_class(db, terms=("warfarin",))
+    m = _linked(db, 1, "Coumadin", d["coumadin"])
+    assert med.classify(db, [m])[m.id] == ["Anticoagulant"]
+    db.query(MedicationClassTerm).delete(); db.commit()
+    # same class, new term: only the other brand is listed
+    c = db.query(MedicationClass).one()
+    db.add(MedicationClassTerm(class_id=c.id, term="jantoven", reviewed=True, source_citation="Sample formulary")); db.commit()
+    assert med.classify(db, [m])[m.id] == ["Anticoagulant"]                              # recorded as Coumadin, term lists Jantoven
+
+
+def test_an_older_free_text_row_is_expanded_only_when_its_whole_name_is_a_catalog_drug_or_brand(db):
+    _catalog(db)
+    _setup_class(db, terms=("coumadin",))
+    exact = _add(db, 1, "Warfarin")
+    with_strength = _add(db, 1, "Warfarin 5 mg")
+    assert med.classify(db, [exact])[exact.id] == ["Anticoagulant"]
+    assert med.classify(db, [with_strength])[with_strength.id] == []                     # free text with a strength is not guessed at
+
+
+def test_equivalence_never_matches_unreviewed_terms_or_unrelated_drugs_and_never_raises(db):
+    d = _catalog(db)
+    _setup_class(db, terms=("coumadin",), reviewed=False)
+    m = _linked(db, 1, "warfarin", d["warfarin"])
+    assert med.classify(db, [m])[m.id] == [] and med.derived_flags(db, 1) == {}          # unreviewed: still silent
+    db.query(MedicationClassTerm).delete(); db.query(SafetyFlagClassLink).delete(); db.query(MedicationClass).delete(); db.query(SafetyRule).delete(); db.commit()
+    _setup_class(db, terms=("coumadin",))
+    other = _linked(db, 1, "timolol", d["timolol"])                                      # its brands (Betimol) don't include Coumadin
+    assert med.classify(db, [other])[other.id] == []
+    ghost = _add(db, 1, "Ghost drug"); ghost.drug_id = 99999; db.commit()                # a dangling catalog link
+    assert med.equivalent_names(db, [ghost]) == {ghost.id: ["Ghost drug"]} and med.classify(db, [ghost])[ghost.id] == []
+

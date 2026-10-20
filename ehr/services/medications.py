@@ -6,8 +6,9 @@ The one place a drug name is matched to a class, and a safety flag is derived fr
         the patient has an ACTIVE medication whose name contains (whole word/phrase, case-insensitive)
         a REVIEWED term of an ACTIVE class that is linked to that flag type.
 
-Unreviewed terms and inactive classes classify nothing. Matching is plain text -- no brand/generic knowledge
-beyond the terms the clinicians enter -- so medications that match no reviewed term are reported as
+Unreviewed terms and inactive classes classify nothing. Matching is whole-word text against the name as recorded plus, for
+a drug in the catalog, its generic name and known brand names (equivalent_names) -- so a term needs listing only once, under
+either name -- and medications that match no reviewed term are reported as
 "not classified" rather than silently treated as safe. A list that has never been reviewed is UNKNOWN, not
 "none": an empty list means "no medications" only after a review row says the patient reports none.
 Everything is decision support; nothing is transmitted or changes a note, billing, or an order.
@@ -19,6 +20,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
+from ehr.models.drug_catalog import DrugAlias, DrugCatalogEntry
 from ehr.models.medications import (MedicationClass, MedicationClassTerm, MedicationListReview, PatientAllergy,
                                     PatientMedication, SafetyFlagClassLink)
 from ehr.services import field_audit
@@ -41,11 +43,57 @@ def active_medications(db: Session, patient_id: int) -> list:
             .order_by(PatientMedication.name).all())
 
 
+def equivalent_names(db: Session, meds: list) -> dict:
+    """{medication id: [names to match terms against]}: the name as recorded, plus -- when the medication is a drug in our
+    catalog (linked by the guided intake, or an older free-text row whose whole name is a catalog drug or brand name) -- that
+    drug's generic name and every brand name known for it. So a term that lists "Coumadin" matches a patient recorded under
+    warfarin, a term that lists "warfarin" matches one recorded under Coumadin, and Jantoven and Coumadin match each other.
+    This only ever ADDS names to compare, and terms still count only once a reviewer has signed them off. Never raises: on any
+    trouble a medication is matched on its recorded name alone."""
+    names = {m.id: [m.name] for m in meds}
+    try:
+        base = {m.id: m.drug_id for m in meds if m.drug_id}
+        unlinked = {m.id: (m.name or "").strip().lower() for m in meds if not m.drug_id and (m.name or "").strip()}
+        if unlinked:
+            keys = set(unlinked.values())
+            by_name = dict((lower, id_) for id_, lower in db.query(DrugCatalogEntry.id, DrugCatalogEntry.name_lower)
+                           .filter(DrugCatalogEntry.name_lower.in_(keys)).all())
+            by_alias = dict((al, did) for al, did in db.query(DrugAlias.alias_lower, DrugAlias.drug_id).filter(DrugAlias.alias_lower.in_(keys)).all())
+            for mid, key in unlinked.items():
+                if key in by_name or key in by_alias:
+                    base[mid] = by_name.get(key) or by_alias[key]
+        if not base:
+            return names
+        drugs = {i: (n, nl) for i, n, nl in db.query(DrugCatalogEntry.id, DrugCatalogEntry.name, DrugCatalogEntry.name_lower)
+                 .filter(DrugCatalogEntry.id.in_(set(base.values()))).all()}
+        # a brand row's generics are the drugs that carry the brand's own name as an alias
+        generics = {}
+        for al, did in db.query(DrugAlias.alias_lower, DrugAlias.drug_id).filter(DrugAlias.alias_lower.in_({nl for _, nl in drugs.values()})).all():
+            generics.setdefault(al, set()).add(did)
+        group_of = {mid: {d} | generics.get(drugs[d][1], set()) for mid, d in base.items() if d in drugs}
+        all_ids = set().union(*group_of.values()) if group_of else set()
+        label = {i: n for i, n in db.query(DrugCatalogEntry.id, DrugCatalogEntry.name).filter(DrugCatalogEntry.id.in_(all_ids)).all()}
+        brands = {}
+        for did, alias in db.query(DrugAlias.drug_id, DrugAlias.alias).filter(DrugAlias.drug_id.in_(all_ids)).all():
+            brands.setdefault(did, []).append(alias)
+        for mid, group in group_of.items():
+            for g in sorted(group):
+                for n in [label.get(g)] + brands.get(g, []):
+                    if n and n.lower() not in {x.lower() for x in names[mid]}:
+                        names[mid].append(n)
+    except Exception:                                  # noqa: BLE001 -- decision support must not break a page
+        log.exception("Could not expand medication names for matching")
+        return {m.id: [m.name] for m in meds}
+    return names
+
+
 def classify(db: Session, meds: list) -> dict:
-    """{medication id: [class labels]} using reviewed terms of active classes only."""
+    """{medication id: [class labels]} using reviewed terms of active classes only; a term matches any generic or brand name
+    of the medication (equivalent_names)."""
     terms = (db.query(MedicationClassTerm.term, MedicationClass.label).join(MedicationClass, MedicationClass.id == MedicationClassTerm.class_id)
              .filter(MedicationClassTerm.reviewed.is_(True), MedicationClass.is_active.is_(True)).all())
-    return {m.id: sorted({label for term, label in terms if term_matches(term, m.name)}) for m in meds}
+    names = equivalent_names(db, meds)
+    return {m.id: sorted({label for term, label in terms if any(term_matches(term, n) for n in names[m.id])}) for m in meds}
 
 
 def derived_flags(db: Session, patient_id: int) -> dict:
@@ -61,10 +109,11 @@ def derived_flags(db: Session, patient_id: int) -> dict:
     except Exception:                                  # noqa: BLE001 -- decision support must not break a page
         log.exception("Could not derive medication-based flags for patient %s", patient_id)
         return {}
+    names = equivalent_names(db, meds)
     out = {}
     for flag_id, term in links:
         for m in meds:
-            if term_matches(term, m.name) and m.name not in out.setdefault(flag_id, []):
+            if any(term_matches(term, n) for n in names[m.id]) and m.name not in out.setdefault(flag_id, []):
                 out[flag_id].append(m.name)
     return out
 
