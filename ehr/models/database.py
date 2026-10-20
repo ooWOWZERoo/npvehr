@@ -988,6 +988,17 @@ class EyeExam(Base):
     # letter (ehr/services/pcp_letter.py) can rely on a recorded fact instead of a clinician's tick-box alone.
     dilated_exam_performed = Column(Boolean)
     dilation_note = Column(String)
+    # Keratometry and pupillary distance, taken in pre-testing alongside the auto-refraction starting point (which is a 'autorefraction'
+    # row in the refractions table). K readings per eye: flat and steep power in diopters, steep-meridian axis. PD in mm: distance
+    # (binocular), monocular OD/OS, and near. All optional.
+    k_od_flat = Column(Float); k_od_steep = Column(Float); k_od_axis = Column(Integer)
+    k_os_flat = Column(Float); k_os_steep = Column(Float); k_os_axis = Column(Integer)
+    pd_distance = Column(Float); pd_od = Column(Float); pd_os = Column(Float); pd_near = Column(Float)
+    # Disposition (the last clinical step): whether a glasses/contact-lens prescription is to be written (none | glasses | contacts | both),
+    # plus free-text treatment/medications prescribed, referral (to whom, why) and patient education given. The prescription itself is
+    # written on the Rx form, which opens pre-filled from this exam's manifest refraction.
+    rx_decision = Column(String)
+    treatment_note = Column(Text); referral_note = Column(Text); education_note = Column(Text)
     assessment = Column(Text); plan = Column(Text)
     diagnosis_codes = Column(String); follow_up_weeks = Column(Integer)
     # The unit follow_up_weeks is expressed in -- Day/Week/Month/Year -- so a
@@ -1155,6 +1166,7 @@ class Refraction(Base):
     # matrix from the IHE General Eye Evaluation profile (see
     # VISION_EHR_DATA_STANDARDS_RESEARCH.md 4.2). One exam can have up to one
     # Refraction row per type; an exam is free to have any subset of the three.
+    # (v3.03: a fourth value, 'autorefraction' -- the auto-refractor / retinoscopy starting point the phoropter is set up from.)
     refraction_type = Column(String, default="manifest")
     od_sphere = Column(Float); od_cylinder = Column(Float); od_axis = Column(Integer)
     od_add = Column(Float); od_va = Column(String)

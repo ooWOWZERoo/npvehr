@@ -1760,6 +1760,20 @@ def migration_063_drug_catalog_generic_checked_at(conn):
     _add_column_if_missing(conn, "drug_catalog", "generic_checked_at", "TIMESTAMP")
 
 
+def migration_064_exam_pretesting_and_disposition(conn):
+    """eye_exams: keratometry (K flat/steep/axis per eye), pupillary distance (distance, OD, OS, near), and the disposition step
+    (rx_decision, treatment_note, referral_note, education_note). All nullable; existing exams read as not recorded. Idempotent."""
+    if not _table_exists(conn, "eye_exams"):
+        return  # brand-new database; create_all() builds the table with these columns.
+    for col in ("k_od_flat", "k_od_steep", "k_os_flat", "k_os_steep", "pd_distance", "pd_od", "pd_os", "pd_near"):
+        _add_column_if_missing(conn, "eye_exams", col, "FLOAT")
+    for col in ("k_od_axis", "k_os_axis"):
+        _add_column_if_missing(conn, "eye_exams", col, "INTEGER")
+    _add_column_if_missing(conn, "eye_exams", "rx_decision", "VARCHAR")
+    for col in ("treatment_note", "referral_note", "education_note"):
+        _add_column_if_missing(conn, "eye_exams", col, "TEXT")
+
+
 # Ordered list of (id, function). Adding new migrations: append, never edit past entries.
 COLUMN_MIGRATIONS = [
     ("001_appointment_columns", migration_001_appointment_columns),
@@ -1807,6 +1821,7 @@ COLUMN_MIGRATIONS = [
     ("059_dilated_exam", migration_059_dilated_exam),
     ("062_drug_catalog_resolved_at", migration_062_drug_catalog_resolved_at),
     ("063_drug_catalog_generic_checked_at", migration_063_drug_catalog_generic_checked_at),
+    ("064_exam_pretesting_and_disposition", migration_064_exam_pretesting_and_disposition),
 ]
 def migration_055_seed_ros_catalog(conn):
     """Review-of-Systems decision-support catalog (ros_master / ros_icd10_test_mapping
@@ -1985,6 +2000,12 @@ def down_059_dilated_exam(conn):
         for col in ("dilated_exam_performed", "dilation_note"):
             conn.execute(text(f"ALTER TABLE eye_exams DROP COLUMN {col}"))
 
+def down_064_exam_pretesting_and_disposition(conn):
+    if _table_exists(conn, "eye_exams"):
+        for col in ("k_od_flat", "k_od_steep", "k_od_axis", "k_os_flat", "k_os_steep", "k_os_axis", "pd_distance", "pd_od", "pd_os", "pd_near",
+                    "rx_decision", "treatment_note", "referral_note", "education_note"):
+            conn.execute(text(f"ALTER TABLE eye_exams DROP COLUMN {col}"))
+
 # 060_medication_catalog_columns deliberately has no down-migration: its columns are nullable foreign keys, which SQLite
 # cannot drop, and old code simply ignores them, so rolling the code back needs no schema change.
 # Sparse by design -- see this section's own docstring above. Extend this
@@ -2002,6 +2023,7 @@ DOWN_MIGRATIONS = {
     "047_vitreous_and_cd_ratio": down_047_vitreous_and_cd_ratio,
     "048_ros_and_social_history": down_048_ros_and_social_history,
     "059_dilated_exam": down_059_dilated_exam,
+    "064_exam_pretesting_and_disposition": down_064_exam_pretesting_and_disposition,
     "053_seed_services": down_053_seed_services,
 }
 

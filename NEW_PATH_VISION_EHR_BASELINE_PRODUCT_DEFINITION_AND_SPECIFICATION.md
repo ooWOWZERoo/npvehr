@@ -5709,3 +5709,37 @@ The brand-to-generic mapping is looked up once and not refreshed; matching is by
 | Safety | Class and flag matching uses generic and brand names of a catalog drug. |
 | Schema | `drug_catalog.generic_checked_at` (migration 063). |
 
+## 130. Exam Form Reordered to Follow the Visit (v3.03)
+
+### 130.1 Request
+
+A review of the New Exam form against a real visit (technician intake, phoropter set-up, the doctor's exam, then prescription and treatment) found the middle out of order and the end short of a prescription or treatment. Fix all of it.
+
+### 130.2 What changed
+
+* **Order** (step rail and page): 1 Intake, 2 Review of systems (was step 6: it is history taken at intake), 3 Pre-testing, 4 Starting point, 5 Refraction, 6 Focus areas (the doctor's part begins here, no longer in the technician's path), 7 Slit lamp & fundus, 8 Area assessments, 9 Assessment & plan, 10 Rx & treatment (new), 11 Return visit.
+* **Pre-testing** (was "Entrance tests", which came *after* refraction): now holds visual acuity (moved out of refraction), pupils, motility and confrontation fields, pressure and the cover test, before the phoropter. The IOP method now defaults to Non-contact (was Goldmann) with a note to take pressure before dilating drops.
+* **Starting point** (new, technician): auto-refraction / retinoscopy sphere, cylinder and axis per eye, keratometry (flat, steep, steep axis) per eye, and PD (distance, right, left, near). Auto-refraction is stored as a fourth refraction type (`autorefraction`); K and PD are new exam columns.
+* **Refraction** opens on **Habitual** (lensometry: the phoropter's starting prescription) instead of Manifest; the Cycloplegic tab says the drops are recorded with the fundus exam.
+* **Rx & treatment** (new): which prescription to write (none, glasses, contacts, both), treatment and medications prescribed, referral (to whom and why), and patient education given; shown on the exam page in its own card.
+* **Write Rx is pre-filled.** It opens from the exam's *manifest* refraction (sphere, cylinder, axis, add per eye) with a note to check each value, on the Rx type chosen at the exam. A contact lens prescription starts blank (spectacle values don't transfer), and nothing is copied for another patient, an exam with no manifest refraction, or a provider who may not view the patient (record-level authorization).
+* Exam page: shows the auto-refraction, keratometry, PD and the Rx & treatment card; the Write Rx button reads "Write glasses Rx" / "Write contact lens Rx" to match the decision.
+* No field was removed or renamed (checked by diffing the form's field names). Migration 064 adds 14 nullable columns to `eye_exams`.
+
+### 130.3 Limits
+
+PD is recorded but not carried onto the prescription (the Rx form has no PD field). Medications prescribed, referral and education are free text, and tests to order are still set up in the specialty panels and Return visit rather than in the new step. The dilation record stays with the fundus exam, with a pointer from the Cycloplegic tab. The new order follows common optometry practice; it should be confirmed with the practice's own technicians and doctors.
+
+### 130.4 Tests
+
+An end-to-end test of the step order (rail and page), where each field lives (acuity in pre-testing, history before the exam, starting-point fields), the Habitual default and the IOP default; an end-to-end test that saves the new fields and shows them on the exam page and that Write Rx opens pre-filled from the manifest refraction (glasses), blank on contacts, and blank for another patient or no exam; unit tests for the pre-fill rules and authorization; a migration test for 064; the existing refraction-tab test now expects Habitual as the default. Full suite green.
+
+**Version 3.03 change log (relative to v3.02):**
+
+| Area | Change |
+| --- | --- |
+| Exam form | Reordered to follow the visit; Pre-testing, Starting point and Rx & treatment steps; Habitual default. |
+| Rx | Write Rx pre-filled from the manifest refraction. |
+| Exam page | Auto-refraction, K, PD and an Rx & treatment card. |
+| Schema | 14 nullable `eye_exams` columns (migration 064); `autorefraction` refraction type. |
+

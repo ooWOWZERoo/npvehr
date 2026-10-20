@@ -30,6 +30,8 @@ templates.env.globals["ehr_env"] = EHR_ENV
 templates.env.globals["ROLE_LABELS"] = ROLE_LABELS
 templates.env.globals["FOCUS_SECTION_MAP"] = lookback_alerts.TEST_CODE_TO_FOCUS_SECTION
 
+RX_DECISIONS = ("none", "glasses", "contacts", "both")     # Disposition step: which prescription (if any) is to be written
+
 def _f(v):
     try: return float(v) if v and str(v).strip() else None
     except: return None
@@ -170,6 +172,12 @@ async def create_exam(request: Request, db: Session = Depends(get_db)):
         ros_neurological=_b(g("ros_neurological")), ros_musculoskeletal=_b(g("ros_musculoskeletal")),
         ros_endocrine=_b(g("ros_endocrine")), ros_skin=_b(g("ros_skin")), ros_notes=g("ros_notes"),
         dilated_exam_performed=_b(g("dilated_exam_performed")), dilation_note=(g("dilation_note") or "").strip()[:255] or None,
+        k_od_flat=_f(g("k_od_flat")), k_od_steep=_f(g("k_od_steep")), k_od_axis=_i(g("k_od_axis")),
+        k_os_flat=_f(g("k_os_flat")), k_os_steep=_f(g("k_os_steep")), k_os_axis=_i(g("k_os_axis")),
+        pd_distance=_f(g("pd_distance")), pd_od=_f(g("pd_od")), pd_os=_f(g("pd_os")), pd_near=_f(g("pd_near")),
+        rx_decision=g("rx_decision") if g("rx_decision") in RX_DECISIONS else None,
+        treatment_note=(g("treatment_note") or "").strip() or None, referral_note=(g("referral_note") or "").strip() or None,
+        education_note=(g("education_note") or "").strip() or None,
         assessment=g("assessment"), plan=g("plan"),
         diagnosis_codes=g("diagnosis_codes"),
         refractive_diagnosis=gl("refractive_diagnosis"), refractive_laterality=g("refractive_laterality"),
@@ -179,10 +187,11 @@ async def create_exam(request: Request, db: Session = Depends(get_db)):
         em_code_confirmed=g("em_code_confirmed") or None)
     db.add(exam); db.flush()
     # Three-step refraction matrix (IHE GEE): habitual (current glasses as worn
-    # in), manifest (subjective refinement), cycloplegic (post-dilation). Each
-    # is optional and independent -- a Refraction row is only created for a
-    # type if at least one sphere value was actually entered for it.
-    for prefix, rtype in (("hab", "habitual"), ("man", "manifest"), ("cyc", "cycloplegic")):
+    # in), manifest (subjective refinement), cycloplegic (post-dilation), plus the
+    # auto-refractor / retinoscopy starting point the phoropter is set up from
+    # ('autorefraction'). Each is optional and independent -- a Refraction row is
+    # only created for a type if at least one sphere value was actually entered for it.
+    for prefix, rtype in (("hab", "habitual"), ("auto", "autorefraction"), ("man", "manifest"), ("cyc", "cycloplegic")):
         od_sphere, os_sphere = _f(g(f"{prefix}_od_sphere")), _f(g(f"{prefix}_os_sphere"))
         if od_sphere is None and os_sphere is None:
             continue

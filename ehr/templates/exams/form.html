@@ -11,14 +11,16 @@
     </div>
     <ol class="exam-steps" id="examSteps">
       <li><a class="exam-step" href="#step-intake" data-step-link="intake"><span class="exam-step-mark">1</span><span>Intake</span></a></li>
-      <li><a class="exam-step" href="#step-focus" data-step-link="focus"><span class="exam-step-mark">2</span><span>Focus areas</span></a></li>
-      <li><a class="exam-step" href="#step-refraction" data-step-link="refraction"><span class="exam-step-mark">3</span><span>Acuity &amp; refraction</span></a></li>
-      <li><a class="exam-step" href="#step-entrance" data-step-link="entrance"><span class="exam-step-mark">4</span><span>Entrance tests</span></a></li>
-      <li><a class="exam-step" href="#step-health" data-step-link="health"><span class="exam-step-mark">5</span><span>Slit lamp &amp; fundus</span></a></li>
-      <li><a class="exam-step" href="#step-systems" data-step-link="systems"><span class="exam-step-mark">6</span><span>Review of systems</span></a></li>
-      <li><a class="exam-step" href="#step-areas" data-step-link="areas"><span class="exam-step-mark">7</span><span>Area assessments</span></a></li>
-      <li><a class="exam-step" href="#step-plan" data-step-link="plan"><span class="exam-step-mark">8</span><span>Assessment &amp; plan</span></a></li>
-      <li><a class="exam-step" href="#step-return" data-step-link="return"><span class="exam-step-mark">9</span><span>Return visit</span></a></li>
+      <li><a class="exam-step" href="#step-systems" data-step-link="systems"><span class="exam-step-mark">2</span><span>Review of systems</span></a></li>
+      <li><a class="exam-step" href="#step-entrance" data-step-link="entrance"><span class="exam-step-mark">3</span><span>Pre-testing</span></a></li>
+      <li><a class="exam-step" href="#step-startpoint" data-step-link="startpoint"><span class="exam-step-mark">4</span><span>Starting point</span></a></li>
+      <li><a class="exam-step" href="#step-refraction" data-step-link="refraction"><span class="exam-step-mark">5</span><span>Refraction</span></a></li>
+      <li><a class="exam-step" href="#step-focus" data-step-link="focus"><span class="exam-step-mark">6</span><span>Focus areas</span></a></li>
+      <li><a class="exam-step" href="#step-health" data-step-link="health"><span class="exam-step-mark">7</span><span>Slit lamp &amp; fundus</span></a></li>
+      <li><a class="exam-step" href="#step-areas" data-step-link="areas"><span class="exam-step-mark">8</span><span>Area assessments</span></a></li>
+      <li><a class="exam-step" href="#step-plan" data-step-link="plan"><span class="exam-step-mark">9</span><span>Assessment &amp; plan</span></a></li>
+      <li><a class="exam-step" href="#step-disposition" data-step-link="disposition"><span class="exam-step-mark">10</span><span>Rx &amp; treatment</span></a></li>
+      <li><a class="exam-step" href="#step-return" data-step-link="return"><span class="exam-step-mark">11</span><span>Return visit</span></a></li>
     </ol>
     <div class="exam-rail-progress" id="examProgress" aria-live="polite"></div>
   </aside>
@@ -79,39 +81,30 @@
       <div class="exam-note" id="exam_type_suggestion_note"></div>
     </section>
 
-    <section class="exam-section" id="step-focus" data-step="focus">
-      <div class="exam-section-head">
-        <div><span class="eyebrow">Today's exam plan</span><h2>Where are we looking today?</h2>
-          <p class="exam-section-sub">Pick every area this visit touches &mdash; more than one can apply. Each opens its own assessment panel under &ldquo;Area assessments&rdquo;.</p></div>
-      </div>
-      <div class="focus-tiles" role="group" aria-label="Visit focus areas">
-        {% for fid, label, meta, on in [
-            ('focus-refractive', 'Comprehensive / Refractive', 'Diagnosis, stability, secondary findings', True),
-            ('focus-anterior', 'Anterior Segment', 'Conjunctiva, cornea, AC, iris, lens', False),
-            ('focus-dryeye', 'Dry Eye / Ocular Surface Disease', 'Tear film, staining, meibography', False),
-            ('focus-glaucoma', 'Posterior Segment / Glaucoma', 'Staging, meds, OCT and VF orders', False),
-            ('focus-binocular', 'Binocular Vision / Pediatrics', 'Vergence, accommodation, home therapy', False),
-            ('focus-surgery', 'Pre-/Post-Op Co-Management', 'Procedure, post-op day, taper', False)] %}
-        <label class="test-chip focus-tile" data-chip-wrap="{{ fid }}">
-          <input type="checkbox" class="focus-toggle" data-target="{{ fid }}"{{ ' checked' if on }} aria-label="{{ label }}">
-          <span class="focus-tile-body"><span class="focus-tile-title">{{ label }}</span><span class="focus-tile-meta">{{ meta }}</span></span>
-          <span class="vf-dot" data-dot-chip="{{ fid }}"></span>
-          <span class="focus-tile-check" aria-hidden="true">&#10003;</span>
-        </label>
+    <section class="exam-section" id="step-systems" data-step="systems">
+      <div class="exam-section-head"><div><span class="eyebrow">History</span><h2>Review of systems</h2></div></div>
+      <div class="ros-grid">
+        {% for code, label in [('constitutional','Constitutional'), ('cardiovascular','Cardiovascular'),
+                                ('respiratory','Respiratory'), ('gastrointestinal','Gastrointestinal'),
+                                ('neurological','Neurological'), ('musculoskeletal','Musculoskeletal'),
+                                ('endocrine','Endocrine'), ('skin','Skin')] %}
+        <label class="fld">{{ label }}<select name="ros_{{ code }}"><option value="">&mdash;</option><option>Yes</option><option>No</option></select></label>
         {% endfor %}
       </div>
-      <div class="focus-summary" id="focusSummary" aria-live="polite"></div>
+      <div class="form-group voice-scribe-field"><label>ROS Notes <textarea name="ros_notes"></textarea></label><button type="button" class="voice-scribe-btn" data-target="ros_notes" title="Voice dictation" aria-label="Voice dictation">&#127908;</button></div>
+      <div class="ros-assist" id="rosAssist" hidden>
+        <details class="ros-assist-wrap" data-ros-wrap>
+          <summary class="eyebrow">ROS suggestions</summary>
+          <p class="ros-assist-intro">Tick a positive finding to record it with this exam and see what the practice's ROS catalog suggests. Suggestions are decision support only &mdash; nothing is added to the note, billed or sent.</p>
+          <div data-ros-systems></div>
+          <div class="ros-suggestions" data-ros-suggestions aria-live="polite" hidden></div>
+        </details>
+      </div>
     </section>
 
-    <section class="exam-section" id="step-refraction" data-step="refraction">
-      <div class="exam-section-head">
-        <div><span class="eyebrow">Right eye &middot; left eye</span><h2>Acuity &amp; refraction</h2></div>
-        <div class="rx-tabs" role="tablist" aria-label="Refraction type">
-          {% for key, label in [('hab', 'Habitual'), ('man', 'Manifest'), ('cyc', 'Cycloplegic')] %}
-          <button type="button" role="tab" class="rx-tab" id="rx-tab-{{ key }}" data-rx-tab="{{ key }}" aria-selected="{{ 'true' if key == 'man' else 'false' }}" tabindex="{{ '0' if key == 'man' else '-1' }}">{{ label }}<span class="rx-tab-dot" aria-hidden="true"></span></button>
-          {% endfor %}
-        </div>
-      </div>
+    <section class="exam-section" id="step-entrance" data-step="entrance">
+      <div class="exam-section-head"><div><span class="eyebrow">Technician &middot; right eye first</span><h2>Pre-testing</h2>
+        <p class="exam-section-sub">Acuity and the screening tests done before the phoropter. Take pressure before any dilating drops.</p></div></div>
       <div class="eye-pair">
         {% for eye, EYE, ename in [('od', 'OD', 'Right eye'), ('os', 'OS', 'Left eye')] %}
         <div class="eye-card">
@@ -124,33 +117,6 @@
             </div>
           </div>
           <hr class="eye-divider">
-          {% for prefix, plabel, hint in [
-              ('hab', 'Habitual refraction', "Patient's current glasses, as worn in"),
-              ('man', 'Manifest refraction', 'Subjective refinement'),
-              ('cyc', 'Cycloplegic refraction', 'Post-dilation')] %}
-          <div class="rx-group" data-rx-group="{{ prefix }}" role="tabpanel" aria-labelledby="rx-tab-{{ prefix }}"{{ '' if prefix == 'man' else ' hidden' }}>
-            <div class="eye-subhead">{{ plabel }}</div>
-            <div class="rx-group-hint">{{ hint }}</div>
-            <div class="field-grid cols-5">
-              <label class="fld">Sphere<input name="{{ prefix }}_{{ eye }}_sphere" type="number" step="0.25"></label>
-              <label class="fld">Cylinder<input name="{{ prefix }}_{{ eye }}_cylinder" type="number" step="0.25"></label>
-              <label class="fld">Axis<input name="{{ prefix }}_{{ eye }}_axis" type="number" min="1" max="180"></label>
-              <label class="fld">Add<input name="{{ prefix }}_{{ eye }}_add" type="number" step="0.25"></label>
-              <label class="fld">VA<input class="mono" name="{{ prefix }}_{{ eye }}_va" placeholder="20/20"></label>
-            </div>
-          </div>
-          {% endfor %}
-        </div>
-        {% endfor %}
-      </div>
-    </section>
-
-    <section class="exam-section" id="step-entrance" data-step="entrance">
-      <div class="exam-section-head"><div><span class="eyebrow">Right eye &middot; left eye</span><h2>Entrance tests</h2></div></div>
-      <div class="eye-pair">
-        {% for eye, EYE, ename in [('od', 'OD', 'Right eye'), ('os', 'OS', 'Left eye')] %}
-        <div class="eye-card">
-          <div class="eye-card-head"><span class="eye-code">{{ EYE }}</span><span class="eyebrow">{{ ename }}</span></div>
           <div>
             <div class="eye-subhead">Pupils</div>
             <div class="field-grid cols-2">
@@ -176,9 +142,102 @@
       <div class="exam-strip">
         <label class="fld">APD (swinging flashlight)<select name="pupil_apd_finding"><option value="">&mdash;</option><option>Negative</option><option>Positive OD</option><option>Positive OS</option></select></label>
         <label class="fld">Pupil notes<input name="pupil_notes"></label>
-        <label class="fld">IOP method<select name="iop_method"><option>Goldmann</option><option>Non-contact</option><option>iCare</option></select></label>
+        <label class="fld">IOP method<select name="iop_method"><option>Non-contact</option><option>Goldmann</option><option>iCare</option></select></label>
         <label class="fld">Cover test<input name="cover_test" placeholder="Orthophoria at distance and near"></label>
       </div>
+    </section>
+
+    <section class="exam-section" id="step-startpoint" data-step="startpoint">
+      <div class="exam-section-head"><div><span class="eyebrow">Technician &middot; right eye first</span><h2>Starting point: auto-refraction, K &amp; PD</h2>
+        <p class="exam-section-sub">From the auto-refractor and keratometer (or retinoscopy). Refraction starts from these numbers.</p></div></div>
+      <div class="eye-pair">
+        {% for eye, EYE, ename in [('od', 'OD', 'Right eye'), ('os', 'OS', 'Left eye')] %}
+        <div class="eye-card">
+          <div class="eye-card-head"><span class="eye-code">{{ EYE }}</span><span class="eyebrow">{{ ename }}</span></div>
+          <div>
+            <div class="eye-subhead">Auto-refraction / retinoscopy</div>
+            <div class="field-grid cols-3">
+              <label class="fld">Sphere<input name="auto_{{ eye }}_sphere" type="number" step="0.25"></label>
+              <label class="fld">Cylinder<input name="auto_{{ eye }}_cylinder" type="number" step="0.25"></label>
+              <label class="fld">Axis<input name="auto_{{ eye }}_axis" type="number" min="1" max="180"></label>
+            </div>
+          </div>
+          <hr class="eye-divider">
+          <div>
+            <div class="eye-subhead">Keratometry</div>
+            <div class="field-grid cols-3">
+              <label class="fld">Flat K (D)<input class="mono" name="k_{{ eye }}_flat" type="number" step="0.25" min="20" max="70"></label>
+              <label class="fld">Steep K (D)<input class="mono" name="k_{{ eye }}_steep" type="number" step="0.25" min="20" max="70"></label>
+              <label class="fld">Steep axis<input class="mono" name="k_{{ eye }}_axis" type="number" min="1" max="180"></label>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      <div class="exam-strip">
+        <label class="fld">PD distance (mm)<input class="mono" name="pd_distance" type="number" step="0.5" min="0"></label>
+        <label class="fld">PD right (mm)<input class="mono" name="pd_od" type="number" step="0.5" min="0"></label>
+        <label class="fld">PD left (mm)<input class="mono" name="pd_os" type="number" step="0.5" min="0"></label>
+        <label class="fld">PD near (mm)<input class="mono" name="pd_near" type="number" step="0.5" min="0"></label>
+      </div>
+    </section>
+
+    <section class="exam-section" id="step-refraction" data-step="refraction">
+      <div class="exam-section-head">
+        <div><span class="eyebrow">Phoropter &middot; right eye first</span><h2>Refraction</h2></div>
+        <div class="rx-tabs" role="tablist" aria-label="Refraction type">
+          {% for key, label in [('hab', 'Habitual'), ('man', 'Manifest'), ('cyc', 'Cycloplegic')] %}
+          <button type="button" role="tab" class="rx-tab" id="rx-tab-{{ key }}" data-rx-tab="{{ key }}" aria-selected="{{ 'true' if key == 'hab' else 'false' }}" tabindex="{{ '0' if key == 'hab' else '-1' }}">{{ label }}<span class="rx-tab-dot" aria-hidden="true"></span></button>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="eye-pair">
+        {% for eye, EYE, ename in [('od', 'OD', 'Right eye'), ('os', 'OS', 'Left eye')] %}
+        <div class="eye-card">
+          <div class="eye-card-head"><span class="eye-code">{{ EYE }}</span><span class="eyebrow">{{ ename }}</span></div>
+          {% for prefix, plabel, hint in [
+              ('hab', 'Habitual refraction', "Lensometry: the patient's current glasses, as worn in. This is the phoropter's starting prescription."),
+              ('man', 'Manifest refraction', 'Subjective refinement'),
+              ('cyc', 'Cycloplegic refraction', 'Post-dilation: taken after the drops. Record the drops used under Slit lamp & fundus.')] %}
+          <div class="rx-group" data-rx-group="{{ prefix }}" role="tabpanel" aria-labelledby="rx-tab-{{ prefix }}"{{ '' if prefix == 'hab' else ' hidden' }}>
+            <div class="eye-subhead">{{ plabel }}</div>
+            <div class="rx-group-hint">{{ hint }}</div>
+            <div class="field-grid cols-5">
+              <label class="fld">Sphere<input name="{{ prefix }}_{{ eye }}_sphere" type="number" step="0.25"></label>
+              <label class="fld">Cylinder<input name="{{ prefix }}_{{ eye }}_cylinder" type="number" step="0.25"></label>
+              <label class="fld">Axis<input name="{{ prefix }}_{{ eye }}_axis" type="number" min="1" max="180"></label>
+              <label class="fld">Add<input name="{{ prefix }}_{{ eye }}_add" type="number" step="0.25"></label>
+              <label class="fld">VA<input class="mono" name="{{ prefix }}_{{ eye }}_va" placeholder="20/20"></label>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section class="exam-section" id="step-focus" data-step="focus">
+      <div class="exam-section-head">
+        <div><span class="eyebrow">Doctor &middot; today's exam plan</span><h2>Where are we looking today?</h2>
+          <p class="exam-section-sub">Pick every area this visit touches &mdash; more than one can apply. Each opens its own assessment panel under &ldquo;Area assessments&rdquo;.</p></div>
+      </div>
+      <div class="focus-tiles" role="group" aria-label="Visit focus areas">
+        {% for fid, label, meta, on in [
+            ('focus-refractive', 'Comprehensive / Refractive', 'Diagnosis, stability, secondary findings', True),
+            ('focus-anterior', 'Anterior Segment', 'Conjunctiva, cornea, AC, iris, lens', False),
+            ('focus-dryeye', 'Dry Eye / Ocular Surface Disease', 'Tear film, staining, meibography', False),
+            ('focus-glaucoma', 'Posterior Segment / Glaucoma', 'Staging, meds, OCT and VF orders', False),
+            ('focus-binocular', 'Binocular Vision / Pediatrics', 'Vergence, accommodation, home therapy', False),
+            ('focus-surgery', 'Pre-/Post-Op Co-Management', 'Procedure, post-op day, taper', False)] %}
+        <label class="test-chip focus-tile" data-chip-wrap="{{ fid }}">
+          <input type="checkbox" class="focus-toggle" data-target="{{ fid }}"{{ ' checked' if on }} aria-label="{{ label }}">
+          <span class="focus-tile-body"><span class="focus-tile-title">{{ label }}</span><span class="focus-tile-meta">{{ meta }}</span></span>
+          <span class="vf-dot" data-dot-chip="{{ fid }}"></span>
+          <span class="focus-tile-check" aria-hidden="true">&#10003;</span>
+        </label>
+        {% endfor %}
+      </div>
+      <div class="focus-summary" id="focusSummary" aria-live="polite"></div>
     </section>
 
     <section class="exam-section" id="step-health" data-step="health">
@@ -214,27 +273,6 @@
         <label class="fld">Dilated fundus / macular exam performed
           <select name="dilated_exam_performed" id="dilated_exam_performed"><option value="">&mdash; not recorded</option><option>Yes</option><option>No</option></select></label>
         <label class="fld">Dilation note<input name="dilation_note" id="dilation_note" maxlength="255" placeholder="Drops used, or why not dilated"></label>
-      </div>
-    </section>
-
-    <section class="exam-section" id="step-systems" data-step="systems">
-      <div class="exam-section-head"><div><span class="eyebrow">History</span><h2>Review of systems</h2></div></div>
-      <div class="ros-grid">
-        {% for code, label in [('constitutional','Constitutional'), ('cardiovascular','Cardiovascular'),
-                                ('respiratory','Respiratory'), ('gastrointestinal','Gastrointestinal'),
-                                ('neurological','Neurological'), ('musculoskeletal','Musculoskeletal'),
-                                ('endocrine','Endocrine'), ('skin','Skin')] %}
-        <label class="fld">{{ label }}<select name="ros_{{ code }}"><option value="">&mdash;</option><option>Yes</option><option>No</option></select></label>
-        {% endfor %}
-      </div>
-      <div class="form-group voice-scribe-field"><label>ROS Notes <textarea name="ros_notes"></textarea></label><button type="button" class="voice-scribe-btn" data-target="ros_notes" title="Voice dictation" aria-label="Voice dictation">&#127908;</button></div>
-      <div class="ros-assist" id="rosAssist" hidden>
-        <details class="ros-assist-wrap" data-ros-wrap>
-          <summary class="eyebrow">ROS suggestions</summary>
-          <p class="ros-assist-intro">Tick a positive finding to record it with this exam and see what the practice's ROS catalog suggests. Suggestions are decision support only &mdash; nothing is added to the note, billed or sent.</p>
-          <div data-ros-systems></div>
-          <div class="ros-suggestions" data-ros-suggestions aria-live="polite" hidden></div>
-        </details>
       </div>
     </section>
 
@@ -607,6 +645,22 @@
           <input type="hidden" name="suggested_em_rationale" id="suggested_em_rationale">
         </div>
       </div>
+    </section>
+
+    <section class="exam-section exam-disposition" id="step-disposition" data-step="disposition">
+      <div class="exam-section-head"><div><span class="eyebrow">Before they leave</span><h2>Prescription &amp; treatment</h2>
+        <p class="exam-section-sub">What the patient leaves with. After you save, <strong>Write Rx</strong> opens a glasses prescription pre-filled from the manifest refraction.</p></div></div>
+      <div class="test-chip-list" role="radiogroup" aria-label="Prescription to write">
+        {% for val, label in [('none', 'No prescription change'), ('glasses', 'Glasses prescription'), ('contacts', 'Contact lens prescription'), ('both', 'Glasses and contact lenses')] %}
+        <label class="test-chip"><input type="radio" name="rx_decision" value="{{ val }}"> {{ label }}</label>
+        {% endfor %}
+      </div>
+      <div class="form-row cols-3" style="margin-top:var(--space-4)">
+        <label class="fld">Treatment &amp; medications prescribed<textarea name="treatment_note" rows="3" placeholder="e.g. Pred Forte QID x 1 week, then taper&hellip;"></textarea></label>
+        <label class="fld">Referral (to whom, and why)<textarea name="referral_note" rows="3" placeholder="e.g. Retina consult for&hellip;"></textarea></label>
+        <label class="fld">Patient education given<textarea name="education_note" rows="3" placeholder="e.g. Drop technique reviewed; return precautions&hellip;"></textarea></label>
+      </div>
+      <p class="exam-section-sub">Tests to order are set up in the specialty panels above and under Return visit; those create real orders.</p>
     </section>
 
     <section class="exam-section exam-return" id="step-return" data-step="return">

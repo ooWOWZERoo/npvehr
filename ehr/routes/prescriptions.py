@@ -24,10 +24,37 @@ def _i(v):
     try: return int(v) if v and str(v).strip() else None
     except: return None
 
+def _prefill_from_exam(db: Session, exam_id, patient_id, user=None):
+    """(values, rx_type) to pre-fill a NEW prescription from the exam it is written for: the exam's MANIFEST refraction (the final
+    subjective result) as the glasses values, and the Rx type the clinician chose on the exam's Rx & treatment step. Only a glasses
+    prescription is pre-filled -- contact-lens values differ from spectacle values (vertex distance, base curve), so a contact lens
+    prescription starts blank. Nothing is pre-filled when the exam doesn't belong to the chosen patient or has no manifest refraction."""
+    if not exam_id:
+        return {}, None
+    exam = db.query(EyeExam).filter(EyeExam.id == exam_id).first()
+    if not exam or (patient_id and exam.patient_id != patient_id):
+        return {}, None
+    if user is not None and not authz.can_view_patient(db, user, exam.patient_id):     # record-level authorization, as everywhere else
+        return {}, None
+    rx_type = "contacts" if exam.rx_decision == "contacts" else "glasses"
+    man = next((r for r in exam.refractions if r.refraction_type == "manifest"), None)
+    if rx_type != "glasses" or man is None:
+        return {}, rx_type
+    values = {}
+    for eye in ("od", "os"):
+        for fld in ("sphere", "cylinder", "axis", "add"):
+            v = getattr(man, f"{eye}_{fld}")
+            if v is not None:
+                values[f"{eye}_{fld}"] = v
+    return values, rx_type
+
+
 @router.get("/new", response_class=HTMLResponse, dependencies=[Depends(require_role(*RX_EDIT))])
 def new_rx_form(request: Request, patient_id: int = None, exam_id: int = None, db: Session = Depends(get_db)):
     ctx_patient = patient_context(db.query(Patient).filter(Patient.id == patient_id).first(), db) if patient_id else None
+    prefill, prefill_type = _prefill_from_exam(db, exam_id, patient_id, request.state.user)
     return templates.TemplateResponse(request, "prescriptions/form.html", {
+        "prefill": prefill, "prefill_type": prefill_type,
         "patients": db.query(Patient).order_by(Patient.last_name).all(),
         "providers": sched.bookable_providers(db),
         "selected_patient_id": patient_id, "selected_exam_id": exam_id, "today": str(date.today()),

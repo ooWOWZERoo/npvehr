@@ -44,21 +44,22 @@
       </div>
       {# The cards are the visible control; this select stays the single source of truth (same name the server and tests use). #}
       <div class="sr-only">
-        <select name="rx_type" id="rx_type" tabindex="-1" aria-hidden="true"><option value="glasses">Glasses</option><option value="contacts">Contact Lenses</option></select>
+        <select name="rx_type" id="rx_type" tabindex="-1" aria-hidden="true"><option value="glasses" {{ 'selected' if prefill_type != 'contacts' }}>Glasses</option><option value="contacts" {{ 'selected' if prefill_type == 'contacts' }}>Contact Lenses</option></select>
       </div>
     </section>
 
     <section class="exam-section" id="step-values" data-step="values">
       <div class="exam-section-head"><div><span class="eyebrow">Right eye &middot; left eye</span><h2>Rx values</h2></div></div>
+      {% if prefill %}<p class="med-note med-note-info" id="rxPrefillNote" style="margin-bottom:var(--space-3)">Pre-filled from this exam&rsquo;s manifest refraction &mdash; check each value before issuing.</p>{% endif %}
       <div class="eye-pair">
         {% for eye, EYE, ename in [('od', 'OD', 'Right eye'), ('os', 'OS', 'Left eye')] %}
         <div class="eye-card">
           <div class="eye-card-head"><span class="eye-code">{{ EYE }}</span><span class="eyebrow">{{ ename }}</span></div>
           <div class="field-grid cols-3">
-            <label class="fld">Sphere<input name="{{ eye }}_sphere" type="number" step="0.25"></label>
-            <label class="fld">Cylinder<input name="{{ eye }}_cylinder" type="number" step="0.25"></label>
-            <label class="fld">Axis<input name="{{ eye }}_axis" type="number" min="1" max="180"></label>
-            <label class="fld">Add<input name="{{ eye }}_add" type="number" step="0.25"></label>
+            <label class="fld">Sphere<input name="{{ eye }}_sphere" value="{{ prefill.get(eye ~ '_sphere', '') }}" type="number" step="0.25"></label>
+            <label class="fld">Cylinder<input name="{{ eye }}_cylinder" value="{{ prefill.get(eye ~ '_cylinder', '') }}" type="number" step="0.25"></label>
+            <label class="fld">Axis<input name="{{ eye }}_axis" value="{{ prefill.get(eye ~ '_axis', '') }}" type="number" min="1" max="180"></label>
+            <label class="fld">Add<input name="{{ eye }}_add" value="{{ prefill.get(eye ~ '_add', '') }}" type="number" step="0.25"></label>
             <label class="fld">Prism<input name="{{ eye }}_prism" type="number" step="0.25"></label>
             <label class="fld">Base<input name="{{ eye }}_base"></label>
           </div>

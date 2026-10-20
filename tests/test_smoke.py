@@ -4188,15 +4188,14 @@ def test_exam_room_rx_tabs_keep_every_refraction_group_submitting(logged_in_page
     page.goto(live_server + "/exams/new")
     hab_group = page.locator('[data-rx-group="hab"]').first
     man_group = page.locator('[data-rx-group="man"]').first
-    assert man_group.is_visible() and hab_group.is_hidden()
-    assert page.locator("#rx-tab-man").get_attribute("aria-selected") == "true"
-
-    page.locator("#rx-tab-hab").click()
+    # Refraction opens on Habitual (lensometry): the phoropter starts from the patient's current glasses.
     assert hab_group.is_visible() and man_group.is_hidden()
+    assert page.locator("#rx-tab-hab").get_attribute("aria-selected") == "true"
     page.fill('input[name="hab_od_sphere"]', "-2.75")
     page.wait_for_function("document.getElementById('rx-tab-hab').classList.contains('has-values')", timeout=5000)
 
     page.locator("#rx-tab-man").click()
+    assert man_group.is_visible() and hab_group.is_hidden()
     page.fill('input[name="man_od_sphere"]', "-3.25")
 
     page.locator("#rx-tab-man").focus()
@@ -5424,3 +5423,102 @@ def test_brands_in_the_name_list_offer_their_generic_and_partial_brands_are_foun
 
     page.goto(live_server + "/admin/drug-catalog/drugs?q=jantoven")
     assert page.locator("table tr", has_text="jantoven").locator(".badge", has_text="Brand").count() == 1
+
+
+def _new_exam_for(page, live_server, last, first):
+    page.goto(live_server + "/exams/new")
+    page.select_option('select[name="patient_id"]', label=f"{last}, {first}")
+    page.select_option('select[name="provider_id"]', index=0)
+
+
+def test_exam_form_follows_the_visit_in_order_and_acuity_lives_in_pre_testing(logged_in_page, live_server):
+    """Intake -> history -> pre-testing -> phoropter starting point -> refraction -> doctor's part -> plan -> Rx & treatment -> return."""
+    page = logged_in_page
+    page.goto(live_server + "/exams/new")
+    keys = ["intake", "systems", "entrance", "startpoint", "refraction", "focus", "health", "areas", "plan", "disposition", "return"]
+    assert page.eval_on_selector_all("[data-step-link]", "els => els.map(e => e.getAttribute('data-step-link'))") == keys
+    assert page.eval_on_selector_all("section[data-step]", "els => els.map(e => e.getAttribute('data-step'))") == keys      # the page itself, in the same order
+    labels = page.eval_on_selector_all("[data-step-link] span:last-child", "els => els.map(e => e.textContent.trim())")
+    assert labels[:5] == ["Intake", "Review of systems", "Pre-testing", "Starting point", "Refraction"] and labels[-2:] == ["Rx & treatment", "Return visit"]
+
+    # Acuity is a pre-test, not part of refraction; pressure defaults to non-contact and is taken before dilation.
+    for name in ("od_sc", "od_cc", "os_sc", "os_cc", "iop_od", "pupil_size_light_od", "cover_test"):
+        assert page.locator(f'#step-entrance [name="{name}"]').count() == 1, name
+        assert page.locator(f'#step-refraction [name="{name}"]').count() == 0, name
+    assert page.locator('#step-entrance select[name="iop_method"]').input_value() == "Non-contact"
+    assert "before any dilating drops" in page.locator("#step-entrance .exam-section-sub").inner_text()
+    # Review of systems sits with intake; the starting point holds auto-refraction, K and PD.
+    assert page.locator('#step-systems [name="ros_cardiovascular"]').count() == 1
+    for name in ("auto_od_sphere", "auto_os_axis", "k_od_flat", "k_os_steep", "k_od_axis", "pd_distance", "pd_od", "pd_os", "pd_near"):
+        assert page.locator(f'#step-startpoint [name="{name}"]').count() == 1, name
+    # The doctor's part starts at focus areas; Refraction opens on Habitual and says the cycloplegic drops are recorded with the fundus.
+    assert page.locator("#rx-tab-hab").get_attribute("aria-selected") == "true"
+    assert "Lensometry" in page.locator('[data-rx-group="hab"] .rx-group-hint').first.text_content()
+    assert "Slit lamp & fundus" in page.locator('[data-rx-group="cyc"] .rx-group-hint').first.text_content()   # (the Cycloplegic tab is hidden, so read text_content)
+    assert page.locator("#step-disposition [name=rx_decision]").count() == 4
+
+
+def test_pre_testing_starting_point_and_disposition_are_saved_shown_and_the_rx_opens_prefilled(logged_in_page, live_server):
+    page = logged_in_page
+    _new_exam_for(page, live_server, "Smith", "Bob")
+    page.fill('input[name="od_sc"]', "20/200")
+    page.fill('input[name="iop_od"]', "15")
+    page.fill('input[name="auto_od_sphere"]', "-3.00")
+    page.fill('input[name="auto_od_cylinder"]', "-0.50")
+    page.fill('input[name="auto_od_axis"]', "175")
+    page.fill('input[name="k_od_flat"]', "43.5")
+    page.fill('input[name="k_od_steep"]', "44.25")
+    page.fill('input[name="k_od_axis"]', "90")
+    page.fill('input[name="pd_distance"]', "63")
+    page.fill('input[name="pd_od"]', "31.5")
+    page.fill('input[name="pd_os"]', "31.5")
+    page.fill('input[name="pd_near"]', "60")
+    page.locator("#rx-tab-man").click()
+    page.fill('input[name="man_od_sphere"]', "-3.25")
+    page.fill('input[name="man_od_cylinder"]', "-0.75")
+    page.fill('input[name="man_od_axis"]', "180")
+    page.fill('input[name="man_od_add"]', "1.50")
+    page.fill('input[name="man_os_sphere"]', "-2.50")
+    page.locator('input[name="rx_decision"][value="glasses"]').check()
+    page.fill('textarea[name="treatment_note"]', "Artificial tears QID OU")
+    page.fill('textarea[name="referral_note"]', "Retina consult for lattice")
+    page.fill('textarea[name="education_note"]', "Drop technique reviewed")
+    page.locator('form[action="/exams/new"] button[type="submit"]', has_text="Save Exam").click()
+    page.wait_for_url(re.compile(r"/exams/\d+$"))
+    exam_url = page.url
+
+    body = page.locator("body").inner_text()
+    assert "Auto-refraction / Retinoscopy" in body and "Keratometry" in body and "PD (mm)" in body
+    assert "OD 43.5 / 44.25 @ 90" in page.locator("#kRow").inner_text()
+    assert "distance 63.0 (31.5 / 31.5), near 60.0" in page.locator("#pdRow").inner_text()
+    card = page.locator("#dispositionCard").inner_text()
+    assert "Glasses prescription" in card and "Artificial tears QID OU" in card and "Retina consult for lattice" in card and "Drop technique reviewed" in card
+    assert page.locator("a", has_text="Write glasses Rx").count() == 1
+
+    # Write Rx opens pre-filled from the MANIFEST refraction (not the auto-refraction or habitual), with a note to check it.
+    page.locator("a", has_text="Write glasses Rx").click()
+    page.wait_for_load_state()
+    assert page.locator('input[name="od_sphere"]').input_value() == "-3.25" and page.locator('input[name="od_cylinder"]').input_value() == "-0.75"
+    assert page.locator('input[name="od_axis"]').input_value() == "180" and page.locator('input[name="od_add"]').input_value() == "1.5"
+    assert page.locator('input[name="os_sphere"]').input_value() == "-2.5" and page.locator('input[name="os_axis"]').input_value() == ""
+    assert "check each value" in page.locator("#rxPrefillNote").inner_text() and page.locator("#rx_type").input_value() == "glasses"
+
+    # An exam where a contact lens Rx was chosen opens the Rx form on contacts with NO values copied (spectacle values don't transfer).
+    _new_exam_for(page, live_server, "Smith", "Bob")
+    page.locator("#rx-tab-man").click()
+    page.fill('input[name="man_od_sphere"]', "-4.00")
+    page.locator('input[name="rx_decision"][value="contacts"]').check()
+    page.locator('form[action="/exams/new"] button[type="submit"]', has_text="Save Exam").click()
+    page.wait_for_url(re.compile(r"/exams/\d+$"))
+    page.locator("a", has_text="Write contact lens Rx").click()
+    page.wait_for_load_state()
+    assert page.locator("#rx_type").input_value() == "contacts" and page.locator('input[name="od_sphere"]').input_value() == ""
+    assert page.locator("#rxPrefillNote").count() == 0
+
+    # Another patient's id with this exam id, or an exam with no manifest values, copies nothing.
+    other = _named_patient_id(page, live_server, "Johnson", "Alice")
+    exam_id = exam_url.rstrip("/").split("/")[-1]
+    page.goto(f"{live_server}/prescriptions/new?patient_id={other}&exam_id={exam_id}")
+    assert page.locator("#rxPrefillNote").count() == 0 and page.locator('input[name="od_sphere"]').input_value() == ""
+    page.goto(f"{live_server}/prescriptions/new")
+    assert page.locator("#rxPrefillNote").count() == 0
