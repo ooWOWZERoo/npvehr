@@ -5202,3 +5202,74 @@ def test_a_brand_name_finds_its_generic_in_the_intake(logged_in_page, live_serve
     opt.click()
     assert page.locator("#medName").input_value() == "warfarin"
     assert "Coumadin is a brand of warfarin" in page.locator("#medNameStatus").inner_text()
+
+
+def test_an_existing_medication_is_edited_through_the_same_chain(logged_in_page, live_server, drug_catalog_seed):
+    """GET/PUT API plus the real component: a catalog medication opens pre-filled and re-saves with a new dosage; an older
+    free-text row opens as a custom entry; the same validation, CSRF and patient-scope rules apply as when adding."""
+    page = logged_in_page
+    api = page.request
+    base = f"{live_server}/api/v1"
+    drop = drug_catalog_seed["Zzdrop Ophthalmic Test"]
+    pid = _named_patient_id(page, live_server, "Smith", "Bob")
+    other = _named_patient_id(page, live_server, "Johnson", "Alice")
+    doses = api.get(f"{base}/drugs/{drop}/dosages").json()["dosages"]
+    freqs = api.get(f"{base}/drugs/{drop}/frequencies").json()["frequencies"]
+    hdr = _csrf_header(page)
+    made = api.post(f"{base}/patients/{pid}/medications", headers=hdr, data={
+        "is_custom": False, "drug_id": drop, "dosage_id": doses[0]["id"], "frequency_id": freqs[1]["id"], "eye": "OD", "indication": "edit test"})
+    med_id = made.json()["id"]
+
+    got = api.get(f"{base}/patients/{pid}/medications/{med_id}").json()
+    assert got["as_custom"] is False and got["drug"]["id"] == drop and got["dosage_id"] == doses[0]["id"] and got["frequency_id"] == freqs[1]["id"]
+    assert got["eye"] == "OD" and got["indication"] == "edit test" and got["status"] == "active"
+    assert api.get(f"{base}/patients/{other}/medications/{med_id}").status == 404                  # someone else's id, wrong patient
+    put_url = f"{base}/patients/{pid}/medications/{med_id}"
+    ok_body = {"is_custom": False, "drug_id": drop, "dosage_id": doses[1]["id"], "frequency_id": freqs[1]["id"], "eye": "OD"}
+    assert api.put(put_url, data=ok_body).status == 403                                              # no CSRF header
+    assert api.put(f"{base}/patients/{other}/medications/{med_id}", data=ok_body, headers=hdr).status == 404
+    assert api.put(put_url, data={**ok_body, "eye": "PO"}, headers=hdr).status == 422               # same rules as adding
+    assert api.put(put_url, data={**ok_body, "dosage_id": 999999}, headers=hdr).status == 422
+
+    # The component: Edit opens the chain pre-filled; changing the dosage and saving updates the row.
+    page.goto(f"{live_server}/patients/{pid}/medications")
+    page.locator(f'[data-med-edit="{med_id}"]').click()
+    page.wait_for_function(f"document.getElementById('medDosage').value === '{doses[0]['id']}'")
+    page.wait_for_function(f"document.getElementById('medFreq').value === '{freqs[1]['id']}'")
+    assert page.locator("#medName").input_value() == "Zzdrop Ophthalmic Test" and page.locator("#medEye").input_value() == "OD"
+    assert page.locator("#medIndication").input_value() == "edit test"
+    assert page.locator("#medIntakeTitle").inner_text() == "Edit medication" and page.locator("#medSubmit").inner_text() == "Save changes"
+    assert page.locator("#medSubmit").is_enabled() and page.locator("#medCancelEdit").is_visible()
+    page.select_option("#medDosage", label="0.01% ophthalmic solution")
+    page.wait_for_function("!document.getElementById('medFreq').disabled")
+    page.select_option("#medFreq", index=1)
+    with page.expect_navigation():
+        page.click("#medSubmit")
+    rows = page.locator("#medsSection tr", has_text="Zzdrop Ophthalmic Test")
+    assert rows.count() == 1 and "0.01% ophthalmic solution" in rows.inner_text()                  # edited in place, not duplicated
+
+    # An older free-text row (the previous form's POST) opens as a custom entry and can be re-saved.
+    api.post(f"{live_server}/patients/{pid}/medications/new", form={"csrf_token": hdr["X-CSRF-Token"], "name": "Zz legacy free text", "strength": "old strength", "frequency": "old freq", "eye": "OS"})
+    page.goto(f"{live_server}/patients/{pid}/medications")
+    page.locator("#medsSection tr", has_text="Zz legacy free text").locator("[data-med-edit]").click()
+    page.locator("#medDosageText").wait_for(state="visible")
+    assert page.locator("#medName").input_value() == "Zz legacy free text" and page.locator("#medDosageText").input_value() == "old strength"
+    assert page.locator("#medFreqText").input_value() == "old freq" and page.locator("#medEye").input_value() == "OS"
+    page.fill("#medDosageText", "new strength")
+    with page.expect_navigation():
+        page.click("#medSubmit")
+    row = page.locator("#medsSection tr", has_text="Zz legacy free text")
+    assert row.count() == 1 and "new strength" in row.inner_text() and "old strength" not in row.inner_text()
+
+    # The edits are in the field-change audit trail (who changed what, from and to).
+    page.goto(f"{live_server}/admin/field-audit?table_name=patient_medications")
+    audit = page.locator("body").inner_text()
+    assert "0.005% ophthalmic solution" in audit and "0.01% ophthalmic solution" in audit and "old strength" in audit and "new strength" in audit
+
+    # Cancel leaves the row untouched.
+    page.goto(f"{live_server}/patients/{pid}/medications")
+    page.locator("#medsSection tr", has_text="Zz legacy free text").locator("[data-med-edit]").click()
+    page.locator("#medCancelEdit").wait_for(state="visible")
+    with page.expect_navigation():
+        page.click("#medCancelEdit")
+    assert "new strength" in page.locator("#medsSection tr", has_text="Zz legacy free text").inner_text()
