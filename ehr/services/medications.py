@@ -27,7 +27,7 @@ log = logging.getLogger(__name__)
 STALE_MONTHS = 12
 MED_FIELDS = ["name", "strength", "route", "frequency", "eye", "indication", "status", "start_date", "stop_date", "note"]
 ALLERGY_FIELDS = ["allergen", "reaction", "severity", "status", "note"]
-EYES = ("OD", "OS", "OU", "PO")                   # PO = by mouth / systemic (oral medications)
+EYES = ("OD", "OS", "OU", "PO", "NA")             # PO = by mouth / systemic (oral); NA = not applicable (not an eye medication)
 SEVERITIES = ("mild", "moderate", "severe")
 
 

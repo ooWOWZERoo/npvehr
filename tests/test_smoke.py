@@ -5152,3 +5152,31 @@ def test_rxnorm_name_load_admin_screen_lazy_dosage_lookup_outage_and_intake(logg
     out = next(d for d in api.get(f"{live_server}/api/v1/drugs/search?q=zzoutage").json()["results"])
     assert api.get(f"{live_server}/api/v1/drugs/{out['id']}/dosages").json()["lookup"] == "unavailable"
     assert api.get(f"{live_server}/api/v1/drugs/{out['id']}/dosages").json()["lookup"] == "unavailable"     # still unresolved: retried, not cached
+
+
+def test_eye_not_applicable_is_a_valid_choice_for_drugs_that_are_not_eye_medications(logged_in_page, live_server, drug_catalog_seed):
+    """'NA' (not applicable) is accepted for non-oral drugs and custom entries, shown as N/A, and never overrides PO for an oral drug."""
+    page = logged_in_page
+    api = page.request
+    base = f"{live_server}/api/v1"
+    drop, pill = drug_catalog_seed["Zzdrop Ophthalmic Test"], drug_catalog_seed["Zzpill Oral Test"]
+    pid = _named_patient_id(page, live_server, "Johnson", "Alice")
+    url = f"{base}/patients/{pid}/medications"
+    hdr = _csrf_header(page)
+    dose = api.get(f"{base}/drugs/{drop}/dosages").json()["dosages"][0]["id"]
+    freq = api.get(f"{base}/drugs/{drop}/frequencies").json()["frequencies"][0]["id"]
+    ok = api.post(url, data={"is_custom": False, "drug_id": drop, "dosage_id": dose, "frequency_id": freq, "eye": "NA"}, headers=hdr)
+    assert ok.status == 201 and ok.json()["eye"] == "NA"
+    pdose = api.get(f"{base}/drugs/{pill}/dosages").json()["dosages"][0]["id"]
+    forced = api.post(url, data={"is_custom": False, "drug_id": pill, "dosage_id": pdose, "frequency_id": freq, "eye": "NA"}, headers=hdr)
+    assert forced.status == 201 and forced.json()["eye"] == "PO"                                  # oral still means PO
+    assert api.post(url, data={"is_custom": True, "name": "Zz skin cream", "eye": "NA"}, headers=hdr).json()["eye"] == "NA"
+    assert api.post(url, data={"is_custom": True, "name": "Zz nope", "eye": "XX"}, headers=hdr).status == 422
+
+    # In the component: NA is offered for a custom entry, satisfies the required Eye, and shows as N/A on the list.
+    cid = _named_patient_id(page, live_server, "Davis", "Carol")
+    page.goto(f"{live_server}/patients/{cid}/medications")
+    assert page.locator('#medEye option[value="NA"]').count() == 1
+    _add_custom_medication(page, "Zz hydrocortisone cream", eye="NA")
+    row = page.locator("#medsSection tr", has_text="Zz hydrocortisone cream")
+    assert row.count() == 1 and "N/A" in row.inner_text()

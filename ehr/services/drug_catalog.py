@@ -9,7 +9,9 @@ Everything the medication intake combobox needs lives here, so routes stay thin 
 
 Route handling: a route string is reduced to one of ophthalmic / oral / topical (or None when unknown) by `route_group`.
 An ORAL drug always records eye = 'PO' (by mouth / systemic) and route 'oral'; 'PO' is refused for a drug whose route is
-ophthalmic or topical, since those are applied to an eye or the skin. A custom (free-text) entry may use any eye value.
+ophthalmic or topical, since those are applied to an eye or the skin. 'NA' (not applicable) is for drugs that are not given
+to or for an eye (a skin cream, an injection, an inhaler...) and is accepted for any non-oral drug. A custom (free-text)
+entry may use any eye value.
 Nothing here sends anything outside the app: the catalog is rows in our own database.
 """
 import re
@@ -22,7 +24,7 @@ from ehr.models.drug_catalog import DrugCatalogEntry, DrugDosage, DrugFrequency
 
 MIN_QUERY_CHARS = 3
 MAX_RESULTS = 15
-EYE_CHOICES = ("OU", "OD", "OS", "PO")
+EYE_CHOICES = ("OU", "OD", "OS", "PO", "NA")        # NA = not applicable (the drug is not given to or for an eye)
 GROUP_ORDER = ("ophthalmic", "oral", "topical", "any")
 
 
@@ -93,14 +95,14 @@ def resolve_selection(db: Session, payload) -> dict:
     can't record a dosage that belongs to a different drug or an eye that contradicts the route."""
     eye = (payload.eye or "").strip().upper()
     if eye and eye not in EYE_CHOICES:
-        raise ValueError("Eye must be OU, OD, OS or PO.")
+        raise ValueError("Eye must be OU, OD, OS, PO or NA.")
 
     if payload.is_custom:
         name = (payload.name or "").strip()
         if not name:
             raise ValueError("A medication name is required.")
         if not eye:
-            raise ValueError("Choose OU, OD, OS or PO.")
+            raise ValueError("Choose OU, OD, OS, PO or NA.")
         return {"name": name[:160], "strength": (payload.dosage_text or "").strip()[:80] or None,
                 "frequency": (payload.frequency_text or "").strip()[:80] or None,
                 "eye": eye, "route": "oral" if eye == "PO" else None,
@@ -122,7 +124,7 @@ def resolve_selection(db: Session, payload) -> dict:
     elif eye == "PO":
         raise ValueError("PO (by mouth) is only for oral medications.")
     elif not eye:
-        raise ValueError("Choose OU, OD or OS.")
+        raise ValueError("Choose OU, OD, OS or NA.")
     return {"name": drug.name, "strength": dosage.label, "frequency": freq.label, "eye": eye,
             "route": effective_route(drug, dosage), "drug_id": drug.id, "dosage_id": dosage.id, "frequency_id": freq.id,
             "drug_rxcui": drug.rxcui, "is_custom": False}

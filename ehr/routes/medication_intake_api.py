@@ -83,7 +83,7 @@ class MedicationIn(BaseModel):
     name: Optional[str] = Field(default=None, max_length=160)
     dosage_text: Optional[str] = Field(default=None, max_length=80)
     frequency_text: Optional[str] = Field(default=None, max_length=80)
-    eye: Literal["OU", "OD", "OS", "PO", ""] = ""
+    eye: Literal["OU", "OD", "OS", "PO", "NA", ""] = ""
     indication: Optional[str] = Field(default=None, max_length=160)
     note: Optional[str] = Field(default=None, max_length=255)
     start_date: Optional[str] = None

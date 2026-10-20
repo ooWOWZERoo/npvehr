@@ -109,7 +109,7 @@ class Plan:
         if self.repeats_in_file:
             out.append(f"{self.repeats_in_file} repeated row(s) in the file were merged.")
         if w["bad_eye"]:
-            out.append(f"{w['bad_eye']} row(s) had an Eye value other than OD, OS or OU; the eye was left blank.")
+            out.append(f"{w['bad_eye']} row(s) had an Eye value other than OD, OS, OU, PO or NA; the eye was left blank.")
         if w["bad_date"]:
             out.append(f"{w['bad_date']} row(s) had a start date that couldn't be read; it was left blank.")
         if w["bad_status"]:
