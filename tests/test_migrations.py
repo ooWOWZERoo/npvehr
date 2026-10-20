@@ -388,3 +388,19 @@ def test_drug_catalog_generic_checked_at_column_is_added_to_an_existing_table_an
     with fresh_engine.begin() as conn:
         conn.execute(text("DROP TABLE drug_catalog"))
         mig.migration_063_drug_catalog_generic_checked_at(conn)         # no table yet: skipped, not an error
+
+
+def test_exam_pretesting_and_disposition_columns_are_added_to_an_existing_table_and_rerun_is_safe(fresh_engine):
+    """Migration 064: an eye_exams table from before keratometry/PD/disposition gains the columns, existing rows read NULL; re-run is a no-op."""
+    with fresh_engine.begin() as conn:
+        conn.execute(text("CREATE TABLE eye_exams (id INTEGER PRIMARY KEY, patient_id INTEGER)"))
+        conn.execute(text("INSERT INTO eye_exams (patient_id) VALUES (1)"))
+    for _ in range(2):
+        with fresh_engine.begin() as conn:
+            mig.migration_064_exam_pretesting_and_disposition(conn)
+    with fresh_engine.connect() as conn:
+        row = conn.execute(text("SELECT k_od_flat, k_os_axis, pd_distance, pd_near, rx_decision, treatment_note, referral_note, education_note FROM eye_exams")).one()
+        assert tuple(row) == (None,) * 8
+    with fresh_engine.begin() as conn:
+        conn.execute(text("DROP TABLE eye_exams"))
+        mig.migration_064_exam_pretesting_and_disposition(conn)          # no table yet: skipped, not an error

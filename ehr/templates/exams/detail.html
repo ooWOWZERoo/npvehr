@@ -7,7 +7,7 @@
   </h1></div>
   <div style="display:flex;gap:0.5rem">
     <a href="/patients/{{ exam.patient_id }}" class="btn btn-secondary btn-sm">Patient</a>
-    <a href="/prescriptions/new?patient_id={{ exam.patient_id }}&exam_id={{ exam.id }}" class="btn btn-primary btn-sm">Write Rx</a>
+    <a href="/prescriptions/new?patient_id={{ exam.patient_id }}&exam_id={{ exam.id }}" class="btn {{ 'btn-secondary' if exam.rx_decision == 'none' else 'btn-primary' }} btn-sm">{% if exam.rx_decision == 'contacts' %}Write contact lens Rx{% elif exam.rx_decision in ('glasses', 'both') %}Write glasses Rx{% else %}Write Rx{% endif %}</a>
     <a href="/exams/{{ exam.id }}/pcp-letter" class="btn btn-secondary btn-sm">PCP letter</a>
   </div>
 </div>
@@ -24,6 +24,13 @@
     <dt>E/M Code</dt><dd>{% if exam.em_code_confirmed %}<span class="mono-data">{{ exam.em_code_confirmed }}</span>{% if exam.suggested_em_rationale %} <span style="color:var(--ink-muted);font-size:0.85rem">({{ exam.suggested_em_rationale }})</span>{% endif %}{% else %}—{% endif %}</dd>
     <dt>IOP OD/OS</dt><dd>{{ exam.iop_od or '—' }} / {{ exam.iop_os or '—' }} mmHg</dd>
     <dt>Cover Test</dt><dd>{{ exam.cover_test or '—' }}</dd>
+    {% if exam.k_od_flat is not none or exam.k_od_steep is not none or exam.k_os_flat is not none or exam.k_os_steep is not none %}
+    <dt>Keratometry</dt><dd class="mono-data" id="kRow">OD {{ exam.k_od_flat if exam.k_od_flat is not none else '—' }} / {{ exam.k_od_steep if exam.k_od_steep is not none else '—' }}{% if exam.k_od_axis %} @ {{ exam.k_od_axis }}{% endif %}
+      &nbsp; OS {{ exam.k_os_flat if exam.k_os_flat is not none else '—' }} / {{ exam.k_os_steep if exam.k_os_steep is not none else '—' }}{% if exam.k_os_axis %} @ {{ exam.k_os_axis }}{% endif %}</dd>
+    {% endif %}
+    {% if exam.pd_distance is not none or exam.pd_od is not none or exam.pd_os is not none or exam.pd_near is not none %}
+    <dt>PD (mm)</dt><dd class="mono-data" id="pdRow">{% if exam.pd_distance is not none %}distance {{ exam.pd_distance }}{% endif %}{% if exam.pd_od is not none or exam.pd_os is not none %} ({{ exam.pd_od if exam.pd_od is not none else '—' }} / {{ exam.pd_os if exam.pd_os is not none else '—' }}){% endif %}{% if exam.pd_near is not none %}, near {{ exam.pd_near }}{% endif %}</dd>
+    {% endif %}
     <dt>Dilated exam</dt><dd id="dilatedRow">{% if exam.dilated_exam_performed is sameas true %}Yes{% elif exam.dilated_exam_performed is sameas false %}No{% else %}<span class="muted">Not recorded</span>{% endif %}{% if exam.dilation_note %} <span class="muted">&mdash; {{ exam.dilation_note }}</span>{% endif %}</dd>
     <dt>Dx Codes</dt><dd class="mono-data">{{ exam.diagnosis_codes or '—' }}</dd>
     <dt>Follow-up</dt><dd>
@@ -46,7 +53,7 @@
       <tr><td>OS</td><td>{{ exam.os_sc or '—' }}</td><td>{{ exam.os_cc or '—' }}</td></tr>
     </table>
     </div>
-    {% for rtype, label in [('habitual', 'Habitual Refraction'), ('manifest', 'Manifest Refraction'), ('cycloplegic', 'Cycloplegic Refraction')] %}
+    {% for rtype, label in [('autorefraction', 'Auto-refraction / Retinoscopy'), ('habitual', 'Habitual Refraction'), ('manifest', 'Manifest Refraction'), ('cycloplegic', 'Cycloplegic Refraction')] %}
     {% set r = exam.refractions|selectattr('refraction_type', 'equalto', rtype)|first %}
     {% if r %}
     <h3 style="margin-top:1rem">{{ label }}</h3>
@@ -402,6 +409,17 @@
     <div><strong>Plan</strong><p>{{ exam.plan or '—' }}</p></div>
   </div>
 </div>
+{% set rx_labels = {'none': 'No prescription change', 'glasses': 'Glasses prescription', 'contacts': 'Contact lens prescription', 'both': 'Glasses and contact lenses'} %}
+{% if exam.rx_decision or exam.treatment_note or exam.referral_note or exam.education_note %}
+<div class="card" style="margin-top:1rem" id="dispositionCard"><h3>Prescription &amp; Treatment</h3>
+  <dl class="dl-grid">
+    <dt>Prescription</dt><dd id="rxDecisionRow">{{ rx_labels.get(exam.rx_decision) or '—' }}</dd>
+    <dt>Treatment &amp; medications</dt><dd style="white-space:pre-wrap">{{ exam.treatment_note or '—' }}</dd>
+    <dt>Referral</dt><dd style="white-space:pre-wrap">{{ exam.referral_note or '—' }}</dd>
+    <dt>Patient education</dt><dd style="white-space:pre-wrap">{{ exam.education_note or '—' }}</dd>
+  </dl>
+</div>
+{% endif %}
 {% set current_user = request.state.user %}
 <div class="card" style="margin-top:1rem"><h3>Sign &amp; Lock</h3>
   {% if exam.signed_at %}
