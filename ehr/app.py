@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Request, Depends, HTTPException
 from fastapi.exception_handlers import http_exception_handler
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
@@ -10,7 +10,7 @@ from ehr.db.migrations import run_column_migrations, run_post_create_all_migrati
 from ehr.db.seed import seed_demo_data
 from ehr.env_info import EHR_ENV
 from ehr.routes import (patients, appointments, exams, prescriptions, admin_scheduling, admin_billing,
-    admin_voice_scribe, admin_ros, admin_safety, admin_imports, admin_medication_import, admin_ros_import, medications as medication_routes, admin_medications, care_coordination, patient_merge as patient_merge_routes, recalls as recall_routes, safety as safety_routes, store_ops, rx_lab_orders, portal, auth as auth_routes)
+    admin_voice_scribe, admin_ros, admin_safety, admin_imports, admin_medication_import, admin_ros_import, medications as medication_routes, medication_intake_api, admin_medications, care_coordination, patient_merge as patient_merge_routes, recalls as recall_routes, safety as safety_routes, store_ops, rx_lab_orders, portal, auth as auth_routes)
 from ehr.auth.deps import get_current_user, LoginRedirect
 from ehr.auth.portal_deps import PortalLoginRedirect
 from ehr.auth.permissions import (ROLE_LABELS, ANY_STAFF, PATIENT_EDIT, APPOINTMENT_EDIT, EXAM_VIEW, EXAM_EDIT,
@@ -29,6 +29,8 @@ templates.env.globals["ROLE_LABELS"] = ROLE_LABELS
 
 @app.exception_handler(LoginRedirect)
 async def _login_redirect_handler(request: Request, exc: LoginRedirect):
+    if request.url.path.startswith("/api/"):                       # API callers get a status, not an HTML redirect
+        return JSONResponse({"detail": "Not authenticated"}, status_code=401)
     return exc.response
 
 @app.exception_handler(HTTPException)
@@ -80,6 +82,7 @@ app.include_router(medication_routes.router, dependencies=[Depends(get_current_u
 app.include_router(recall_routes.router, dependencies=[Depends(get_current_user)])
 app.include_router(care_coordination.router, dependencies=[Depends(get_current_user)])
 app.include_router(admin_medications.router, dependencies=[Depends(get_current_user)])
+app.include_router(medication_intake_api.router)   # JSON API: each endpoint depends on get_current_user itself so an unauthenticated call gets 401, not a login redirect
 app.include_router(admin_ros_import.router, dependencies=[Depends(get_current_user)])
 app.include_router(admin_ros.router, dependencies=[Depends(get_current_user)])
 app.include_router(admin_safety.router, dependencies=[Depends(get_current_user)])

@@ -31,12 +31,20 @@ class PatientMedication(Base):
     strength: Mapped[Optional[str]] = mapped_column(String(80))
     route: Mapped[Optional[str]] = mapped_column(String(40))
     frequency: Mapped[Optional[str]] = mapped_column(String(80))
-    eye: Mapped[Optional[str]] = mapped_column(String(2))                # OD / OS / OU for ocular medications
+    eye: Mapped[Optional[str]] = mapped_column(String(2))                # OD / OS / OU for ocular medications; PO = by mouth / systemic
     indication: Mapped[Optional[str]] = mapped_column(String(160))
     status: Mapped[str] = mapped_column(String(8), default="active")     # active | stopped
     start_date: Mapped[Optional[date]] = mapped_column(Date)
     stop_date: Mapped[Optional[date]] = mapped_column(Date)
     source: Mapped[str] = mapped_column(String(20), default="staff")     # staff | patient | imported
+    # Catalog link from the guided intake (all NULL for older rows and custom entries). The text columns above stay the
+    # record of what was entered; these only say which catalog rows were picked. SET NULL so removing a catalog row never
+    # touches a patient's history.
+    drug_id: Mapped[Optional[int]] = mapped_column(ForeignKey("drug_catalog.id", ondelete="SET NULL"))
+    dosage_id: Mapped[Optional[int]] = mapped_column(ForeignKey("drug_dosages.id", ondelete="SET NULL"))
+    frequency_id: Mapped[Optional[int]] = mapped_column(ForeignKey("drug_frequencies.id", ondelete="SET NULL"))
+    drug_rxcui: Mapped[Optional[str]] = mapped_column(String(20))        # RxNorm id copied at entry time
+    is_custom: Mapped[bool] = mapped_column(Boolean, default=False)      # True when typed free-text rather than picked from the catalog
     note: Mapped[Optional[str]] = mapped_column(String(255))
     recorded_by_user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"))
     recorded_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

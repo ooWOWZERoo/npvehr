@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}PCP Letter &mdash; New Path Vision EHR{% endblock %}
 {% block content %}
+<style>@media print { .sidebar, .topbar { display: none !important; } .main-col { display: block; } }</style>
 <div class="page-header no-print"><div><span class="page-eyebrow">Care coordination</span><h1>Letter to the Managing Physician
   <span class="badge {{ 'badge-completed' if c.status == 'sent' else 'badge-scheduled' }}" style="vertical-align:middle">{{ c.status|title }}</span></h1>
   <p class="page-lede">{{ patient.last_name }}, {{ patient.first_name }} &mdash; exam {{ exam.exam_date if exam else '' }}</p></div>
@@ -10,6 +11,7 @@
 <div class="card"><h3>Documented exclusion</h3><p>No letter was sent: <strong>{{ c.exclusion_reason|replace('_', ' ')|capitalize }}</strong>{% if c.exclusion_note %} &mdash; {{ c.exclusion_note }}{% endif %}.</p></div>
 {% else %}
 <div class="card" id="letterBody">
+  <img class="letterhead print-only" src="/static/img/npv-logo-on-light.png" width="900" height="204" alt="New Path Vision">
   {% if c.recipient_snapshot %}<p class="muted" style="font-size:0.85rem">To: {{ c.recipient_snapshot }}</p>{% endif %}
   <div style="white-space:pre-wrap;font-family:inherit">{{ c.body_snapshot }}</div>
 </div>

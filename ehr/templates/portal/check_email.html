@@ -8,7 +8,10 @@
     try { if (localStorage.getItem("npv-theme") === "dark") document.documentElement.setAttribute("data-theme", "dark"); } catch (e) {}
   </script>
   <title>Check Your Email &mdash; New Path Vision EHR</title>
-  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+  <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="/static/favicon-192.png">
+  <link rel="shortcut icon" href="/static/favicon.ico">
+  <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@600;700;800&display=swap">
@@ -28,7 +31,9 @@
 </head>
 <body class="login-body">
   <div class="login-card">
-    <span class="login-brand-text">New Path Vision &mdash; Patient Portal</span>
+    <img class="brand-logo brand-logo-light-theme portal-card-logo" src="/static/img/npv-logo-on-light.png" width="900" height="204" alt="New Path Vision">
+    <img class="brand-logo brand-logo-dark-theme portal-card-logo" src="/static/img/npv-logo-on-dark.png" width="900" height="207" alt="" aria-hidden="true">
+    <span class="portal-card-label">Patient Portal</span>
     <h1 style="font-size:1.2rem">Check your email</h1>
     {% if registered %}
     <p style="color:var(--ink-muted);font-size:0.85rem">We've sent a one-time sign-in link to confirm your email and finish creating your account. It expires in 15 minutes.</p>

@@ -1702,6 +1702,48 @@ def migration_058_recall_status(conn):
     conn.execute(text("UPDATE patient_recalls SET status = 'open' WHERE status IS NULL"))
 
 
+
+def migration_060_medication_catalog_columns(conn):
+    """Nullable catalog links on patient_medications for the guided medication intake: drug_id / dosage_id / frequency_id
+    (real FKs to the new drug_catalog / drug_dosages / drug_frequencies tables, ON DELETE SET NULL so catalog edits never
+    touch a patient's history), drug_rxcui (id copied at entry) and is_custom (free-text entry). Existing rows keep all
+    link columns NULL and is_custom FALSE -- their name/strength/frequency text is untouched. Post-create_all so the
+    referenced tables exist (Postgres rejects a FK to a missing table). Idempotent."""
+    if not _table_exists(conn, "patient_medications") or not _table_exists(conn, "drug_catalog"):
+        return  # brand-new database: create_all() builds the table with these columns.
+    _add_column_if_missing(conn, "patient_medications", "drug_id", "INTEGER REFERENCES drug_catalog(id) ON DELETE SET NULL")
+    _add_column_if_missing(conn, "patient_medications", "dosage_id", "INTEGER REFERENCES drug_dosages(id) ON DELETE SET NULL")
+    _add_column_if_missing(conn, "patient_medications", "frequency_id", "INTEGER REFERENCES drug_frequencies(id) ON DELETE SET NULL")
+    _add_column_if_missing(conn, "patient_medications", "drug_rxcui", "VARCHAR(20)")
+    _add_column_if_missing(conn, "patient_medications", "is_custom", "BOOLEAN DEFAULT FALSE")
+    conn.execute(text("UPDATE patient_medications SET is_custom = FALSE WHERE is_custom IS NULL"))
+
+
+# Starting pick list for the intake's Frequency dropdown (practice-editable data, not clinical content: plain dosing-interval
+# wording). Grouped by the route a drug is usually given by; 'any' rows are offered for every route.
+_FREQUENCY_SEED = [
+    ("ophthalmic", ["Once daily", "Twice daily (BID)", "Three times daily (TID)", "Four times daily (QID)", "At bedtime (QHS)",
+                    "Every morning (QAM)", "Every hour while awake", "Every 2 hours while awake", "Every 4 hours", "Every 6 hours"]),
+    ("oral", ["Once daily", "Twice daily (BID)", "Three times daily (TID)", "Four times daily (QID)", "At bedtime (QHS)",
+              "Every morning (QAM)", "Every 4-6 hours as needed", "With meals"]),
+    ("topical", ["Once daily", "Twice daily (BID)", "Three times daily (TID)", "Four times daily (QID)", "At bedtime (QHS)"]),
+    ("any", ["As needed (PRN)", "Weekly", "Every other day", "Monthly"]),
+]
+
+
+def migration_061_seed_drug_frequencies(conn):
+    """Seeds the Frequency pick list. Idempotent: a (route_group, label) is only inserted when absent, so administrators'
+    later edits and additions are never overwritten or duplicated."""
+    if not _table_exists(conn, "drug_frequencies"):
+        return
+    for group, labels in _FREQUENCY_SEED:
+        for order, label in enumerate(labels, start=1):
+            exists = conn.execute(text("SELECT 1 FROM drug_frequencies WHERE route_group = :g AND label = :l"),
+                                  {"g": group, "l": label}).first()
+            if not exists:
+                conn.execute(text("INSERT INTO drug_frequencies (route_group, label, sort_order, is_active) "
+                                  "VALUES (:g, :l, :o, :a)"), {"g": group, "l": label, "o": order, "a": True})
+
 # Ordered list of (id, function). Adding new migrations: append, never edit past entries.
 COLUMN_MIGRATIONS = [
     ("001_appointment_columns", migration_001_appointment_columns),
@@ -1857,6 +1899,8 @@ POST_CREATE_ALL_MIGRATIONS = [
     ("055_seed_ros_catalog", migration_055_seed_ros_catalog),
     ("056_seed_safety_flag_types", migration_056_seed_safety_flag_types),
     ("057_seed_pcp_letter_template", migration_057_seed_pcp_letter_template),
+    ("060_medication_catalog_columns", migration_060_medication_catalog_columns),
+    ("061_seed_drug_frequencies", migration_061_seed_drug_frequencies),
 ]
 
 # ---------------------------------------------------------------------------
@@ -1923,6 +1967,8 @@ def down_059_dilated_exam(conn):
         for col in ("dilated_exam_performed", "dilation_note"):
             conn.execute(text(f"ALTER TABLE eye_exams DROP COLUMN {col}"))
 
+# 060_medication_catalog_columns deliberately has no down-migration: its columns are nullable foreign keys, which SQLite
+# cannot drop, and old code simply ignores them, so rolling the code back needs no schema change.
 # Sparse by design -- see this section's own docstring above. Extend this
 # alongside any new migration that a reviewer has actually confirmed is safe
 # to reverse (a plain ADD COLUMN or CREATE TABLE with no data-seeding and

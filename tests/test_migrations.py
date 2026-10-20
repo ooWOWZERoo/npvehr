@@ -329,3 +329,32 @@ def test_dilated_exam_columns_are_added_to_an_existing_eye_exams_table_and_rerun
     with fresh_engine.connect() as conn:
         row = conn.execute(text("SELECT dilated_exam_performed, dilation_note FROM eye_exams")).one()
         assert tuple(row) == (None, None)
+
+
+def test_medication_catalog_columns_and_frequency_seed_are_safe_on_existing_data_and_rerun(fresh_engine):
+    """Migrations 060/061: an old patient_medications table gains five nullable/defaulted columns without touching its rows,
+    the frequency pick list seeds once, and a re-run (or an administrator's own row) is never duplicated or overwritten."""
+    Base.metadata.create_all(fresh_engine, tables=[t for n, t in Base.metadata.tables.items() if n in ("drug_catalog", "drug_dosages", "drug_frequencies")])
+    with fresh_engine.begin() as conn:
+        conn.execute(text("CREATE TABLE patient_medications (id INTEGER PRIMARY KEY, patient_id INTEGER, name VARCHAR(160), strength VARCHAR(80), frequency VARCHAR(80), eye VARCHAR(2))"))
+        conn.execute(text("INSERT INTO patient_medications (patient_id, name, strength, frequency, eye) VALUES (1, 'Old free-text drug', '5 mg', 'daily', 'OU')"))
+    for _ in range(2):
+        with fresh_engine.begin() as conn:
+            mig.migration_060_medication_catalog_columns(conn)
+    with fresh_engine.connect() as conn:
+        row = conn.execute(text("SELECT name, strength, frequency, eye, drug_id, dosage_id, frequency_id, drug_rxcui, is_custom FROM patient_medications")).one()
+        assert tuple(row) == ("Old free-text drug", "5 mg", "daily", "OU", None, None, None, None, 0)
+    with fresh_engine.begin() as conn:                                        # a real FK: a bad catalog id is rejected, not stored
+        conn.execute(text("PRAGMA foreign_keys=ON"))
+        with pytest.raises(Exception):
+            conn.execute(text("UPDATE patient_medications SET drug_id = 424242"))
+
+    with fresh_engine.begin() as conn:
+        conn.execute(text("INSERT INTO drug_frequencies (route_group, label, sort_order, is_active) VALUES ('oral', 'Our own wording', 1, 1)"))
+        mig.migration_061_seed_drug_frequencies(conn)
+        mig.migration_061_seed_drug_frequencies(conn)
+    with fresh_engine.connect() as conn:
+        n = conn.execute(text("SELECT COUNT(*) FROM drug_frequencies")).scalar()
+        assert conn.execute(text("SELECT COUNT(*) FROM (SELECT route_group, label FROM drug_frequencies GROUP BY 1, 2 HAVING COUNT(*) > 1)")).scalar() == 0
+        assert conn.execute(text("SELECT COUNT(*) FROM drug_frequencies WHERE label = 'Our own wording'")).scalar() == 1
+    assert n > 20

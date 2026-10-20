@@ -1621,6 +1621,7 @@ from ehr.models import safety as _safety  # noqa: E402,F401  (registers the safe
 
 from ehr.models import imports as _imports  # noqa: E402,F401  (registers the import-batch and recall tables on Base)
 
+from ehr.models import drug_catalog as _drug_catalog  # noqa: E402,F401  (registers the drug catalog tables on Base; patient_medications references them)
 from ehr.models import medications as _medications  # noqa: E402,F401  (registers the medication/allergy/class tables on Base)
 
 from ehr.models import care_coordination as _care_coordination  # noqa: E402,F401  (registers the PCP-letter tables on Base)

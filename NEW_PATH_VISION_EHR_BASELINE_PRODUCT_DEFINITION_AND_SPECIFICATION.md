@@ -5515,3 +5515,96 @@ Screenshots of the running app in light, dark, collapsed-sidebar and mobile layo
 | --- | --- |
 | Static assets | Three transparent logo PNGs added. |
 | Sidebar / login | Placeholder mark replaced by the supplied logo, with dark-theme and collapsed variants. |
+
+## 124. Favicon from the Eye Mark (v2.97)
+
+### 124.1 Request
+
+Use the eye mark from the supplied logo as the browser-tab icon, replacing the old placeholder.
+
+### 124.2 What was built
+
+* The eye mark sits on a dark-green rounded square, so it stays visible on both light and dark browser tabs (the mark itself is cream and would vanish on a light tab).
+* Files in `ehr/static/`: `favicon-32.png`, `favicon-192.png`, `favicon.ico` (16/32/48), and `apple-touch-icon.png` (180px, square, for iOS home-screen shortcuts). The old placeholder `favicon.svg` is removed.
+* All seven page templates that declared an icon (staff app, login, patient portal pages, prescription print) now point at the new files.
+
+### 124.3 Limits
+
+Raster icons only, so there is no scalable SVG version. The logo is still not on the patient portal pages or the printed prescription/letter headers.
+
+### 124.4 Verified
+
+Previewed the icon at 192px, 32px and on a dark tab strip; the full end-to-end suite, plus a test that each declared icon file is served.
+
+**Version 2.97 change log (relative to v2.96):**
+
+| Area | Change |
+| --- | --- |
+| Static assets | Eye-mark favicon (PNG, ICO, Apple touch icon); placeholder SVG removed. |
+| Templates | Seven templates point at the new icons. |
+
+## 125. Logo on the Patient Portal and Printed Headers (v2.98)
+
+### 125.1 Request
+
+Carry the New Path Vision logo onto the patient portal and the printed headers, and show how to reach the portal.
+
+### 125.2 What was built
+
+* **Patient portal**: the signed-in top bar shows the logo (linking to the portal home) beside a "Patient Portal" label; the sign-in, create-account and check-your-email cards show the logo above the same label. Light theme uses the tagline logo and dark theme the cream wordmark, switching with the theme toggle. It wraps cleanly on a phone.
+* **Prescription print page**: the text title is replaced by the logo above the prescription type.
+* **PCP letter**: a print-only letterhead logo appears at the top of the letter when printed (not on screen, where the page header already identifies it). Printing this page also hides the staff sidebar and top bar, which previously printed alongside the letter.
+* Shared CSS classes in `app.css` (`brand-logo-*`, `print-only`) so a future printed document can reuse them.
+
+### 125.3 Reaching the portal
+
+The portal is at `/portal/login` (staff sign-in is `/login`). A patient enters the email on file; in any environment not labelled production the "check your email" page shows the one-time sign-in link directly, because no email vendor is wired (§Phase 3). The demo patients (e.g. `alice@example.com`) work on a seeded database. In production the link is not displayed, so portal sign-in there needs the email vendor first.
+
+### 125.4 Limits
+
+No other printed documents exist yet (no statements or receipts). Pre-existing, unchanged: wide tables on the portal home can overflow on a very narrow phone.
+
+### 125.5 Verified
+
+Screenshots of the running app (portal sign-in, home in light, dark and mobile, and the Rx print page); an end-to-end test that the portal pages and the Rx print page carry the logo; the full suite.
+
+**Version 2.98 change log (relative to v2.97):**
+
+| Area | Change |
+| --- | --- |
+| Patient portal | Logo (theme-paired) in the top bar and on the sign-in, register and check-email cards. |
+| Printing | Logo on the Rx print page; print-only letterhead on the PCP letter, app chrome hidden when printing it. |
+| CSS | Shared `brand-logo-*` and `print-only` classes. |
+
+## 126. Guided Medication Intake (v2.99)
+
+### 126.1 Request
+
+A reactive intake for clinical technicians: an autocomplete Medication field (300 ms debounce, from 3 characters), then Dosage, then Frequency, plus an Eye modifier (OU/OD/OS/PO, forced to PO for oral drugs), and an "Add Custom" escape hatch that turns Dosage and Frequency into free text. Powered by explicit REST endpoints that the page itself consumes, with safe migrations supporting both relational keys and free-text fallback.
+
+### 126.2 What was built
+
+* **Catalog tables**: `drug_catalog`, `drug_dosages`, `drug_frequencies` (design doc §9). Frequencies are seeded with plain dosing wording grouped by route; the app ships **no drug data**.
+* **Patient medication history**: `patient_medications` gains nullable `drug_id`, `dosage_id`, `frequency_id` (FKs, `ON DELETE SET NULL`), `drug_rxcui` and `is_custom` (migration 060, applied after `create_all`; 061 seeds frequencies). Existing rows are untouched; the name/strength/frequency text is always stored too, so a custom entry or a later catalog edit never changes history. The eye column now also accepts **PO** (by mouth / systemic).
+* **REST API** (`/api/v1`): drug search, dosages, frequencies, and add-medication, with 401 JSON for signed-out callers, CSRF via `X-CSRF-Token` on writes, role and record-level checks, and server-side enforcement of every rule (min 3 characters; dosage must belong to the drug; oral => PO; PO refused for eye/topical drugs).
+* **UI**: the Medications tab's Add form is replaced by the combobox chain (keyboard navigable, ARIA combobox roles, theme-aware). Shared `NPV.debounce` and `NPV.api` helpers added to `app.js`. The edit form gains the PO option.
+* Add Custom stays available at all times; custom entries record `is_custom` and leave the relational keys NULL.
+
+### 126.3 Not built / limits
+
+* **The RxNorm loader.** RxNorm was chosen as the catalog source, but the NLM service is blocked from the development environment's network, so the loader has not been written or checked against the live API. Until it runs, the catalog is empty and technicians use Add Custom. It will send only drug-name search text, and copy results into the local tables.
+* No admin screen yet for manual catalog entries or the frequency list; editing an existing medication is still the free-text form; safety rules still match on the medication name text.
+
+### 126.4 Verified
+
+Migration test (060 on an old table leaves rows intact with NULL links, real FK enforced, rerun-safe; 061 seeds once and never duplicates or overwrites an administrator's row); an API contract test (401, min length, wildcards literal, dosage chaining, preferred frequencies, CSRF, oral forced to PO, PO refused for an eye drop, wrong-drug dosage refused, custom entry NULL keys, patient scope); an end-to-end component test (no request under 3 characters, one request after the debounce, locked-until-chosen chain, name edit resets, oral locks PO, no-dosage drug falls back to custom, Add Custom row always present); three older tests moved to the new form. Full suite green (196).
+
+**Version 2.99 change log (relative to v2.98):**
+
+| Area | Change |
+| --- | --- |
+| Schema | Three catalog tables; five nullable/defaulted columns on patient_medications (migrations 060, 061). |
+| API | `/api/v1` drug search, dosages, frequencies, add-medication. |
+| UI | Guided medication intake replaces the Add form; PO eye option. |
+| Not yet | RxNorm loader; admin catalog screen. |
+

@@ -37,7 +37,7 @@
             <label class="fld">Medication* <input name="name" required maxlength="160" value="{{ m.name }}"></label>
             <label class="fld">Strength <input name="strength" maxlength="80" value="{{ m.strength or '' }}"></label>
             <label class="fld">Route <input name="route" maxlength="40" value="{{ m.route or '' }}"></label>
-            <label class="fld">Eye <select name="eye"><option value="">&mdash;</option>{% for e in ('OD','OS','OU') %}<option {{ 'selected' if m.eye == e }}>{{ e }}</option>{% endfor %}</select></label>
+            <label class="fld">Eye <select name="eye"><option value="">&mdash;</option>{% for e in ('OD','OS','OU','PO') %}<option {{ 'selected' if m.eye == e }}>{{ e }}</option>{% endfor %}</select></label>
             <label class="fld">Frequency <input name="frequency" maxlength="80" value="{{ m.frequency or '' }}"></label>
             <label class="fld">For <input name="indication" maxlength="160" value="{{ m.indication or '' }}"></label>
             <label class="fld">Started <input type="date" name="start_date" value="{{ m.start_date or '' }}"></label>
@@ -52,23 +52,48 @@
   </tbody></table></div>
   {% else %}<div class="empty-state"><strong>No active medications recorded</strong>{% if med_review.state == 'never' %}Not reviewed yet &mdash; this does not mean the patient takes none.{% else %}Add one below if the patient starts something.{% endif %}</div>{% endif %}
   {% if can_edit_meds %}
-  <form method="post" action="/patients/{{ patient.id }}/medications/new" class="card form-card" style="margin-top:var(--space-4)"><h3>Add a medication</h3>
-    <div class="form-row cols-3">
-      <div class="form-group"><label>Medication* <input name="name" required maxlength="160" placeholder="e.g. Latanoprost 0.005%"></label></div>
-      <div class="form-group"><label>Strength <input name="strength" maxlength="80"></label></div>
-      <div class="form-group"><label>Route <input name="route" maxlength="40" placeholder="oral, topical, ophthalmic..."></label></div>
-    </div>
-    <div class="form-row cols-3">
-      <div class="form-group"><label>Eye <select name="eye"><option value="">&mdash;</option><option>OD</option><option>OS</option><option>OU</option></select></label></div>
-      <div class="form-group"><label>Frequency <input name="frequency" maxlength="80" placeholder="e.g. once nightly"></label></div>
-      <div class="form-group"><label>For <input name="indication" maxlength="160"></label></div>
+  <section class="card form-card med-intake" id="medIntake" data-patient-id="{{ patient.id }}" aria-labelledby="medIntakeTitle" style="margin-top:var(--space-4)">
+    <h3 id="medIntakeTitle">Add a medication</h3>
+    <p class="muted med-intake-help">Search by medication name (3+ characters), then choose a dosage and frequency. Not listed? Use <strong>Add Custom</strong> and type it in.</p>
+    <div class="alert alert-error med-intake-error" id="medIntakeError" role="alert" hidden></div>
+    <div class="form-row cols-2">
+      <div class="form-group med-combo">
+        <label for="medName">Medication*</label>
+        <div class="med-combo-field">
+          <input id="medName" type="text" role="combobox" aria-expanded="false" aria-controls="medNameList" aria-autocomplete="list" autocomplete="off" maxlength="160" placeholder="Start typing, e.g. latanoprost">
+          <ul class="med-combo-list" id="medNameList" role="listbox" aria-label="Matching medications" hidden></ul>
+        </div>
+        <div class="med-intake-status muted" id="medNameStatus" aria-live="polite"></div>
+      </div>
+      <div class="form-group"><label for="medEye">Eye*</label>
+        <select id="medEye" disabled>
+          <option value="">Choose&hellip;</option><option value="OU">OU &mdash; both eyes</option><option value="OD">OD &mdash; right eye</option>
+          <option value="OS">OS &mdash; left eye</option><option value="PO">PO &mdash; by mouth / systemic</option>
+        </select>
+        <div class="med-intake-status muted" id="medEyeNote"></div>
+      </div>
     </div>
     <div class="form-row cols-2">
-      <div class="form-group"><label>Started <input type="date" name="start_date"></label></div>
-      <div class="form-group"><label>Note <input name="note" maxlength="255"></label></div>
+      <div class="form-group"><label for="medDosage">Dosage*</label>
+        <select id="medDosage" disabled><option value="">Choose a medication first</option></select>
+        <input id="medDosageText" type="text" maxlength="80" placeholder="e.g. 0.005% one drop" hidden>
+        <div class="med-intake-status muted" id="medDosageNote"></div>
+      </div>
+      <div class="form-group"><label for="medFreq">Frequency*</label>
+        <select id="medFreq" disabled><option value="">Choose a dosage first</option></select>
+        <input id="medFreqText" type="text" maxlength="80" placeholder="e.g. once nightly" hidden>
+      </div>
     </div>
-    <button type="submit" class="btn btn-primary">Add medication</button>
-  </form>
+    <div class="form-row cols-3">
+      <div class="form-group"><label for="medIndication">For</label><input id="medIndication" maxlength="160"></div>
+      <div class="form-group"><label for="medStart">Started</label><input id="medStart" type="date"></div>
+      <div class="form-group"><label for="medNote">Note</label><input id="medNote" maxlength="255"></div>
+    </div>
+    <div class="med-intake-actions">
+      <button type="button" class="btn btn-primary" id="medSubmit" disabled>Add medication</button>
+      <button type="button" class="btn btn-secondary" id="medBackToList" hidden>Search the catalog instead</button>
+    </div>
+  </section>
   {% endif %}
   {% if stopped_meds %}
   <details style="margin-top:var(--space-4)"><summary class="muted" style="cursor:pointer">Stopped medications ({{ stopped_meds|length }})</summary>
@@ -120,3 +145,4 @@
   {% endif %}
 </div>
 {% endblock %}
+{% block wextra_js %}{% if can_edit_meds %}<script src="/static/js/med_intake.js"></script>{% endif %}{% endblock %}
