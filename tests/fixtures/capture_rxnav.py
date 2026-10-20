@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from ehr.services import rxnorm  # noqa: E402
 
 NAMES = ["latanoprost", "xalatan", "dorzolamide / timolol", "warfarin", "timolol maleate", "cajuput oil", "zzzznotadrug"]
+BRANDS = ["coumadin", "cosopt", "zzzznotadrug"]      # exact-name brand lookups (coumadin is NOT in the display-name list)
 KEEP_IN_LIST = ["latanoprost", "xalatan", "dorzolamide / timolol", "warfarin", "timolol maleate", "cajuput oil", "prednisoLONE", "prednisoLONE acetate",
                 "metFORMIN", "lumigan", "(1,1-dimethylethyl)urea", "(-)-ambroxide"]
 recorded = {}
@@ -38,6 +39,8 @@ names = rxnorm.fetch_display_names()
 recorded["/Prescribe/displaynames.json"] = {"displayTermsList": {"term": [n for n in names if n in KEEP_IN_LIST]}}
 for n in NAMES:
     rxnorm.fetch_drug_detail(n)
+for brand in BRANDS:
+    rxnorm.fetch_brand_generics(brand)
 out = {"captured_from": "https://rxnav.nlm.nih.gov/REST", "captured_on": date.today().isoformat(), "rxnorm_version": version,
        "note": "Real RxNav responses, recorded by tests/fixtures/capture_rxnav.py. Only the displaynames list is trimmed.", "responses": recorded}
 Path(__file__).with_name("rxnav_captured.json").write_text(json.dumps(out, indent=1, sort_keys=True))

@@ -5180,3 +5180,25 @@ def test_eye_not_applicable_is_a_valid_choice_for_drugs_that_are_not_eye_medicat
     _add_custom_medication(page, "Zz hydrocortisone cream", eye="NA")
     row = page.locator("#medsSection tr", has_text="Zz hydrocortisone cream")
     assert row.count() == 1 and "N/A" in row.inner_text()
+
+
+def test_a_brand_name_finds_its_generic_in_the_intake(logged_in_page, live_server, rxnav_stub):
+    """Typing 'coumadin' (not in RxNorm's name list) offers warfarin, labelled with the brand, and records the generic."""
+    page = logged_in_page
+    api = page.request
+    found = api.get(f"{live_server}/api/v1/drugs/search?q=coumadin").json()["results"]
+    assert [(d["name"], d["via_brand"]) for d in found] == [("warfarin", "Coumadin")]
+    assert [(d["name"], d["via_brand"]) for d in api.get(f"{live_server}/api/v1/drugs/search?q=COUMAD").json()["results"]] == [("warfarin", "Coumadin")]   # cached: partial match now works
+    assert api.get(f"{live_server}/api/v1/drugs/search?q=zzzznotadrug").json()["results"] == []
+
+    pid = _named_patient_id(page, live_server, "Wilson", "David")
+    page.goto(f"{live_server}/patients/{pid}/medications")
+    page.fill("#medName", "jantoven")                                                  # a brand listed by name, resolved brands too
+    page.locator(".med-combo-custom").wait_for()
+    page.fill("#medName", "coumadin")
+    opt = page.locator(".med-combo-option", has_text="brand: Coumadin")
+    opt.wait_for()
+    assert "warfarin" in opt.inner_text()
+    opt.click()
+    assert page.locator("#medName").input_value() == "warfarin"
+    assert "Coumadin is a brand of warfarin" in page.locator("#medNameStatus").inner_text()

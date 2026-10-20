@@ -5,7 +5,7 @@
 All responses are JSON. Errors use FastAPI's {"detail": ...} shape: 401 not signed in, 403 role or CSRF, 404 unknown
 drug / patient outside the caller's access, 422 validation. Mutations need the session CSRF token in an X-CSRF-Token header.
 
-    GET  /api/v1/drugs/search?q=<text>              minimum 3 characters
+    GET  /api/v1/drugs/search?q=<text>              minimum 3 characters; matches names and brand aliases ("via_brand")
     GET  /api/v1/drugs/{drug_id}/dosages            first use of an RxNorm drug fetches its dosages (services/rxnorm.py); see "lookup"
     GET  /api/v1/drugs/{drug_id}/frequencies        drug's own route group first
     POST /api/v1/patients/{patient_id}/medications  add a medication (catalog pick or custom entry); MEDICATION_EDIT only
@@ -37,6 +37,7 @@ class DrugOut(BaseModel):
     route: Optional[str] = None
     route_group: Optional[str] = None
     is_oral: bool
+    via_brand: Optional[str] = None            # the brand name that found this generic (e.g. "Coumadin" -> warfarin)
 
 
 class DosageOut(BaseModel):
@@ -101,9 +102,10 @@ class MedicationOut(BaseModel):
     drug_id: Optional[int]
 
 
-def _drug_out(d) -> DrugOut:
+def _drug_out(hit) -> DrugOut:
+    d = hit.drug
     g = catalog.route_group(d.default_route)
-    return DrugOut(id=d.id, name=d.name, rxcui=d.rxcui, route=d.default_route, route_group=g, is_oral=g == "oral")
+    return DrugOut(id=d.id, name=d.name, rxcui=d.rxcui, route=d.default_route, route_group=g, is_oral=g == "oral", via_brand=hit.via)
 
 
 def _json(model: BaseModel, status_code=200):
@@ -120,7 +122,11 @@ def search_drugs(q: str = "", db: Session = Depends(get_db), user=Depends(get_cu
         rows = catalog.search(db, q)
     except ValueError as e:
         return _bad(str(e))
-    return _json(SearchOut(query=q.strip(), results=[_drug_out(d) for d in rows]))
+    if not rows:                                   # nothing local: maybe a brand name RxNorm can map to its generic
+        rows = rxnorm.brand_fallback(db, q)
+        if rows:
+            db.commit()
+    return _json(SearchOut(query=q.strip(), results=[_drug_out(h) for h in rows]))
 
 
 @router.get("/drugs/{drug_id}/dosages")

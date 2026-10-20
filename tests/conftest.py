@@ -177,5 +177,3 @@ def drug_catalog_seed(live_server):
     finally:
         con.close()
 
-
-

@@ -142,3 +142,65 @@ def test_two_names_that_map_to_one_rxnorm_concept_do_not_violate_the_unique_rxcu
         rxnorm._get = real
     assert a.rxcui == "43611" and b.rxcui is None                                                 # the second keeps NULL instead of failing
     assert db.query(DrugDosage).filter(DrugDosage.drug_id == b.id).count() == 2                    # but still gets its dosages
+
+
+# ---------------------------------------------------------------------------------------------- brand names -> generics
+from ehr.models.drug_catalog import DrugAlias  # noqa: E402
+from ehr.services import drug_catalog as catalog  # noqa: E402
+
+
+def test_resolving_an_ingredient_records_its_brands_and_a_brand_then_finds_the_generic(db):
+    rxnorm.load_display_names(db)
+    drug, _ = _labels(db, "warfarin")
+    assert rxnorm.ensure_resolved(db, drug) == "ok"
+    db.commit()
+    assert sorted(a.alias for a in db.query(DrugAlias).filter(DrugAlias.drug_id == drug.id)) == ["Coumadin", "Jantoven"]
+    hits = catalog.search(db, "COUMAD")
+    assert [(h.drug.name, h.via) for h in hits] == [("warfarin", "Coumadin")]
+    assert rxnorm.ensure_resolved(db, drug) == "local"                                  # aliases are not re-fetched either
+
+
+def test_a_brand_missing_from_the_name_list_is_looked_up_once_and_cached(db):
+    assert catalog.search(db, "coumadin") == []                                          # empty catalog: nothing local
+    hits = rxnorm.brand_fallback(db, "coumadin")
+    db.commit()
+    assert [(h.drug.name, h.via, h.drug.rxcui, h.drug.tty, h.drug.source) for h in hits] == [("warfarin", "Coumadin", "11289", "IN", "rxnorm")]
+    again = catalog.search(db, "coumadin")                                               # cached: now answered locally
+    assert [(h.drug.name, h.via) for h in again] == [("warfarin", "Coumadin")]
+    assert db.query(DrugCatalogEntry).filter(DrugCatalogEntry.name_lower == "warfarin").count() == 1
+
+
+def test_a_brand_fallback_reuses_an_existing_generic_row_instead_of_duplicating_it(db):
+    rxnorm.load_display_names(db)
+    db.commit()
+    before = db.query(DrugCatalogEntry).count()
+    hits = rxnorm.brand_fallback(db, "coumadin")
+    db.commit()
+    assert hits[0].drug.name == "warfarin" and db.query(DrugCatalogEntry).count() == before
+
+
+def test_a_combination_brand_maps_to_the_combination_not_each_ingredient(db):
+    hits = rxnorm.brand_fallback(db, "cosopt")
+    assert [h.drug.name for h in hits] == ["dorzolamide / timolol"] and hits[0].via == "Cosopt"
+
+
+def test_brand_fallback_returns_nothing_for_unknown_names_non_brands_and_outages(db, monkeypatch):
+    assert rxnorm.brand_fallback(db, "zzzznotadrug") == []                              # RxNorm has no such name
+    assert rxnorm.brand_fallback(db, "latanoprost") == []                               # known, but a generic, not a brand
+    monkeypatch.setattr(rxnorm, "_get", lambda path, params=None: (_ for _ in ()).throw(rxnorm.RxNavError("down")))
+    assert rxnorm.brand_fallback(db, "coumadin") == [] and db.query(DrugCatalogEntry).count() == 0
+
+
+def test_search_ranks_name_prefixes_before_alias_prefixes_and_lists_a_drug_once(db):
+    a = DrugCatalogEntry(name="warfarin", name_lower="warfarin", source="manual", is_active=True)
+    b = DrugCatalogEntry(name="Waroxin", name_lower="waroxin", source="manual", is_active=True)
+    c = DrugCatalogEntry(name="aspirin", name_lower="aspirin", source="manual", is_active=True)
+    db.add_all([a, b, c])
+    db.flush()
+    db.add_all([DrugAlias(drug_id=a.id, alias="Warlock", alias_lower="warlock"), DrugAlias(drug_id=c.id, alias="Warrior", alias_lower="warrior"),
+                DrugAlias(drug_id=a.id, alias="Warfarin Brand", alias_lower="warfarin brand")])
+    db.commit()
+    assert [(h.drug.name, h.via) for h in catalog.search(db, "war")] == [("warfarin", None), ("Waroxin", None), ("aspirin", "Warrior")]   # names first; warfarin once
+    with pytest.raises(ValueError):
+        catalog.search(db, "wa")
+    assert rxnorm.add_alias(db, a, "WARFARIN") is False and rxnorm.add_alias(db, a, "Warlock") is False and rxnorm.add_alias(db, a, "Newname") is True

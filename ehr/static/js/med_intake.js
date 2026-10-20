@@ -4,6 +4,7 @@
 //   * Medication: debounced 300 ms, searches only once 3+ characters are typed, stale responses are ignored.
 //   * Dosage unlocks after a medication is chosen; Frequency after a dosage; Eye as soon as a name exists.
 //   * An oral drug sets and locks the eye to PO; PO is not offered for a non-oral catalog drug.
+//   * A brand name finds its generic ("Coumadin" -> warfarin); the generic is what gets recorded.
 //   * "Add Custom" (always in the list) turns Dosage and Frequency into free-text inputs and records is_custom.
 (function () {
   "use strict";
@@ -51,7 +52,8 @@
       li.id = "medOpt" + i; li.setAttribute("role", "option"); li.setAttribute("aria-selected", "false");
       li.className = "med-combo-option";
       var nm = document.createElement("span"); nm.textContent = d.name; li.appendChild(nm);
-      if (d.route) { var r = document.createElement("small"); r.className = "muted"; r.textContent = " " + d.route; li.appendChild(r); }
+      if (d.via_brand) { var v = document.createElement("small"); v.className = "muted"; v.textContent = " \u2014 brand: " + d.via_brand; li.appendChild(v); }
+      else if (d.route) { var r = document.createElement("small"); r.className = "muted"; r.textContent = " " + d.route; li.appendChild(r); }
       li.addEventListener("mousedown", function (e) { e.preventDefault(); selectDrug(d); });
       el.list.appendChild(li); state.items.push({ drug: d });
     });
@@ -126,7 +128,8 @@
 
   function selectDrug(d) {
     state.drug = d; state.dosage = null; state.isCustom = false;
-    el.name.value = d.name; closeList(); el.nameStatus.textContent = ""; setError("");
+    el.name.value = d.name; closeList(); setError("");
+    el.nameStatus.textContent = d.via_brand ? d.via_brand + " is a brand of " + d.name + "." : "";
     fillSelect(el.freq, "Choose a dosage first");
     fillSelect(el.dosage, "Loading…");
     window.NPV.api("GET", "/api/v1/drugs/" + d.id + "/dosages").then(function (data) {

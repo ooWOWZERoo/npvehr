@@ -28,6 +28,20 @@
     ]
    }
   },
+  "/rxcui.json?name=cosopt&search=2": {
+   "idGroup": {
+    "rxnormId": [
+     "216253"
+    ]
+   }
+  },
+  "/rxcui.json?name=coumadin&search=2": {
+   "idGroup": {
+    "rxnormId": [
+     "202421"
+    ]
+   }
+  },
   "/rxcui.json?name=dorzolamide+%2F+timolol&search=2": {
    "idGroup": {
     "rxnormId": [
@@ -77,9 +91,32 @@
     "umlscui": ""
    }
   },
-  "/rxcui/11289/related.json?tty=SCD+SBD+DF": {
+  "/rxcui/11289/related.json?tty=SCD+SBD+DF+BN": {
    "relatedGroup": {
     "conceptGroup": [
+     {
+      "conceptProperties": [
+       {
+        "language": "ENG",
+        "name": "Coumadin",
+        "rxcui": "202421",
+        "suppress": "N",
+        "synonym": "",
+        "tty": "BN",
+        "umlscui": ""
+       },
+       {
+        "language": "ENG",
+        "name": "Jantoven",
+        "rxcui": "405155",
+        "suppress": "N",
+        "synonym": "",
+        "tty": "BN",
+        "umlscui": ""
+       }
+      ],
+      "tty": "BN"
+     },
      {
       "conceptProperties": [
        {
@@ -353,9 +390,12 @@
     "umlscui": ""
    }
   },
-  "/rxcui/1309211/related.json?tty=SCD+SBD+DF": {
+  "/rxcui/1309211/related.json?tty=SCD+SBD+DF+BN": {
    "relatedGroup": {
     "conceptGroup": [
+     {
+      "tty": "BN"
+     },
      {
       "tty": "DF"
      },
@@ -380,9 +420,23 @@
     "umlscui": ""
    }
   },
-  "/rxcui/153159/related.json?tty=SCD+SBD+DF": {
+  "/rxcui/153159/related.json?tty=SCD+SBD+DF+BN": {
    "relatedGroup": {
     "conceptGroup": [
+     {
+      "conceptProperties": [
+       {
+        "language": "ENG",
+        "name": "Xalatan",
+        "rxcui": "153159",
+        "suppress": "N",
+        "synonym": "",
+        "tty": "BN",
+        "umlscui": ""
+       }
+      ],
+      "tty": "BN"
+     },
      {
       "conceptProperties": [
        {
@@ -429,6 +483,96 @@
     "rxcui": null
    }
   },
+  "/rxcui/202421/properties.json": {
+   "properties": {
+    "language": "ENG",
+    "name": "Coumadin",
+    "rxcui": "202421",
+    "suppress": "N",
+    "synonym": "",
+    "tty": "BN",
+    "umlscui": ""
+   }
+  },
+  "/rxcui/202421/related.json?tty=IN+MIN": {
+   "relatedGroup": {
+    "conceptGroup": [
+     {
+      "conceptProperties": [
+       {
+        "language": "ENG",
+        "name": "warfarin",
+        "rxcui": "11289",
+        "suppress": "N",
+        "synonym": "",
+        "tty": "IN",
+        "umlscui": ""
+       }
+      ],
+      "tty": "IN"
+     },
+     {
+      "tty": "MIN"
+     }
+    ],
+    "rxcui": null
+   }
+  },
+  "/rxcui/216253/properties.json": {
+   "properties": {
+    "language": "ENG",
+    "name": "Cosopt",
+    "rxcui": "216253",
+    "suppress": "N",
+    "synonym": "",
+    "tty": "BN",
+    "umlscui": ""
+   }
+  },
+  "/rxcui/216253/related.json?tty=IN+MIN": {
+   "relatedGroup": {
+    "conceptGroup": [
+     {
+      "conceptProperties": [
+       {
+        "language": "ENG",
+        "name": "timolol",
+        "rxcui": "10600",
+        "suppress": "N",
+        "synonym": "",
+        "tty": "IN",
+        "umlscui": ""
+       },
+       {
+        "language": "ENG",
+        "name": "dorzolamide",
+        "rxcui": "60207",
+        "suppress": "N",
+        "synonym": "",
+        "tty": "IN",
+        "umlscui": ""
+       }
+      ],
+      "tty": "IN"
+     },
+     {
+      "conceptProperties": [
+       {
+        "language": "ENG",
+        "name": "dorzolamide / timolol",
+        "rxcui": "662263",
+        "suppress": "N",
+        "synonym": "",
+        "tty": "MIN",
+        "umlscui": ""
+       }
+      ],
+      "tty": "MIN"
+     }
+    ],
+    "rxcui": null
+   }
+  },
   "/rxcui/42933/properties.json": {
    "properties": {
     "language": "ENG",
@@ -440,9 +584,12 @@
     "umlscui": ""
    }
   },
-  "/rxcui/42933/related.json?tty=SCD+SBD+DF": {
+  "/rxcui/42933/related.json?tty=SCD+SBD+DF+BN": {
    "relatedGroup": {
     "conceptGroup": [
+     {
+      "tty": "BN"
+     },
      {
       "conceptProperties": [
        {
@@ -489,9 +636,50 @@
     "umlscui": ""
    }
   },
-  "/rxcui/43611/related.json?tty=SCD+SBD+DF": {
+  "/rxcui/43611/related.json?tty=SCD+SBD+DF+BN": {
    "relatedGroup": {
     "conceptGroup": [
+     {
+      "conceptProperties": [
+       {
+        "language": "ENG",
+        "name": "Xalatan",
+        "rxcui": "153159",
+        "suppress": "N",
+        "synonym": "",
+        "tty": "BN",
+        "umlscui": ""
+       },
+       {
+        "language": "ENG",
+        "name": "Xelpros",
+        "rxcui": "2056744",
+        "suppress": "N",
+        "synonym": "",
+        "tty": "BN",
+        "umlscui": ""
+       },
+       {
+        "language": "ENG",
+        "name": "Rocklatan",
+        "rxcui": "2119702",
+        "suppress": "N",
+        "synonym": "",
+        "tty": "BN",
+        "umlscui": ""
+       },
+       {
+        "language": "ENG",
+        "name": "Iyuzeh",
+        "rxcui": "2642280",
+        "suppress": "N",
+        "synonym": "",
+        "tty": "BN",
+        "umlscui": ""
+       }
+      ],
+      "tty": "BN"
+     },
      {
       "conceptProperties": [
        {
@@ -612,9 +800,23 @@
     "umlscui": ""
    }
   },
-  "/rxcui/662263/related.json?tty=SCD+SBD+DF": {
+  "/rxcui/662263/related.json?tty=SCD+SBD+DF+BN": {
    "relatedGroup": {
     "conceptGroup": [
+     {
+      "conceptProperties": [
+       {
+        "language": "ENG",
+        "name": "Cosopt",
+        "rxcui": "216253",
+        "suppress": "N",
+        "synonym": "",
+        "tty": "BN",
+        "umlscui": ""
+       }
+      ],
+      "tty": "BN"
+     },
      {
       "conceptProperties": [
        {
