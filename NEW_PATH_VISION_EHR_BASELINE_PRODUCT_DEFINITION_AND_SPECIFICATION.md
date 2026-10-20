@@ -5592,7 +5592,7 @@ A reactive intake for clinical technicians: an autocomplete Medication field (30
 
 ### 126.3 Not built / limits
 
-* **The RxNorm loader.** RxNorm was chosen as the catalog source, but the NLM service is blocked from the development environment's network, so the loader has not been written or checked against the live API. Until it runs, the catalog is empty and technicians use Add Custom. It will send only drug-name search text, and copy results into the local tables.
+* **The RxNorm loader** was not built in this round (the NLM service was blocked from the development network); it is §127.
 * No admin screen yet for manual catalog entries or the frequency list; editing an existing medication is still the free-text form; safety rules still match on the medication name text.
 
 ### 126.4 Verified
@@ -5607,4 +5607,39 @@ Migration test (060 on an old table leaves rows intact with NULL links, real FK 
 | API | `/api/v1` drug search, dosages, frequencies, add-medication. |
 | UI | Guided medication intake replaces the Add form; PO eye option. |
 | Not yet | RxNorm loader; admin catalog screen. |
+
+## 127. RxNorm Drug Catalog Loader (v3.00)
+
+### 127.1 Request
+
+Build the loader that fills the drug catalog from NLM RxNorm (the source the practice chose in §126), so the medication intake offers real drugs, strengths and routes.
+
+### 127.2 What was built
+
+* **Admin > Drug Catalog** (`/admin/drug-catalog`; System/Practice Administrator to load, auditors may view): one button copies RxNorm's published display-name list (~13,700 names, with tall-man lettering such as `prednisoLONE`) into the catalog. It only **adds** names (manual and resolved rows are never touched), skips bare chemical fragments, takes about a second, and writes an audit row each time (who, when, names added, RxNorm release, or the failure). The same load runs from the command line (`python -m ehr.services.rxnorm`).
+* **First-pick lookup**: the first time a technician picks an RxNorm name, that one drug's RxNorm id, strengths and dose forms are fetched (about 0.7 s), stored locally, and the route is derived from the dose form (so an oral drug forces PO). Later picks are local. An outage is explained on the form and **never cached**, so the next pick retries; Add Custom and manual dosage entry always remain.
+* **Dosage rules**: brand names list their branded products; ingredients and salts list only single-ingredient generics (combinations are their own names, e.g. "dorzolamide / timolol"); the ingredient is dropped from a label only when a strength follows it.
+* New table `drug_catalog_load_events`; new column `drug_catalog.resolved_at` (migration 062); new permission sets `DRUG_CATALOG_EDIT` / `DRUG_CATALOG_VIEW`. No new dependency (standard-library HTTP).
+* **What leaves the app**: the fixed name-list request and, per drug resolved, the picked drug *name*. Never patient data. `RXNAV_BASE_URL` can point elsewhere (the tests use a local stand-in).
+
+### 127.3 Verified against the real service
+
+Before and after writing it, the loader was run against the live RxNav API (2026-10-20, apiVersion 3.1.356) through the real app: the load added 13,613 of 13,688 names in 1.2 s; searches for latan/pred/timol/warf/brimon return sensible prefix-first lists; latanoprost, warfarin, acetazolamide and xalatan resolved in ~0.7 s each with correct strengths, correct oral/ophthalmic routing, and instant repeat picks. That testing caught one real defect (the "sodium 1 MG" label above), now fixed and pinned by a test.
+
+### 127.4 Tests
+
+The automated suite never touches the network. It runs the loader against a local stand-in that replays **real RxNav responses captured from the live service** (`tests/fixtures/rxnav_captured.json`, re-captured with `tests/fixtures/capture_rxnav.py`): unit tests for name filtering, the audit events (success, failure, re-run), every resolution outcome (ingredient, brand, combination, salt, no dosages, unknown name, outage, two names mapping to one concept), plus an end-to-end test of the admin screen, role denial, the intake and the outage path, and a migration test for 062. Full suite green (208).
+
+### 127.5 Limits
+
+No scheduled refresh (an administrator re-runs the load); no brand-to-generic equivalence ("coumadin" finds nothing unless RxNorm lists it; use the generic or Add Custom); no admin screen yet for manual catalog entries or the frequency list; safety rules still match medication name text.
+
+**Version 3.00 change log (relative to v2.99):**
+
+| Area | Change |
+| --- | --- |
+| Admin | Drug Catalog screen with a load button and audited load history. |
+| Service | `ehr/services/rxnorm.py`: name load, first-pick lookup, dosage rules. |
+| API | `/api/v1/drugs/{id}/dosages` resolves RxNorm drugs on first use and reports `lookup`. |
+| Schema | `drug_catalog_load_events` table; `drug_catalog.resolved_at` (migration 062). |
 

@@ -5,6 +5,7 @@
                          'manual' (entered by an administrator, `rxcui` NULL).
   * drug_dosages      -- the strengths/forms offered once a drug is chosen (one drug -> many dosages).
   * drug_frequencies  -- the practice's dosing-frequency pick list, grouped by route (ophthalmic / oral / topical / any).
+  * drug_catalog_load_events -- audit row for each RxNorm name load (ehr/services/rxnorm.py).
 
 A patient's medication row keeps its own copy of the name, strength and frequency text, so history stays readable if a
 catalog row is later edited or removed; the nullable drug_id / dosage_id / frequency_id on patient_medications only record
@@ -29,6 +30,9 @@ class DrugCatalogEntry(Base):
     tty: Mapped[Optional[str]] = mapped_column(String(10))                  # RxNorm term type: IN (ingredient) / BN (brand name)
     default_route: Mapped[Optional[str]] = mapped_column(String(40))        # e.g. 'ophthalmic', 'oral', 'topical'
     source: Mapped[str] = mapped_column(String(10), default="manual")       # rxnorm | manual
+    # RxNorm rows arrive as bare names (from the display-name list) and are resolved on first use: resolved_at is set once the
+    # drug's rxcui, route and dosages have been fetched (NULL = not yet tried, or the last try failed). Manual rows leave it NULL.
+    resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     dosages: Mapped[list["DrugDosage"]] = relationship(back_populates="drug", cascade="all, delete-orphan",
@@ -47,6 +51,21 @@ class DrugDosage(Base):
     route: Mapped[Optional[str]] = mapped_column(String(40))                # overrides the drug's default route when set
     drug: Mapped["DrugCatalogEntry"] = relationship(back_populates="dosages")
     __table_args__ = (UniqueConstraint("drug_id", "label", name="uq_drug_dosage_label"),)
+
+
+class DrugCatalogLoadEvent(Base):
+    """One row per attempt to load drug names from RxNorm (who, when, what came of it) -- accountability for the app's only
+    outbound data feed. user_id is NULL when run from the command line."""
+    __tablename__ = "drug_catalog_load_events"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"))
+    status: Mapped[str] = mapped_column(String(8))                          # ok | failed
+    names_in_source: Mapped[int] = mapped_column(default=0)
+    names_added: Mapped[int] = mapped_column(default=0)
+    rxnorm_version: Mapped[Optional[str]] = mapped_column(String(40))
+    error: Mapped[Optional[str]] = mapped_column(String(255))
+    loaded_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    __table_args__ = (CheckConstraint("status IN ('ok','failed')", name="ck_drug_load_status"),)
 
 
 class DrugFrequency(Base):

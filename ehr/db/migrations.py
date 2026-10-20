@@ -1744,6 +1744,14 @@ def migration_061_seed_drug_frequencies(conn):
                 conn.execute(text("INSERT INTO drug_frequencies (route_group, label, sort_order, is_active) "
                                   "VALUES (:g, :l, :o, :a)"), {"g": group, "l": label, "o": order, "a": True})
 
+
+def migration_062_drug_catalog_resolved_at(conn):
+    """drug_catalog.resolved_at: when an RxNorm drug's rxcui/route/dosages were fetched (NULL = not yet). Existing rows
+    (manual entries, or none) stay NULL, which for a manual row simply means nothing to resolve. Idempotent."""
+    if not _table_exists(conn, "drug_catalog"):
+        return  # brand-new database: create_all() builds the table with this column.
+    _add_column_if_missing(conn, "drug_catalog", "resolved_at", "TIMESTAMP")
+
 # Ordered list of (id, function). Adding new migrations: append, never edit past entries.
 COLUMN_MIGRATIONS = [
     ("001_appointment_columns", migration_001_appointment_columns),
@@ -1789,6 +1797,7 @@ COLUMN_MIGRATIONS = [
     ("048_ros_and_social_history", migration_048_ros_and_social_history),
     ("058_recall_status", migration_058_recall_status),
     ("059_dilated_exam", migration_059_dilated_exam),
+    ("062_drug_catalog_resolved_at", migration_062_drug_catalog_resolved_at),
 ]
 def migration_055_seed_ros_catalog(conn):
     """Review-of-Systems decision-support catalog (ros_master / ros_icd10_test_mapping

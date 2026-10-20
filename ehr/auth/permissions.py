@@ -165,6 +165,10 @@ def require_role(*allowed_roles):
         return user
     return _dep
 
+# Drug catalog administration (loading drug names from RxNorm): administrators change it, auditors may view.
+DRUG_CATALOG_EDIT = {SYSTEM_ADMINISTRATOR, PRACTICE_ADMINISTRATOR}
+DRUG_CATALOG_VIEW = DRUG_CATALOG_EDIT | {READ_ONLY_AUDITOR}
+
 # Patient medication and allergy lists: clinical staff who can edit an exam; class/term admin reuses the SAFETY_RULES_* sets.
 MEDICATION_EDIT = EXAM_EDIT
 

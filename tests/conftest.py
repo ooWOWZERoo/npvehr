@@ -13,12 +13,16 @@ finally block for the same reason. Playwright's own browser/context/page
 fixtures (session/test scoped respectively) are torn down by
 pytest-playwright itself; no extra handling is needed for those here.
 """
+import json
 import os
 import socket
 import subprocess
 import sys
 import tempfile
+import threading
 import time
+import urllib.parse
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import pytest
@@ -51,8 +55,57 @@ def _wait_for_port(proc: subprocess.Popen, port: int, timeout: float = 20.0):
     raise RuntimeError(f"Server on 127.0.0.1:{port} did not start within {timeout}s")
 
 
+RXNAV_FIXTURE = Path(__file__).resolve().parent / "fixtures" / "rxnav_captured.json"
+RXNAV_OUTAGE_NAME = "Zzoutage Test"      # the stand-in always answers 503 for this name (and for everything while /__fail?on=1)
+
+
 @pytest.fixture(scope="session")
-def live_server():
+def rxnav_stub():
+    """A local stand-in for NLM RxNav so the suite never touches the network. It replays REAL responses captured from the live
+    service (tests/fixtures/rxnav_captured.json, re-captured with tests/fixtures/capture_rxnav.py), keyed by the exact request
+    the loader makes; an unknown request is a 404. Failure injection: GET /__fail?on=1 makes every request 503 until on=0.
+    Yields the control base URL, e.g. http://127.0.0.1:PORT."""
+    captured = json.loads(RXNAV_FIXTURE.read_text())["responses"]
+    names = list(captured["/Prescribe/displaynames.json"]["displayTermsList"]["term"]) + [RXNAV_OUTAGE_NAME]
+    state = {"fail": False}
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass
+
+        def _send(self, code, payload):
+            body = json.dumps(payload).encode()
+            self.send_response(code)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def do_GET(self):
+            parsed = urllib.parse.urlsplit(self.path)
+            if parsed.path == "/__fail":
+                state["fail"] = urllib.parse.parse_qs(parsed.query).get("on") == ["1"]
+                return self._send(200, {"fail": state["fail"]})
+            key = parsed.path[len("/REST"):] + ("?" + parsed.query if parsed.query else "")
+            if state["fail"] or urllib.parse.unquote_plus(parsed.query).startswith(f"name={RXNAV_OUTAGE_NAME}"):
+                return self._send(503, {"error": "stand-in outage"})
+            if key == "/Prescribe/displaynames.json":
+                return self._send(200, {"displayTermsList": {"term": names}})
+            if key in captured:
+                return self._send(200, captured[key])
+            return self._send(404, {"error": "not captured: " + key})
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        yield f"http://127.0.0.1:{server.server_address[1]}"
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+@pytest.fixture(scope="session")
+def live_server(rxnav_stub):
     """Seeds a throwaway SQLite database and runs the app against it for the
     whole test session (one server, many tests -- faster than one per test,
     and this app's own migration/seed steps are already covered by being
@@ -62,7 +115,7 @@ def live_server():
         # CRON_SECRET fixed (rather than the random-per-process dev fallback) so
         # tests can exercise the reminder cron endpoint's own auth check.
         env = {**os.environ, "DATABASE_URL": f"sqlite:///{db_path}", "EHR_ENV": "test",
-               "CRON_SECRET": "test-cron-secret"}
+               "CRON_SECRET": "test-cron-secret", "RXNAV_BASE_URL": rxnav_stub + "/REST"}
 
         subprocess.run([sys.executable, "-m", "ehr.db.seed"], cwd=REPO_ROOT, env=env, check=True)
 
@@ -123,4 +176,5 @@ def drug_catalog_seed(live_server):
         return ids
     finally:
         con.close()
+
 

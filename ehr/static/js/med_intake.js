@@ -138,6 +138,10 @@
       el.dosage.disabled = !data.dosages.length;
       el.dosageNote.textContent = "";
       if (!data.dosages.length) {
+        var why = data.lookup === "unavailable" ? "RxNorm couldn\u2019t be reached just now \u2014 pick the drug again to retry, or "
+                : data.lookup === "not_found" ? "No strengths found for this name \u2014 "
+                : "No dosages on file \u2014 ";
+        el.dosageNote.appendChild(document.createTextNode(why));
         var b = document.createElement("button");
         b.type = "button"; b.className = "btn btn-sm btn-secondary"; b.textContent = "Enter dosage manually";
         b.addEventListener("click", function () { enterCustom(d.name); });

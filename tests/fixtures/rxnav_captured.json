@@ -1,0 +1,688 @@
+{
+ "captured_from": "https://rxnav.nlm.nih.gov/REST",
+ "captured_on": "2026-10-20",
+ "note": "Real RxNav responses, recorded by tests/fixtures/capture_rxnav.py. Only the displaynames list is trimmed.",
+ "responses": {
+  "/Prescribe/displaynames.json": {
+   "displayTermsList": {
+    "term": [
+     "(-)-ambroxide",
+     "(1,1-dimethylethyl)urea",
+     "cajuput oil",
+     "dorzolamide / timolol",
+     "latanoprost",
+     "lumigan",
+     "metFORMIN",
+     "prednisoLONE",
+     "prednisoLONE acetate",
+     "timolol maleate",
+     "warfarin",
+     "xalatan"
+    ]
+   }
+  },
+  "/rxcui.json?name=cajuput+oil&search=2": {
+   "idGroup": {
+    "rxnormId": [
+     "1309211"
+    ]
+   }
+  },
+  "/rxcui.json?name=dorzolamide+%2F+timolol&search=2": {
+   "idGroup": {
+    "rxnormId": [
+     "662263"
+    ]
+   }
+  },
+  "/rxcui.json?name=latanoprost&search=2": {
+   "idGroup": {
+    "rxnormId": [
+     "43611"
+    ]
+   }
+  },
+  "/rxcui.json?name=timolol+maleate&search=2": {
+   "idGroup": {
+    "rxnormId": [
+     "42933"
+    ]
+   }
+  },
+  "/rxcui.json?name=warfarin&search=2": {
+   "idGroup": {
+    "rxnormId": [
+     "11289"
+    ]
+   }
+  },
+  "/rxcui.json?name=xalatan&search=2": {
+   "idGroup": {
+    "rxnormId": [
+     "153159"
+    ]
+   }
+  },
+  "/rxcui.json?name=zzzznotadrug&search=2": {
+   "idGroup": {}
+  },
+  "/rxcui/11289/properties.json": {
+   "properties": {
+    "language": "ENG",
+    "name": "warfarin",
+    "rxcui": "11289",
+    "suppress": "N",
+    "synonym": "",
+    "tty": "IN",
+    "umlscui": ""
+   }
+  },
+  "/rxcui/11289/related.json?tty=SCD+SBD+DF": {
+   "relatedGroup": {
+    "conceptGroup": [
+     {
+      "conceptProperties": [
+       {
+        "language": "ENG",
+        "name": "Oral Tablet",
+        "rxcui": "317541",
+        "suppress": "N",
+        "synonym": "",
+        "tty": "DF",
+        "umlscui": ""
+       }
+      ],
+      "tty": "DF"
+     },
+     {
+      "conceptProperties": [
+       {
+        "language": "ENG",
+        "name": "warfarin sodium 1 MG Oral Tablet [Coumadin]",
+        "rxcui": "855290",
+        "suppress": "N",
+        "synonym": "Coumadin 1 MG Oral Tablet",
+        "tty": "SBD",
+        "umlscui": ""
+       },
+       {
+        "language": "ENG",
+        "name": "warfarin sodium 1 MG Oral Tablet [Jantoven]",
+        "rxcui": "855292",
+        "suppress": "N",
+        "synonym": "Jantoven 1 MG Oral Tablet",
+        "tty": "SBD",
+        "umlscui": ""
+       },
+       {
+        "language": "ENG",
+        "name": "warfarin sodium 10 MG Oral Tablet [Coumadin]",
+        "rxcui": "855298",
+        "suppress": "N",
+        "synonym": "Coumadin 10 MG Oral Tablet",
+        "tty": "SBD",
+        "umlscui": ""
+       },
+       {
+        "language": "ENG",
+        "name": "warfarin sodium 10 MG Oral Tablet [Jantoven]",
+        "rxcui": "855300",
+        "suppress": "N",
+        "synonym": "Jantoven 10 MG Oral Tablet",
+        "tty": "SBD",
+        "umlscui": ""
+       },
+       {
+        "language": "ENG",
+        "name": "warfarin sodium 2 MG Oral Tablet [Coumadin]",
+        "rxcui": "855304",
+        "suppress": "N",
+        "synonym": "Coumadin 2 MG Oral Tablet",
+        "tty": "SBD",
+        "umlscui": ""
+       },
+       {
+        "language": "ENG",
+        "name": "warfarin sodium 2 MG Oral Tablet [Jantoven]",
+        "rxcui": "855306",
+        "suppress": "N",
+        "synonym": "Jantoven 2 MG Oral Tablet",
+        "tty": "SBD",
+        "umlscui": ""
+       },
+       {
+        "language": "ENG",
+        "name": "warfarin sodium 2.5 MG Oral Tablet [Coumadin]",
+        "rxcui": "855314",
+        "suppress": "N",
+        "synonym": "Coumadin 2.5 MG Oral Tablet",
+        "tty": "SBD",
+        "umlscui": ""
+       },
+       {
+        "language": "ENG",
+        "name": "warfarin sodium 2.5 MG Oral Tablet [Jantoven]",
+        "rxcui": "855316",
+        "suppress": "N",
+        "synonym": "Jantoven 2.5 MG Oral Tablet",
+        "tty": "SBD",
+        "umlscui": ""
+       },
+       {
+        "language": "ENG",
+        "name": "warfarin sodium 3 MG Oral Tablet [Coumadin]",
+        "rxcui": "855320",
+        "suppress": "N",
+        "synonym": "Coumadin 3 MG Oral Tablet",
+        "tty": "SBD",
+        "umlscui": ""
+       },
+       {
+        "language": "ENG",
+        "name": "warfarin sodium 3 MG Oral Tablet [Jantoven]",
+        "rxcui": "855322",
+        "suppress": "N",
+        "synonym": "Jantoven 3 MG Oral Tablet",
+        "tty": "SBD",
+        "umlscui": ""
+       },
+       {
+        "language": "ENG",
+        "name": "warfarin sodium 4 MG Oral Tablet [Jantoven]",
+        "rxcui": "855328",
+        "suppress": "N",
+        "synonym": "Jantoven 4 MG Oral Tablet",
+        "tty": "SBD",
+        "umlscui": ""
+       },
+       {
+        "language": "ENG",
+        "name": "warfarin sodium 5 MG Oral Tablet [Coumadin]",
+        "rxcui": "855334",
+        "suppress": "N",
+        "synonym": "Coumadin 5 MG Oral Tablet",
+        "tty": "SBD",
+        "umlscui": ""
+       },
+       {
+        "language": "ENG",
+        "name": "warfarin sodium 5 MG Oral Tablet [Jantoven]",
+        "rxcui": "855336",
+        "suppress": "N",
+        "synonym": "Jantoven 5 MG Oral Tablet",
+        "tty": "SBD",
+        "umlscui": ""
+       },
+       {
+        "language": "ENG",
+        "name": "warfarin sodium 6 MG Oral Tablet [Coumadin]",
+        "rxcui": "855340",
+        "suppress": "N",
+        "synonym": "Coumadin 6 MG Oral Tablet",
+        "tty": "SBD",
+        "umlscui": ""
+       },
+       {
+        "language": "ENG",
+        "name": "warfarin sodium 6 MG Oral Tablet [Jantoven]",
+        "rxcui": "855342",
+        "suppress": "N",
+        "synonym": "Jantoven 6 MG Oral Tablet",
+        "tty": "SBD",
+        "umlscui": ""
+       },
+       {
+        "language": "ENG",
+        "name": "warfarin sodium 7.5 MG Oral Tablet [Jantoven]",
+        "rxcui": "855348",
+        "suppress": "N",
+        "synonym": "Jantoven 7.5 MG Oral Tablet",
+        "tty": "SBD",
+        "umlscui": ""
+       }
+      ],
+      "tty": "SBD"
+     },
+     {
+      "conceptProperties": [
+       {
+        "language": "ENG",
+        "name": "warfarin sodium 1 MG Oral Tablet",
+        "rxcui": "855288",
+        "suppress": "N",
+        "synonym": "",
+        "tty": "SCD",
+        "umlscui": ""
+       },
+       {
+        "language": "ENG",
+        "name": "warfarin sodium 10 MG Oral Tablet",
+        "rxcui": "855296",
+        "suppress": "N",
+        "synonym": "",
+        "tty": "SCD",
+        "umlscui": ""
+       },
+       {
+        "language": "ENG",
+        "name": "warfarin sodium 2 MG Oral Tablet",
+        "rxcui": "855302",
+        "suppress": "N",
+        "synonym": "",
+        "tty": "SCD",
+        "umlscui": ""
+       },
+       {
+        "language": "ENG",
+        "name": "warfarin sodium 2.5 MG Oral Tablet",
+        "rxcui": "855312",
+        "suppress": "N",
+        "synonym": "",
+        "tty": "SCD",
+        "umlscui": ""
+       },
+       {
+        "language": "ENG",
+        "name": "warfarin sodium 3 MG Oral Tablet",
+        "rxcui": "855318",
+        "suppress": "N",
+        "synonym": "",
+        "tty": "SCD",
+        "umlscui": ""
+       },
+       {
+        "language": "ENG",
+        "name": "warfarin sodium 4 MG Oral Tablet",
+        "rxcui": "855324",
+        "suppress": "N",
+        "synonym": "",
+        "tty": "SCD",
+        "umlscui": ""
+       },
+       {
+        "language": "ENG",
+        "name": "warfarin sodium 5 MG Oral Tablet",
+        "rxcui": "855332",
+        "suppress": "N",
+        "synonym": "",
+        "tty": "SCD",
+        "umlscui": ""
+       },
+       {
+        "language": "ENG",
+        "name": "warfarin sodium 6 MG Oral Tablet",
+        "rxcui": "855338",
+        "suppress": "N",
+        "synonym": "",
+        "tty": "SCD",
+        "umlscui": ""
+       },
+       {
+        "language": "ENG",
+        "name": "warfarin sodium 7.5 MG Oral Tablet",
+        "rxcui": "855344",
+        "suppress": "N",
+        "synonym": "",
+        "tty": "SCD",
+        "umlscui": ""
+       },
+       {
+        "language": "ENG",
+        "name": "warfarin sodium 0.5 MG Oral Tablet",
+        "rxcui": "855350",
+        "suppress": "N",
+        "synonym": "",
+        "tty": "SCD",
+        "umlscui": ""
+       }
+      ],
+      "tty": "SCD"
+     }
+    ],
+    "rxcui": null
+   }
+  },
+  "/rxcui/1309211/properties.json": {
+   "properties": {
+    "language": "ENG",
+    "name": "cajuput oil",
+    "rxcui": "1309211",
+    "suppress": "N",
+    "synonym": "",
+    "tty": "IN",
+    "umlscui": ""
+   }
+  },
+  "/rxcui/1309211/related.json?tty=SCD+SBD+DF": {
+   "relatedGroup": {
+    "conceptGroup": [
+     {
+      "tty": "DF"
+     },
+     {
+      "tty": "SBD"
+     },
+     {
+      "tty": "SCD"
+     }
+    ],
+    "rxcui": null
+   }
+  },
+  "/rxcui/153159/properties.json": {
+   "properties": {
+    "language": "ENG",
+    "name": "Xalatan",
+    "rxcui": "153159",
+    "suppress": "N",
+    "synonym": "",
+    "tty": "BN",
+    "umlscui": ""
+   }
+  },
+  "/rxcui/153159/related.json?tty=SCD+SBD+DF": {
+   "relatedGroup": {
+    "conceptGroup": [
+     {
+      "conceptProperties": [
+       {
+        "language": "ENG",
+        "name": "Ophthalmic Solution",
+        "rxcui": "7670",
+        "suppress": "N",
+        "synonym": "",
+        "tty": "DF",
+        "umlscui": ""
+       }
+      ],
+      "tty": "DF"
+     },
+     {
+      "conceptProperties": [
+       {
+        "language": "ENG",
+        "name": "latanoprost 0.05 MG/ML Ophthalmic Solution [Xalatan]",
+        "rxcui": "542527",
+        "suppress": "N",
+        "synonym": "Xalatan 0.005 % Ophthalmic Solution",
+        "tty": "SBD",
+        "umlscui": ""
+       }
+      ],
+      "tty": "SBD"
+     },
+     {
+      "conceptProperties": [
+       {
+        "language": "ENG",
+        "name": "latanoprost 0.05 MG/ML Ophthalmic Solution",
+        "rxcui": "314072",
+        "suppress": "N",
+        "synonym": "latanoprost 0.005 % Ophthalmic Solution",
+        "tty": "SCD",
+        "umlscui": ""
+       }
+      ],
+      "tty": "SCD"
+     }
+    ],
+    "rxcui": null
+   }
+  },
+  "/rxcui/42933/properties.json": {
+   "properties": {
+    "language": "ENG",
+    "name": "timolol maleate",
+    "rxcui": "42933",
+    "suppress": "N",
+    "synonym": "",
+    "tty": "PIN",
+    "umlscui": ""
+   }
+  },
+  "/rxcui/42933/related.json?tty=SCD+SBD+DF": {
+   "relatedGroup": {
+    "conceptGroup": [
+     {
+      "conceptProperties": [
+       {
+        "language": "ENG",
+        "name": "Oral Tablet",
+        "rxcui": "317541",
+        "suppress": "N",
+        "synonym": "",
+        "tty": "DF",
+        "umlscui": ""
+       }
+      ],
+      "tty": "DF"
+     },
+     {
+      "tty": "SBD"
+     },
+     {
+      "conceptProperties": [
+       {
+        "language": "ENG",
+        "name": "amiloride hydrochloride 2.5 MG / hydrochlorothiazide 25 MG / timolol maleate 10 MG Oral Tablet",
+        "rxcui": "977949",
+        "suppress": "N",
+        "synonym": "amiloride hydrochloride 2.5 MG / HCTZ 25 MG / timolol maleate 10 MG Oral Tablet",
+        "tty": "SCD",
+        "umlscui": ""
+       }
+      ],
+      "tty": "SCD"
+     }
+    ],
+    "rxcui": null
+   }
+  },
+  "/rxcui/43611/properties.json": {
+   "properties": {
+    "language": "ENG",
+    "name": "latanoprost",
+    "rxcui": "43611",
+    "suppress": "N",
+    "synonym": "",
+    "tty": "IN",
+    "umlscui": ""
+   }
+  },
+  "/rxcui/43611/related.json?tty=SCD+SBD+DF": {
+   "relatedGroup": {
+    "conceptGroup": [
+     {
+      "conceptProperties": [
+       {
+        "language": "ENG",
+        "name": "Ophthalmic Suspension",
+        "rxcui": "316964",
+        "suppress": "N",
+        "synonym": "",
+        "tty": "DF",
+        "umlscui": ""
+       },
+       {
+        "language": "ENG",
+        "name": "Ophthalmic Solution",
+        "rxcui": "7670",
+        "suppress": "N",
+        "synonym": "",
+        "tty": "DF",
+        "umlscui": ""
+       }
+      ],
+      "tty": "DF"
+     },
+     {
+      "conceptProperties": [
+       {
+        "language": "ENG",
+        "name": "latanoprost 0.05 MG/ML Ophthalmic Suspension [Xelpros]",
+        "rxcui": "2056748",
+        "suppress": "N",
+        "synonym": "Xelpros 0.05 MG/ML Ophthalmic Emulsion",
+        "tty": "SBD",
+        "umlscui": ""
+       },
+       {
+        "language": "ENG",
+        "name": "latanoprost 0.05 MG/ML / netarsudil 0.2 MG/ML Ophthalmic Solution [Rocklatan]",
+        "rxcui": "2119706",
+        "suppress": "N",
+        "synonym": "rocklatan (netarsudil 0.02 % / latanoprost 0.005 % ) Ophthalmic Solution",
+        "tty": "SBD",
+        "umlscui": ""
+       },
+       {
+        "language": "ENG",
+        "name": "latanoprost 0.05 MG/ML Ophthalmic Solution [Iyuzeh]",
+        "rxcui": "2642284",
+        "suppress": "N",
+        "synonym": "Iyuzeh 0.005 % Ophthalmic Solution",
+        "tty": "SBD",
+        "umlscui": ""
+       },
+       {
+        "language": "ENG",
+        "name": "latanoprost 0.05 MG/ML Ophthalmic Solution [Xalatan]",
+        "rxcui": "542527",
+        "suppress": "N",
+        "synonym": "Xalatan 0.005 % Ophthalmic Solution",
+        "tty": "SBD",
+        "umlscui": ""
+       }
+      ],
+      "tty": "SBD"
+     },
+     {
+      "conceptProperties": [
+       {
+        "language": "ENG",
+        "name": "latanoprost 0.05 MG/ML Ophthalmic Suspension",
+        "rxcui": "2056743",
+        "suppress": "N",
+        "synonym": "latanoprost 0.05 MG/ML Ophthalmic Emulsion",
+        "tty": "SCD",
+        "umlscui": ""
+       },
+       {
+        "language": "ENG",
+        "name": "latanoprost 0.05 MG/ML / netarsudil 0.2 MG/ML Ophthalmic Solution",
+        "rxcui": "2119701",
+        "suppress": "N",
+        "synonym": "latanoprost 0.005 % / netarsudil 0.02 % Ophthalmic Solution",
+        "tty": "SCD",
+        "umlscui": ""
+       },
+       {
+        "language": "ENG",
+        "name": "latanoprost 0.05 MG/ML Ophthalmic Solution",
+        "rxcui": "314072",
+        "suppress": "N",
+        "synonym": "latanoprost 0.005 % Ophthalmic Solution",
+        "tty": "SCD",
+        "umlscui": ""
+       },
+       {
+        "language": "ENG",
+        "name": "latanoprost 0.05 MG/ML / timolol 5 MG/ML Ophthalmic Solution",
+        "rxcui": "388054",
+        "suppress": "N",
+        "synonym": "latanoprost 0.005 % / timolol 0.5 % Ophthalmic Solution",
+        "tty": "SCD",
+        "umlscui": ""
+       }
+      ],
+      "tty": "SCD"
+     }
+    ],
+    "rxcui": null
+   }
+  },
+  "/rxcui/662263/properties.json": {
+   "properties": {
+    "language": "ENG",
+    "name": "dorzolamide / timolol",
+    "rxcui": "662263",
+    "suppress": "N",
+    "synonym": "",
+    "tty": "MIN",
+    "umlscui": ""
+   }
+  },
+  "/rxcui/662263/related.json?tty=SCD+SBD+DF": {
+   "relatedGroup": {
+    "conceptGroup": [
+     {
+      "conceptProperties": [
+       {
+        "language": "ENG",
+        "name": "Ophthalmic Solution",
+        "rxcui": "7670",
+        "suppress": "N",
+        "synonym": "",
+        "tty": "DF",
+        "umlscui": ""
+       }
+      ],
+      "tty": "DF"
+     },
+     {
+      "conceptProperties": [
+       {
+        "language": "ENG",
+        "name": "Preservative-Free dorzolamide 20 MG/ML / timolol 5 MG/ML Ophthalmic Solution [Cosopt]",
+        "rxcui": "1922784",
+        "suppress": "N",
+        "synonym": "Cosopt PF (dorzolamide 2 % / timolol 0.5 % ) Ophthalmic Solution",
+        "tty": "SBD",
+        "umlscui": ""
+       },
+       {
+        "language": "ENG",
+        "name": "dorzolamide 20 MG/ML / timolol 5 MG/ML Ophthalmic Solution [Cosopt]",
+        "rxcui": "1923433",
+        "suppress": "N",
+        "synonym": "Cosopt 2 % / 0.5 % Ophthalmic Solution",
+        "tty": "SBD",
+        "umlscui": ""
+       }
+      ],
+      "tty": "SBD"
+     },
+     {
+      "conceptProperties": [
+       {
+        "language": "ENG",
+        "name": "Preservative-Free dorzolamide 20 MG/ML / timolol 5 MG/ML Ophthalmic Solution",
+        "rxcui": "1922783",
+        "suppress": "N",
+        "synonym": "dorzolamide 2 % / timolol 0.5 % PF Ophthalmic Solution",
+        "tty": "SCD",
+        "umlscui": ""
+       },
+       {
+        "language": "ENG",
+        "name": "dorzolamide 20 MG/ML / timolol 5 MG/ML Ophthalmic Solution",
+        "rxcui": "1923432",
+        "suppress": "N",
+        "synonym": "dorzolamide 2 % / timolol 0.5 % Ophthalmic Solution",
+        "tty": "SCD",
+        "umlscui": ""
+       }
+      ],
+      "tty": "SCD"
+     }
+    ],
+    "rxcui": null
+   }
+  },
+  "/version.json": {
+   "apiVersion": "3.1.356",
+   "version": "05-Oct-2026"
+  }
+ },
+ "rxnorm_version": "05-Oct-2026"
+}
