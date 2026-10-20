@@ -4,7 +4,7 @@
 
 It runs the loader's own functions with the network layer wrapped to record each real response under the exact request
 the loader made, so the test stand-in (tests/conftest.py) answers precisely what RxNav answered. The display-name list is
-trimmed to the names below plus a few junk entries the loader must skip."""
+trimmed to the names below plus a few junk entries the loader must skip, and the brand list to KEEP_BRANDS."""
 import json
 import sys
 from datetime import date
@@ -15,7 +15,8 @@ from ehr.services import rxnorm  # noqa: E402
 
 NAMES = ["latanoprost", "xalatan", "dorzolamide / timolol", "warfarin", "timolol maleate", "cajuput oil", "zzzznotadrug"]
 BRANDS = ["coumadin", "cosopt", "zzzznotadrug"]      # exact-name brand lookups (coumadin is NOT in the display-name list)
-KEEP_IN_LIST = ["latanoprost", "xalatan", "dorzolamide / timolol", "warfarin", "timolol maleate", "cajuput oil", "prednisoLONE", "prednisoLONE acetate",
+KEEP_BRANDS = ["coumadin", "jantoven", "xalatan", "lasix", "tylenol", "cosopt", "lumigan"]   # the brand list is trimmed to these
+KEEP_IN_LIST = ["lasix", "tylenol", "furosemide", "acetaminophen", "latanoprost", "xalatan", "dorzolamide / timolol", "warfarin", "timolol maleate", "cajuput oil", "prednisoLONE", "prednisoLONE acetate",
                 "metFORMIN", "lumigan", "(1,1-dimethylethyl)urea", "(-)-ambroxide"]
 recorded = {}
 real_get = rxnorm._get
@@ -37,6 +38,11 @@ rxnorm._get = recording_get
 version = rxnorm.fetch_version()
 names = rxnorm.fetch_display_names()
 recorded["/Prescribe/displaynames.json"] = {"displayTermsList": {"term": [n for n in names if n in KEEP_IN_LIST]}}
+brands = rxnorm.fetch_brand_list()
+trimmed = [{"rxcui": r, "name": n, "tty": "BN"} for n, r in brands if n.lower() in KEEP_BRANDS]
+recorded["/allconcepts.json?tty=BN"] = {"minConceptGroup": {"minConcept": trimmed}}
+for c in trimmed:
+    rxnorm.fetch_generics_for_rxcui(c["rxcui"])               # each kept brand's generic(s), as the loader asks for them
 for n in NAMES:
     rxnorm.fetch_drug_detail(n)
 for brand in BRANDS:

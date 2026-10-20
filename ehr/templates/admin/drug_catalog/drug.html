@@ -3,7 +3,7 @@
 {% block content %}
 <div class="page-header"><div><span class="page-eyebrow">Administration &middot; Drug Catalog</span><h1>{{ drug.name }}
   <span class="badge {{ 'badge-completed' if drug.is_active else 'badge-cancelled' }}" style="vertical-align:middle">{{ 'Active' if drug.is_active else 'Inactive' }}</span></h1>
-  <p class="page-lede">{{ 'From RxNorm' if drug.source == 'rxnorm' else 'Added by hand' }}{% if drug.rxcui %} &middot; RxNorm id {{ drug.rxcui }}{% endif %}{% if drug.source == 'rxnorm' and not drug.resolved_at %} &middot; its strengths are fetched the first time someone picks it{% endif %}.</p></div>
+  <p class="page-lede">{{ 'From RxNorm' if drug.source == 'rxnorm' else 'Added by hand' }}{% if drug.tty == 'BN' %} &middot; a brand name (the medication form offers its generic instead once looked up){% endif %}{% if drug.rxcui %} &middot; RxNorm id {{ drug.rxcui }}{% endif %}{% if drug.source == 'rxnorm' and not drug.resolved_at %} &middot; its strengths are fetched the first time someone picks it{% endif %}.</p></div>
   <a href="/admin/drug-catalog/drugs" class="btn btn-secondary">Back to the list</a></div>
 {% set tab = 'drugs' %}{% include "admin/drug_catalog/_nav.html" %}
 <div class="card form-card" style="margin-bottom:var(--space-4)"><h3>Details</h3>

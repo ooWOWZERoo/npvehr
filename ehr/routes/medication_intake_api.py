@@ -141,13 +141,10 @@ def _bad(msg, status_code=422):
 @router.get("/drugs/search")
 def search_drugs(q: str = "", db: Session = Depends(get_db), user=Depends(get_current_user)):
     try:
-        rows = catalog.search(db, q)
+        rows = rxnorm.search(db, q)                # local catalog first; brands are mapped to their generics as they surface
     except ValueError as e:
         return _bad(str(e))
-    if not rows:                                   # nothing local: maybe a brand name RxNorm can map to its generic
-        rows = rxnorm.brand_fallback(db, q)
-        if rows:
-            db.commit()
+    db.commit()
     return _json(SearchOut(query=q.strip(), results=[_drug_out(h) for h in rows]))
 
 
