@@ -2,27 +2,28 @@
 
 Everything the medication intake combobox needs lives here, so routes stay thin and the UI never touches the database:
 
-    search(db, q)                  -> catalog rows matching what the technician typed (min 3 characters, prefix matches first)
+    search(db, q)                  -> Hit rows matching what the technician typed, by name or brand alias (min 3 characters, prefix matches first)
     dosages_for(db, drug)          -> that drug's dosages
     frequencies_for(db, drug)      -> the frequency pick list, the drug's own route group first
     resolve_selection(db, payload) -> validated, normalised values for a new patient medication, or ValueError(message)
 
 Route handling: a route string is reduced to one of ophthalmic / oral / topical (or None when unknown) by `route_group`.
 An ORAL drug always records eye = 'PO' (by mouth / systemic) and route 'oral'; 'PO' is refused for a drug whose route is
-ophthalmic or topical, since those are applied to an eye or the skin. A custom (free-text) entry may use any eye value.
+ophthalmic or topical, since those are applied to an eye or the skin. 'NA' (not applicable) is for drugs that are not given
+to or for an eye (a skin cream, an injection, an inhaler...) and is accepted for any non-oral drug. A custom (free-text)
+entry may use any eye value.
 Nothing here sends anything outside the app: the catalog is rows in our own database.
 """
 import re
 from typing import Optional
 
-from sqlalchemy import case
 from sqlalchemy.orm import Session
 
-from ehr.models.drug_catalog import DrugCatalogEntry, DrugDosage, DrugFrequency
+from ehr.models.drug_catalog import DrugAlias, DrugCatalogEntry, DrugDosage, DrugFrequency
 
 MIN_QUERY_CHARS = 3
 MAX_RESULTS = 15
-EYE_CHOICES = ("OU", "OD", "OS", "PO")
+EYE_CHOICES = ("OU", "OD", "OS", "PO", "NA")        # NA = not applicable (the drug is not given to or for an eye)
 GROUP_ORDER = ("ophthalmic", "oral", "topical", "any")
 
 
@@ -51,18 +52,32 @@ def _like_escape(q: str) -> str:
     return q.replace("\\", "\\\\").replace("%", r"\%").replace("_", r"\_")
 
 
+class Hit:
+    """A search result: the catalog drug, and the brand name that matched when it was found through an alias."""
+    def __init__(self, drug, via=None):
+        self.drug, self.via = drug, via
+
+
 def search(db: Session, q: str) -> list:
-    """Active catalog rows whose name starts with, or otherwise contains, `q` (case-insensitive). Prefix matches sort
-    first, then alphabetically. Raises ValueError below the minimum length so a caller can't dump the catalog."""
+    """Active catalog drugs matching `q` by name or by brand alias (case-insensitive), as Hit rows: names starting with q,
+    then aliases starting with q, then names containing q, then aliases containing q; alphabetical within each; max 15.
+    A drug found by both its name and an alias is listed once, under whichever match ranks higher. Raises ValueError below the minimum length so
+    a caller can't dump the catalog."""
     q = (q or "").strip().lower()
     if len(q) < MIN_QUERY_CHARS:
         raise ValueError(f"Type at least {MIN_QUERY_CHARS} characters to search.")
-    like = _like_escape(q)
-    starts = DrugCatalogEntry.name_lower.like(like + "%", escape="\\")
-    return (db.query(DrugCatalogEntry)
-            .filter(DrugCatalogEntry.is_active.is_(True), DrugCatalogEntry.name_lower.like("%" + like + "%", escape="\\"))
-            .order_by(case((starts, 0), else_=1), DrugCatalogEntry.name_lower)
-            .limit(MAX_RESULTS).all())
+    like = "%" + _like_escape(q) + "%"
+    ranked = {}                                                      # drug id -> (rank, name_lower, Hit)
+    for d in (db.query(DrugCatalogEntry).filter(DrugCatalogEntry.is_active.is_(True), DrugCatalogEntry.name_lower.like(like, escape="\\"))
+              .order_by(DrugCatalogEntry.name_lower).limit(60)):
+        ranked[d.id] = (0 if d.name_lower.startswith(q) else 2, d.name_lower, Hit(d))
+    for al, d in (db.query(DrugAlias, DrugCatalogEntry).join(DrugCatalogEntry, DrugCatalogEntry.id == DrugAlias.drug_id)
+                  .filter(DrugCatalogEntry.is_active.is_(True), DrugAlias.alias_lower.like(like, escape="\\"))
+                  .order_by(DrugAlias.alias_lower).limit(60)):
+        rank = 1 if al.alias_lower.startswith(q) else 3
+        if d.id not in ranked or rank < ranked[d.id][0] and ranked[d.id][0] != 0:
+            ranked[d.id] = (rank, d.name_lower, Hit(d, via=al.alias))
+    return [h for _, _, h in sorted(ranked.values(), key=lambda t: (t[0], t[1]))[:MAX_RESULTS]]
 
 
 def get_drug(db: Session, drug_id: int) -> Optional[DrugCatalogEntry]:
@@ -93,14 +108,14 @@ def resolve_selection(db: Session, payload) -> dict:
     can't record a dosage that belongs to a different drug or an eye that contradicts the route."""
     eye = (payload.eye or "").strip().upper()
     if eye and eye not in EYE_CHOICES:
-        raise ValueError("Eye must be OU, OD, OS or PO.")
+        raise ValueError("Eye must be OU, OD, OS, PO or NA.")
 
     if payload.is_custom:
         name = (payload.name or "").strip()
         if not name:
             raise ValueError("A medication name is required.")
         if not eye:
-            raise ValueError("Choose OU, OD, OS or PO.")
+            raise ValueError("Choose OU, OD, OS, PO or NA.")
         return {"name": name[:160], "strength": (payload.dosage_text or "").strip()[:80] or None,
                 "frequency": (payload.frequency_text or "").strip()[:80] or None,
                 "eye": eye, "route": "oral" if eye == "PO" else None,
@@ -122,7 +137,7 @@ def resolve_selection(db: Session, payload) -> dict:
     elif eye == "PO":
         raise ValueError("PO (by mouth) is only for oral medications.")
     elif not eye:
-        raise ValueError("Choose OU, OD or OS.")
+        raise ValueError("Choose OU, OD, OS or NA.")
     return {"name": drug.name, "strength": dosage.label, "frequency": freq.label, "eye": eye,
             "route": effective_route(drug, dosage), "drug_id": drug.id, "dosage_id": dosage.id, "frequency_id": freq.id,
             "drug_rxcui": drug.rxcui, "is_custom": False}

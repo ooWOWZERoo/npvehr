@@ -66,7 +66,7 @@
 
     card.appendChild(el("div", "med-label", "Medications"));
     card.appendChild(d.medications.length ? chips(d.medications, function (m) {
-      return m.name + (m.strength ? " " + m.strength : "") + (m.eye ? " (" + m.eye + ")" : "") + (m.frequency ? ", " + m.frequency : "");
+      return m.name + (m.strength ? " " + m.strength : "") + (m.eye ? " (" + (m.eye === "NA" ? "N/A" : m.eye) + ")" : "") + (m.frequency ? ", " + m.frequency : "");
     }) : el("div", "muted", "None recorded."));
     card.appendChild(describe("medications", d));
     if (d.can_edit) card.appendChild(reviewRow("medications", d));

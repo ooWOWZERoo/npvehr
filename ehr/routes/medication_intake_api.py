@@ -5,10 +5,12 @@
 All responses are JSON. Errors use FastAPI's {"detail": ...} shape: 401 not signed in, 403 role or CSRF, 404 unknown
 drug / patient outside the caller's access, 422 validation. Mutations need the session CSRF token in an X-CSRF-Token header.
 
-    GET  /api/v1/drugs/search?q=<text>              minimum 3 characters
+    GET  /api/v1/drugs/search?q=<text>              minimum 3 characters; matches names and brand aliases ("via_brand")
     GET  /api/v1/drugs/{drug_id}/dosages            first use of an RxNorm drug fetches its dosages (services/rxnorm.py); see "lookup"
     GET  /api/v1/drugs/{drug_id}/frequencies        drug's own route group first
     POST /api/v1/patients/{patient_id}/medications  add a medication (catalog pick or custom entry); MEDICATION_EDIT only
+    GET  /api/v1/patients/{patient_id}/medications/{med_id}   one medication with its catalog state, to pre-fill an edit
+    PUT  /api/v1/patients/{patient_id}/medications/{med_id}   re-save it through the same rules as POST; MEDICATION_EDIT only
 """
 from typing import Literal, Optional
 
@@ -21,8 +23,10 @@ from ehr.auth import csrf
 from ehr.auth.deps import get_current_user
 from ehr.auth.permissions import MEDICATION_EDIT, require_role
 from ehr.models.database import get_db
+from ehr.models.medications import PatientMedication
 from ehr.routes.patients import _get_patient_or_404
 from ehr.services import drug_catalog as catalog
+from ehr.services.drug_catalog import Hit
 from ehr.services import rxnorm
 from ehr.services import medications as med_svc
 
@@ -37,6 +41,7 @@ class DrugOut(BaseModel):
     route: Optional[str] = None
     route_group: Optional[str] = None
     is_oral: bool
+    via_brand: Optional[str] = None            # the brand name that found this generic (e.g. "Coumadin" -> warfarin)
 
 
 class DosageOut(BaseModel):
@@ -83,7 +88,7 @@ class MedicationIn(BaseModel):
     name: Optional[str] = Field(default=None, max_length=160)
     dosage_text: Optional[str] = Field(default=None, max_length=80)
     frequency_text: Optional[str] = Field(default=None, max_length=80)
-    eye: Literal["OU", "OD", "OS", "PO", ""] = ""
+    eye: Literal["OU", "OD", "OS", "PO", "NA", ""] = ""
     indication: Optional[str] = Field(default=None, max_length=160)
     note: Optional[str] = Field(default=None, max_length=255)
     start_date: Optional[str] = None
@@ -101,9 +106,28 @@ class MedicationOut(BaseModel):
     drug_id: Optional[int]
 
 
-def _drug_out(d) -> DrugOut:
+class MedicationDetail(BaseModel):
+    id: int
+    patient_id: int
+    status: str
+    name: str
+    strength: Optional[str]
+    frequency: Optional[str]
+    eye: Optional[str]
+    route: Optional[str]
+    indication: Optional[str]
+    note: Optional[str]
+    start_date: Optional[str]
+    as_custom: bool                            # True for custom entries and for older free-text rows: edit them as free text
+    drug: Optional[DrugOut] = None
+    dosage_id: Optional[int] = None
+    frequency_id: Optional[int] = None
+
+
+def _drug_out(hit) -> DrugOut:
+    d = hit.drug
     g = catalog.route_group(d.default_route)
-    return DrugOut(id=d.id, name=d.name, rxcui=d.rxcui, route=d.default_route, route_group=g, is_oral=g == "oral")
+    return DrugOut(id=d.id, name=d.name, rxcui=d.rxcui, route=d.default_route, route_group=g, is_oral=g == "oral", via_brand=hit.via)
 
 
 def _json(model: BaseModel, status_code=200):
@@ -120,7 +144,11 @@ def search_drugs(q: str = "", db: Session = Depends(get_db), user=Depends(get_cu
         rows = catalog.search(db, q)
     except ValueError as e:
         return _bad(str(e))
-    return _json(SearchOut(query=q.strip(), results=[_drug_out(d) for d in rows]))
+    if not rows:                                   # nothing local: maybe a brand name RxNorm can map to its generic
+        rows = rxnorm.brand_fallback(db, q)
+        if rows:
+            db.commit()
+    return _json(SearchOut(query=q.strip(), results=[_drug_out(h) for h in rows]))
 
 
 @router.get("/drugs/{drug_id}/dosages")
@@ -162,3 +190,39 @@ def add_patient_medication(request: Request, patient_id: int, body: MedicationIn
     db.commit()
     return _json(MedicationOut(id=m.id, patient_id=patient_id, name=m.name, strength=m.strength, frequency=m.frequency,
                                eye=m.eye, route=m.route, is_custom=m.is_custom, drug_id=m.drug_id), 201)
+
+
+def _patient_med(db, request, patient_id, med_id):
+    if not _get_patient_or_404(db, patient_id, request.state.user):
+        return None
+    m = db.get(PatientMedication, med_id)
+    return m if m and m.patient_id == patient_id else None
+
+
+@router.get("/patients/{patient_id}/medications/{med_id}")
+def get_patient_medication(request: Request, patient_id: int, med_id: int, db: Session = Depends(get_db), user=Depends(get_current_user)):
+    m = _patient_med(db, request, patient_id, med_id)
+    if not m:
+        return _bad("Medication not found.", 404)
+    drug = catalog.get_drug(db, m.drug_id) if m.drug_id else None
+    return _json(MedicationDetail(
+        id=m.id, patient_id=patient_id, status=m.status, name=m.name, strength=m.strength, frequency=m.frequency, eye=m.eye, route=m.route,
+        indication=m.indication, note=m.note, start_date=m.start_date.isoformat() if m.start_date else None,
+        as_custom=bool(m.is_custom or not drug), drug=_drug_out(Hit(drug)) if drug else None, dosage_id=m.dosage_id, frequency_id=m.frequency_id))
+
+
+@router.put("/patients/{patient_id}/medications/{med_id}", dependencies=[Depends(get_current_user), Depends(require_role(*MEDICATION_EDIT))])
+def update_patient_medication(request: Request, patient_id: int, med_id: int, body: MedicationIn, db: Session = Depends(get_db),
+                              user=Depends(get_current_user)):
+    csrf.verify_or_403(request.state.csrf_token, request.headers.get("x-csrf-token"))
+    m = _patient_med(db, request, patient_id, med_id)
+    if not m:
+        return _bad("Medication not found.", 404)
+    try:
+        values = catalog.resolve_selection(db, body)
+    except ValueError as e:
+        return _bad(str(e))
+    med_svc.update_resolved_medication(db, m, user.id, values, body.indication, body.note, body.start_date)
+    db.commit()
+    return _json(MedicationOut(id=m.id, patient_id=patient_id, name=m.name, strength=m.strength, frequency=m.frequency,
+                               eye=m.eye, route=m.route, is_custom=m.is_custom, drug_id=m.drug_id))

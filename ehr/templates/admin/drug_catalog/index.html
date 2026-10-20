@@ -3,9 +3,7 @@
 {% block content %}
 <div class="page-header"><div><span class="page-eyebrow">Administration</span><h1>Drug Catalog</h1>
   <p class="page-lede">The drug names technicians search when adding a medication. Names come from the National Library of Medicine's RxNorm; a drug's strengths are fetched the first time someone picks it.</p></div></div>
-{% if not can_edit %}<div class="alert alert-info" style="margin-bottom:var(--space-4)"><strong>View-only access.</strong> Only a System Administrator or Practice Administrator can load drug names.</div>{% endif %}
-{% if flash %}<div class="alert alert-info" style="margin-bottom:var(--space-4)">{{ flash }}</div>{% endif %}
-{% if error %}<div class="alert alert-error" style="margin-bottom:var(--space-4)">{{ error }}</div>{% endif %}
+{% set tab = 'load' %}{% include "admin/drug_catalog/_nav.html" %}
 <div class="alert alert-info" style="margin-bottom:var(--space-4)">
   Decision support for staff only. Loading sends one fixed list request to RxNorm &mdash; no patient information leaves the app. It only <strong>adds</strong> names; nothing already here is changed or removed. If RxNorm can't be reached, technicians can still use <strong>Add Custom</strong> on the medication form.
 </div>
@@ -20,7 +18,7 @@
   {% if can_edit %}
   <form method="post" action="/admin/drug-catalog/load" style="margin-top:var(--space-4)">
     <button type="submit" class="btn btn-primary">{{ 'Load drug names from RxNorm' if not rxnorm_count else 'Check RxNorm for new names' }}</button>
-    <span class="muted" style="font-size:0.82rem;margin-left:var(--space-2)">Takes a few seconds.</span>
+    <span class="muted" style="font-size:0.82rem;margin-left:var(--space-2)">Takes a few seconds. After the first load, new names are also picked up automatically on the 8th of each month.</span>
   </form>
   {% endif %}
 </div>
@@ -30,7 +28,7 @@
   <div class="table-responsive"><table><thead><tr><th>When</th><th>By</th><th>Result</th><th>Names added</th><th>In RxNorm</th><th>RxNorm release</th></tr></thead><tbody>
   {% for ev, u in events %}
     <tr><td>{{ ev.loaded_at.strftime('%m/%d/%Y %I:%M %p') }} UTC</td>
-      <td>{{ (u.first_name ~ ' ' ~ u.last_name) if u else 'Command line' }}</td>
+      <td>{{ (u.first_name ~ ' ' ~ u.last_name) if u else 'Scheduled or command line' }}</td>
       <td><span class="badge {{ 'badge-completed' if ev.status == 'ok' else 'badge-cancelled' }}">{{ 'Loaded' if ev.status == 'ok' else 'Failed' }}</span>{% if ev.error %} <span class="muted" style="font-size:0.78rem">{{ ev.error }}</span>{% endif %}</td>
       <td>{{ '{:,}'.format(ev.names_added) }}</td><td>{{ '{:,}'.format(ev.names_in_source) }}</td><td>{{ ev.rxnorm_version or '—' }}</td></tr>
   {% endfor %}

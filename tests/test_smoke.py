@@ -5152,3 +5152,247 @@ def test_rxnorm_name_load_admin_screen_lazy_dosage_lookup_outage_and_intake(logg
     out = next(d for d in api.get(f"{live_server}/api/v1/drugs/search?q=zzoutage").json()["results"])
     assert api.get(f"{live_server}/api/v1/drugs/{out['id']}/dosages").json()["lookup"] == "unavailable"
     assert api.get(f"{live_server}/api/v1/drugs/{out['id']}/dosages").json()["lookup"] == "unavailable"     # still unresolved: retried, not cached
+
+
+def test_eye_not_applicable_is_a_valid_choice_for_drugs_that_are_not_eye_medications(logged_in_page, live_server, drug_catalog_seed):
+    """'NA' (not applicable) is accepted for non-oral drugs and custom entries, shown as N/A, and never overrides PO for an oral drug."""
+    page = logged_in_page
+    api = page.request
+    base = f"{live_server}/api/v1"
+    drop, pill = drug_catalog_seed["Zzdrop Ophthalmic Test"], drug_catalog_seed["Zzpill Oral Test"]
+    pid = _named_patient_id(page, live_server, "Johnson", "Alice")
+    url = f"{base}/patients/{pid}/medications"
+    hdr = _csrf_header(page)
+    dose = api.get(f"{base}/drugs/{drop}/dosages").json()["dosages"][0]["id"]
+    freq = api.get(f"{base}/drugs/{drop}/frequencies").json()["frequencies"][0]["id"]
+    ok = api.post(url, data={"is_custom": False, "drug_id": drop, "dosage_id": dose, "frequency_id": freq, "eye": "NA"}, headers=hdr)
+    assert ok.status == 201 and ok.json()["eye"] == "NA"
+    pdose = api.get(f"{base}/drugs/{pill}/dosages").json()["dosages"][0]["id"]
+    forced = api.post(url, data={"is_custom": False, "drug_id": pill, "dosage_id": pdose, "frequency_id": freq, "eye": "NA"}, headers=hdr)
+    assert forced.status == 201 and forced.json()["eye"] == "PO"                                  # oral still means PO
+    assert api.post(url, data={"is_custom": True, "name": "Zz skin cream", "eye": "NA"}, headers=hdr).json()["eye"] == "NA"
+    assert api.post(url, data={"is_custom": True, "name": "Zz nope", "eye": "XX"}, headers=hdr).status == 422
+
+    # In the component: NA is offered for a custom entry, satisfies the required Eye, and shows as N/A on the list.
+    cid = _named_patient_id(page, live_server, "Davis", "Carol")
+    page.goto(f"{live_server}/patients/{cid}/medications")
+    assert page.locator('#medEye option[value="NA"]').count() == 1
+    _add_custom_medication(page, "Zz hydrocortisone cream", eye="NA")
+    row = page.locator("#medsSection tr", has_text="Zz hydrocortisone cream")
+    assert row.count() == 1 and "N/A" in row.inner_text()
+
+
+def test_a_brand_name_finds_its_generic_in_the_intake(logged_in_page, live_server, rxnav_stub):
+    """Typing 'coumadin' (not in RxNorm's name list) offers warfarin, labelled with the brand, and records the generic."""
+    page = logged_in_page
+    api = page.request
+    found = api.get(f"{live_server}/api/v1/drugs/search?q=coumadin").json()["results"]
+    assert [(d["name"], d["via_brand"]) for d in found] == [("warfarin", "Coumadin")]
+    assert [(d["name"], d["via_brand"]) for d in api.get(f"{live_server}/api/v1/drugs/search?q=COUMAD").json()["results"]] == [("warfarin", "Coumadin")]   # cached: partial match now works
+    assert api.get(f"{live_server}/api/v1/drugs/search?q=zzzznotadrug").json()["results"] == []
+
+    pid = _named_patient_id(page, live_server, "Wilson", "David")
+    page.goto(f"{live_server}/patients/{pid}/medications")
+    page.fill("#medName", "jantoven")                                                  # a brand listed by name, resolved brands too
+    page.locator(".med-combo-custom").wait_for()
+    page.fill("#medName", "coumadin")
+    opt = page.locator(".med-combo-option", has_text="brand: Coumadin")
+    opt.wait_for()
+    assert "warfarin" in opt.inner_text()
+    opt.click()
+    assert page.locator("#medName").input_value() == "warfarin"
+    assert "Coumadin is a brand of warfarin" in page.locator("#medNameStatus").inner_text()
+
+
+def test_an_existing_medication_is_edited_through_the_same_chain(logged_in_page, live_server, drug_catalog_seed):
+    """GET/PUT API plus the real component: a catalog medication opens pre-filled and re-saves with a new dosage; an older
+    free-text row opens as a custom entry; the same validation, CSRF and patient-scope rules apply as when adding."""
+    page = logged_in_page
+    api = page.request
+    base = f"{live_server}/api/v1"
+    drop = drug_catalog_seed["Zzdrop Ophthalmic Test"]
+    pid = _named_patient_id(page, live_server, "Smith", "Bob")
+    other = _named_patient_id(page, live_server, "Johnson", "Alice")
+    doses = api.get(f"{base}/drugs/{drop}/dosages").json()["dosages"]
+    freqs = api.get(f"{base}/drugs/{drop}/frequencies").json()["frequencies"]
+    hdr = _csrf_header(page)
+    made = api.post(f"{base}/patients/{pid}/medications", headers=hdr, data={
+        "is_custom": False, "drug_id": drop, "dosage_id": doses[0]["id"], "frequency_id": freqs[1]["id"], "eye": "OD", "indication": "edit test"})
+    med_id = made.json()["id"]
+
+    got = api.get(f"{base}/patients/{pid}/medications/{med_id}").json()
+    assert got["as_custom"] is False and got["drug"]["id"] == drop and got["dosage_id"] == doses[0]["id"] and got["frequency_id"] == freqs[1]["id"]
+    assert got["eye"] == "OD" and got["indication"] == "edit test" and got["status"] == "active"
+    assert api.get(f"{base}/patients/{other}/medications/{med_id}").status == 404                  # someone else's id, wrong patient
+    put_url = f"{base}/patients/{pid}/medications/{med_id}"
+    ok_body = {"is_custom": False, "drug_id": drop, "dosage_id": doses[1]["id"], "frequency_id": freqs[1]["id"], "eye": "OD"}
+    assert api.put(put_url, data=ok_body).status == 403                                              # no CSRF header
+    assert api.put(f"{base}/patients/{other}/medications/{med_id}", data=ok_body, headers=hdr).status == 404
+    assert api.put(put_url, data={**ok_body, "eye": "PO"}, headers=hdr).status == 422               # same rules as adding
+    assert api.put(put_url, data={**ok_body, "dosage_id": 999999}, headers=hdr).status == 422
+
+    # The component: Edit opens the chain pre-filled; changing the dosage and saving updates the row.
+    page.goto(f"{live_server}/patients/{pid}/medications")
+    page.locator(f'[data-med-edit="{med_id}"]').click()
+    page.wait_for_function(f"document.getElementById('medDosage').value === '{doses[0]['id']}'")
+    page.wait_for_function(f"document.getElementById('medFreq').value === '{freqs[1]['id']}'")
+    assert page.locator("#medName").input_value() == "Zzdrop Ophthalmic Test" and page.locator("#medEye").input_value() == "OD"
+    assert page.locator("#medIndication").input_value() == "edit test"
+    assert page.locator("#medIntakeTitle").inner_text() == "Edit medication" and page.locator("#medSubmit").inner_text() == "Save changes"
+    assert page.locator("#medSubmit").is_enabled() and page.locator("#medCancelEdit").is_visible()
+    page.select_option("#medDosage", label="0.01% ophthalmic solution")
+    page.wait_for_function("!document.getElementById('medFreq').disabled")
+    page.select_option("#medFreq", index=1)
+    with page.expect_navigation():
+        page.click("#medSubmit")
+    rows = page.locator("#medsSection tr", has_text="Zzdrop Ophthalmic Test")
+    assert rows.count() == 1 and "0.01% ophthalmic solution" in rows.inner_text()                  # edited in place, not duplicated
+
+    # An older free-text row (the previous form's POST) opens as a custom entry and can be re-saved.
+    api.post(f"{live_server}/patients/{pid}/medications/new", form={"csrf_token": hdr["X-CSRF-Token"], "name": "Zz legacy free text", "strength": "old strength", "frequency": "old freq", "eye": "OS"})
+    page.goto(f"{live_server}/patients/{pid}/medications")
+    page.locator("#medsSection tr", has_text="Zz legacy free text").locator("[data-med-edit]").click()
+    page.locator("#medDosageText").wait_for(state="visible")
+    assert page.locator("#medName").input_value() == "Zz legacy free text" and page.locator("#medDosageText").input_value() == "old strength"
+    assert page.locator("#medFreqText").input_value() == "old freq" and page.locator("#medEye").input_value() == "OS"
+    page.fill("#medDosageText", "new strength")
+    with page.expect_navigation():
+        page.click("#medSubmit")
+    row = page.locator("#medsSection tr", has_text="Zz legacy free text")
+    assert row.count() == 1 and "new strength" in row.inner_text() and "old strength" not in row.inner_text()
+
+    # The edits are in the field-change audit trail (who changed what, from and to).
+    page.goto(f"{live_server}/admin/field-audit?table_name=patient_medications")
+    audit = page.locator("body").inner_text()
+    assert "0.005% ophthalmic solution" in audit and "0.01% ophthalmic solution" in audit and "old strength" in audit and "new strength" in audit
+
+    # Cancel leaves the row untouched.
+    page.goto(f"{live_server}/patients/{pid}/medications")
+    page.locator("#medsSection tr", has_text="Zz legacy free text").locator("[data-med-edit]").click()
+    page.locator("#medCancelEdit").wait_for(state="visible")
+    with page.expect_navigation():
+        page.click("#medCancelEdit")
+    assert "new strength" in page.locator("#medsSection tr", has_text="Zz legacy free text").inner_text()
+
+
+def test_admin_adds_edits_and_deactivates_drugs_and_edits_the_frequency_list(logged_in_page, live_server, drug_catalog_seed):
+    """Drug Catalog admin: add a drug by hand (dosages, brand names), it is found by the intake API; rename, change route
+    (an oral drug then forces PO), deactivate/reactivate; RxNorm names can't be renamed; frequencies add/edit/hide; roles; audit."""
+    page = logged_in_page
+    api = page.request
+    base = f"{live_server}/api/v1"
+    tok = page.locator('meta[name="csrf-token"]').get_attribute("content")
+    post = lambda path, **form: api.post(live_server + path, form={"csrf_token": tok, **form}, max_redirects=0)
+
+    # Roles: front desk can't open or change any of it.
+    fd_ctx = page.context.browser.new_context()
+    fd = fd_ctx.new_page()
+    fd.goto(live_server + "/login")
+    fd.fill("#email", "frontdesk@newpathvision.example")
+    fd.fill("#password", "ChangeMe123!")
+    fd.click("button[type=submit]")
+    fd.wait_for_url(f"{live_server}/")
+    assert fd.goto(live_server + "/admin/drug-catalog/drugs").status == 403 and fd.goto(live_server + "/admin/drug-catalog/frequencies").status == 403
+    assert fd.request.post(live_server + "/admin/drug-catalog/drugs/new", form={"csrf_token": "x", "name": "Zz sneaky"}).status == 403
+    fd_ctx.close()
+
+    # Add by hand through the page.
+    page.goto(live_server + "/admin/drug-catalog/drugs")
+    page.fill('input[name="name"]', "Zz Compounded Drops")
+    page.select_option('select[name="route"]', "ophthalmic")
+    page.fill('textarea[name="dosages"]', "0.01% ophthalmic solution\n0.05% ophthalmic solution\n0.01% ophthalmic solution")      # a repeated line is kept once
+    page.fill('textarea[name="aliases"]', "Zz Brandy")
+    page.get_by_role("button", name="Add drug").click()
+    page.wait_for_load_state()
+    assert page.locator("h1").inner_text().startswith("Zz Compounded Drops") and "Added Zz Compounded Drops" in page.locator(".alert-info").first.inner_text()
+    drug_url = page.url
+    drug_id = int(drug_url.split("?")[0].rstrip("/").split("/")[-1])
+    assert page.locator("table tr", has_text="ophthalmic solution").count() == 2
+
+    # The intake API now finds it by name and by brand, with its dosages and eye-drop route.
+    by_name = api.get(f"{base}/drugs/search?q=zz compounded").json()["results"]
+    assert [(d["name"], d["route_group"], d["via_brand"]) for d in by_name] == [("Zz Compounded Drops", "ophthalmic", None)]
+    assert [(d["name"], d["via_brand"]) for d in api.get(f"{base}/drugs/search?q=zz brandy").json()["results"]] == [("Zz Compounded Drops", "Zz Brandy")]
+    assert [x["label"] for x in api.get(f"{base}/drugs/{drug_id}/dosages").json()["dosages"]] == ["0.01% ophthalmic solution", "0.05% ophthalmic solution"]
+
+    # A duplicate name is refused (case-insensitive) and sends you to the existing drug.
+    dup = post("/admin/drug-catalog/drugs/new", name="zz compounded DROPS")
+    assert dup.status == 303 and f"/drugs/{drug_id}" in dup.headers["location"]
+
+    # Rename (hand-added only) and change the route to oral: the intake now treats it as oral.
+    post(f"/admin/drug-catalog/drugs/{drug_id}/edit", name="Zz Compounded Tablets", route="oral")
+    renamed = api.get(f"{base}/drugs/search?q=zz compounded").json()["results"]
+    assert [(d["name"], d["is_oral"]) for d in renamed] == [("Zz Compounded Tablets", True)]
+
+    # Dosages and brand names: add one, remove one.
+    post(f"/admin/drug-catalog/drugs/{drug_id}/dosages/new", dosages="10 mg tablet")
+    dosages = api.get(f"{base}/drugs/{drug_id}/dosages").json()["dosages"]
+    assert "10 mg tablet" in [x["label"] for x in dosages] and len(dosages) == 3
+    post(f"/admin/drug-catalog/drugs/{drug_id}/dosages/{dosages[0]['id']}/delete")
+    assert len(api.get(f"{base}/drugs/{drug_id}/dosages").json()["dosages"]) == 2
+    page.goto(drug_url.split("?")[0])
+    alias_row = page.locator("table tr", has_text="Zz Brandy")
+    assert alias_row.count() == 1
+    with page.expect_navigation():
+        alias_row.get_by_role("button", name="Remove").click()
+    assert api.get(f"{base}/drugs/search?q=zz brandy").json()["results"] == []
+
+    # Deactivate hides it from searches; reactivate brings it back.
+    post(f"/admin/drug-catalog/drugs/{drug_id}/toggle-active")
+    assert api.get(f"{base}/drugs/search?q=zz compounded").json()["results"] == []
+    assert api.get(f"{base}/drugs/{drug_id}/dosages").status == 404
+    post(f"/admin/drug-catalog/drugs/{drug_id}/toggle-active")
+    assert len(api.get(f"{base}/drugs/search?q=zz compounded").json()["results"]) == 1
+
+    # An RxNorm name can't be renamed (its route, dosages and brand names can still be adjusted). 'coumadin' makes the stand-in
+    # RxNorm service hand back warfarin, which the app then adds to the catalog as an RxNorm row.
+    warf = next(d for d in api.get(f"{base}/drugs/search?q=coumadin").json()["results"] if d["name"] == "warfarin")
+    post(f"/admin/drug-catalog/drugs/{warf['id']}/edit", name="Renamed by mistake", route="oral")
+    page.goto(f"{live_server}/admin/drug-catalog/drugs/{warf['id']}")
+    assert page.locator("h1").inner_text().startswith("warfarin") and page.locator('input[name="name"]').get_attribute("readonly") is not None
+    assert "From RxNorm" in page.locator(".page-lede").inner_text()
+
+    # Frequencies: add a wording to the oral group; it is offered for oral drugs; hide/show; edit the wording.
+    page.goto(live_server + "/admin/drug-catalog/frequencies")
+    page.locator('select[name="route_group"]').first.select_option("oral")
+    page.fill('input[name="label"] >> nth=0', "Zz Twice weekly")
+    page.get_by_role("button", name="Add", exact=True).click()
+    page.wait_for_load_state()
+    pill = drug_catalog_seed["Zzpill Oral Test"]
+    freqs = lambda: api.get(f"{base}/drugs/{pill}/frequencies").json()["frequencies"]
+    mine = next(f for f in freqs() if f["label"] == "Zz Twice weekly")
+    assert mine["route_group"] == "oral" and mine["preferred"] is True
+    assert post("/admin/drug-catalog/frequencies/new", route_group="oral", label="zz TWICE weekly").headers["location"].startswith("/admin/drug-catalog/frequencies?error=")   # duplicate refused
+    post(f"/admin/drug-catalog/frequencies/{mine['id']}/edit", label="Zz Twice a week", sort_order="0")
+    assert freqs()[0]["label"] == "Zz Twice a week"                                    # order 0 puts it first in the oral group
+    post(f"/admin/drug-catalog/frequencies/{mine['id']}/toggle-active")
+    assert all(f["label"] != "Zz Twice a week" for f in freqs())
+    post(f"/admin/drug-catalog/frequencies/{mine['id']}/toggle-active")
+    assert any(f["label"] == "Zz Twice a week" for f in freqs())
+
+    # Every change is in the field-change audit trail.
+    page.goto(f"{live_server}/admin/field-audit")
+    audit = page.locator("body").inner_text()
+    assert "Zz Compounded Tablets" in audit and "drug_frequencies" in audit and "drug_dosages" in audit
+
+
+def test_scheduled_rxnorm_refresh_endpoint_needs_the_cron_secret_and_reports_outages(logged_in_page, live_server, rxnav_stub):
+    """The monthly refresh endpoint (Vercel Cron): bearer-token only, adds nothing new on a re-run, 502 on an outage, audited."""
+    import urllib.request
+    page = logged_in_page
+    api = page.request
+    url = f"{live_server}/admin/drug-catalog/refresh/run"
+    assert api.get(url).status == 403 and api.get(url, headers={"Authorization": "Bearer wrong"}).status == 403
+    page.goto(live_server + "/admin/drug-catalog")                                                 # the administrator's own first load
+    page.get_by_role("button", name=re.compile("RxNorm")).click()
+    page.wait_for_load_state()
+    ok = api.get(url, headers={"Authorization": "Bearer test-cron-secret"})
+    assert ok.status == 200 and ok.json()["ok"] is True and ok.json()["names_added"] == 0 and "skipped" not in ok.json()
+    urllib.request.urlopen(f"{rxnav_stub}/__fail?on=1").read()
+    try:
+        down = api.get(url, headers={"Authorization": "Bearer test-cron-secret"})
+        assert down.status == 502 and down.json()["ok"] is False
+    finally:
+        urllib.request.urlopen(f"{rxnav_stub}/__fail?on=0").read()
+    page.goto(live_server + "/admin/drug-catalog")
+    assert page.locator("table tr", has_text="Scheduled or command line").count() >= 2 and page.locator("table tr", has_text="Failed").count() >= 1

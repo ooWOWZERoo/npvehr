@@ -27,7 +27,7 @@ log = logging.getLogger(__name__)
 STALE_MONTHS = 12
 MED_FIELDS = ["name", "strength", "route", "frequency", "eye", "indication", "status", "start_date", "stop_date", "note"]
 ALLERGY_FIELDS = ["allergen", "reaction", "severity", "status", "note"]
-EYES = ("OD", "OS", "OU", "PO")                   # PO = by mouth / systemic (oral medications)
+EYES = ("OD", "OS", "OU", "PO", "NA")             # PO = by mouth / systemic (oral); NA = not applicable (not an eye medication)
 SEVERITIES = ("mild", "moderate", "severe")
 
 
@@ -109,6 +109,18 @@ def add_resolved_medication(db: Session, patient_id: int, user_id: int, values: 
     db.flush()
     field_audit.record_field_changes(db, "patient_medications", m.id, {}, {"name": m.name, "status": "active", "eye": m.eye}, user_id)
     return m
+
+
+def update_resolved_medication(db: Session, med: PatientMedication, user_id: int, values: dict, indication=None, note=None, start_date=None) -> PatientMedication:
+    """Re-save a medication from the guided intake (values from drug_catalog.resolve_selection, already validated). Status and
+    stop date are left alone; every changed field is written to the field-change audit trail."""
+    before = {f: getattr(med, f) for f in MED_FIELDS}
+    med.name, med.strength, med.route, med.frequency, med.eye = values["name"], values["strength"], values["route"], values["frequency"], values["eye"]
+    med.drug_id, med.dosage_id, med.frequency_id = values["drug_id"], values["dosage_id"], values["frequency_id"]
+    med.drug_rxcui, med.is_custom = values["drug_rxcui"], values["is_custom"]
+    med.indication, med.note, med.start_date = _clean(indication, 160), _clean(note, 255), _date(start_date)
+    field_audit.record_field_changes(db, "patient_medications", med.id, before, {f: getattr(med, f) for f in MED_FIELDS}, user_id)
+    return med
 
 
 def update_medication(db: Session, med: PatientMedication, user_id: int, form) -> bool:

@@ -31,7 +31,7 @@ class PatientMedication(Base):
     strength: Mapped[Optional[str]] = mapped_column(String(80))
     route: Mapped[Optional[str]] = mapped_column(String(40))
     frequency: Mapped[Optional[str]] = mapped_column(String(80))
-    eye: Mapped[Optional[str]] = mapped_column(String(2))                # OD / OS / OU for ocular medications; PO = by mouth / systemic
+    eye: Mapped[Optional[str]] = mapped_column(String(2))                # OD / OS / OU for ocular medications; PO = by mouth / systemic; NA = not applicable
     indication: Mapped[Optional[str]] = mapped_column(String(160))
     status: Mapped[str] = mapped_column(String(8), default="active")     # active | stopped
     start_date: Mapped[Optional[date]] = mapped_column(Date)

@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Frequencies &mdash; Drug Catalog{% endblock %}
+{% block content %}
+<div class="page-header"><div><span class="page-eyebrow">Administration</span><h1>Drug Catalog</h1>
+  <p class="page-lede">The dosing-frequency choices on the medication form. A drug's own group is shown first; the rest follow. Wording you hide stays on medications already recorded.</p></div></div>
+{% set tab = 'freq' %}{% include "admin/drug_catalog/_nav.html" %}
+{% if can_edit %}
+<div class="card form-card" style="margin-bottom:var(--space-4)"><h3>Add a frequency</h3>
+  <form method="post" action="/admin/drug-catalog/frequencies/new" style="display:flex;gap:var(--space-3);flex-wrap:wrap;align-items:end">
+    <div class="form-group" style="margin:0"><label>Group <select name="route_group">{% for code, label in group_choices %}<option value="{{ code }}">{{ label }}</option>{% endfor %}</select></label></div>
+    <div class="form-group" style="margin:0;flex:1;min-width:220px"><label>Wording* <input name="label" required maxlength="80" placeholder="e.g. Twice weekly"></label></div>
+    <button type="submit" class="btn btn-primary">Add</button>
+  </form>
+</div>
+{% endif %}
+{% for code, label, rows in groups %}
+<div class="card" style="margin-bottom:var(--space-4)"><h3>{{ label }}</h3>
+  {% if rows %}
+  <div class="table-responsive"><table><thead><tr><th>Wording</th><th>Order</th><th>Status</th><th></th></tr></thead><tbody>
+  {% for f in rows %}
+    <tr style="{{ 'opacity:0.6' if not f.is_active }}">
+      <td colspan="2">{% if can_edit %}
+        <form method="post" action="/admin/drug-catalog/frequencies/{{ f.id }}/edit" style="display:flex;gap:var(--space-2);align-items:center">
+          <input name="label" value="{{ f.label }}" maxlength="80" style="flex:1"><input name="sort_order" type="number" value="{{ f.sort_order }}" style="width:5rem" aria-label="Order">
+          <button type="submit" class="btn btn-sm btn-secondary">Save</button></form>{% else %}{{ f.label }}{% endif %}</td>
+      <td><span class="badge {{ 'badge-completed' if f.is_active else 'badge-cancelled' }}">{{ 'Shown' if f.is_active else 'Hidden' }}</span></td>
+      <td>{% if can_edit %}<form method="post" action="/admin/drug-catalog/frequencies/{{ f.id }}/toggle-active"><button class="btn btn-sm btn-secondary" type="submit">{{ 'Hide' if f.is_active else 'Show' }}</button></form>{% endif %}</td></tr>
+  {% endfor %}
+  </tbody></table></div>
+  {% else %}<p class="muted">None.</p>{% endif %}
+</div>
+{% endfor %}
+{% endblock %}

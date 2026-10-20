@@ -4,6 +4,7 @@
                          `source` says where the row came from: 'rxnorm' (loaded from NLM's RxNorm, `rxcui` set) or
                          'manual' (entered by an administrator, `rxcui` NULL).
   * drug_dosages      -- the strengths/forms offered once a drug is chosen (one drug -> many dosages).
+  * drug_aliases      -- brand names that find a generic ("Coumadin" -> warfarin).
   * drug_frequencies  -- the practice's dosing-frequency pick list, grouped by route (ophthalmic / oral / topical / any).
   * drug_catalog_load_events -- audit row for each RxNorm name load (ehr/services/rxnorm.py).
 
@@ -39,6 +40,20 @@ class DrugCatalogEntry(Base):
                                                        passive_deletes=True, order_by="DrugDosage.label")
     __table_args__ = (CheckConstraint("source IN ('rxnorm','manual')", name="ck_drug_catalog_source"),
                       Index("ix_drug_catalog_name_lower", "name_lower"))
+
+
+class DrugAlias(Base):
+    """A brand (or other alternate) name that finds a catalog drug: "Coumadin" -> warfarin. Learned from RxNorm when a generic
+    is resolved or a brand is looked up live; the drug itself stays the generic, so safety matching and records use it."""
+    __tablename__ = "drug_aliases"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    drug_id: Mapped[int] = mapped_column(ForeignKey("drug_catalog.id", ondelete="CASCADE"))
+    alias: Mapped[str] = mapped_column(String(160))
+    alias_lower: Mapped[str] = mapped_column(String(160))
+    source: Mapped[str] = mapped_column(String(10), default="rxnorm")       # rxnorm | manual
+    __table_args__ = (UniqueConstraint("drug_id", "alias_lower", name="uq_drug_alias"),
+                      CheckConstraint("source IN ('rxnorm','manual')", name="ck_drug_alias_source"),
+                      Index("ix_drug_aliases_alias_lower", "alias_lower"))
 
 
 class DrugDosage(Base):

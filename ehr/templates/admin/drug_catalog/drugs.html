@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Browse Drugs &mdash; Drug Catalog{% endblock %}
+{% block content %}
+<div class="page-header"><div><span class="page-eyebrow">Administration</span><h1>Drug Catalog</h1>
+  <p class="page-lede">Every drug a technician can pick. Add anything RxNorm doesn't have, or open a drug to change its route, dosages and brand names.</p></div></div>
+{% set tab = 'drugs' %}{% include "admin/drug_catalog/_nav.html" %}
+{% if can_edit %}
+<div class="card form-card" style="margin-bottom:var(--space-4)"><h3>Add a drug by hand</h3>
+  <form method="post" action="/admin/drug-catalog/drugs/new">
+    <div class="form-row cols-2">
+      <div class="form-group"><label>Drug name* <input name="name" required maxlength="160" placeholder="e.g. Compounded atropine drops"></label></div>
+      <div class="form-group"><label>Usually given by <select name="route">{% for v, l in route_choices %}<option value="{{ v }}">{{ l }}</option>{% endfor %}</select></label></div>
+    </div>
+    <div class="form-row cols-2">
+      <div class="form-group"><label>Dosages (one per line) <textarea name="dosages" rows="3" placeholder="0.01% ophthalmic solution&#10;0.05% ophthalmic solution"></textarea></label></div>
+      <div class="form-group"><label>Brand / other names (one per line) <textarea name="aliases" rows="3"></textarea></label></div>
+    </div>
+    <button type="submit" class="btn btn-primary">Add drug</button>
+  </form>
+</div>
+{% endif %}
+<form method="get" class="card" style="margin-bottom:var(--space-4);display:flex;gap:var(--space-3);flex-wrap:wrap;align-items:end">
+  <div class="form-group" style="margin:0;flex:1;min-width:200px"><label>Search <input name="q" value="{{ q }}" placeholder="Drug name"></label></div>
+  <div class="form-group" style="margin:0"><label>Source <select name="source"><option value="">All</option><option value="rxnorm" {{ 'selected' if source == 'rxnorm' }}>RxNorm</option><option value="manual" {{ 'selected' if source == 'manual' }}>Added by hand</option></select></label></div>
+  <button type="submit" class="btn btn-secondary">Search</button>
+</form>
+<div class="card">
+  {% if drugs %}
+  <div class="table-responsive"><table><thead><tr><th>Drug</th><th>Source</th><th>Route</th><th>Dosages</th><th>Status</th><th></th></tr></thead><tbody>
+  {% for d in drugs %}
+    <tr style="{{ 'opacity:0.6' if not d.is_active }}"><td><strong>{{ d.name }}</strong></td>
+      <td>{{ 'RxNorm' if d.source == 'rxnorm' else 'By hand' }}</td>
+      <td>{{ route_group(d.default_route) or '—' }}</td>
+      <td>{{ dose_counts.get(d.id, 0) }}{% if d.source == 'rxnorm' and not d.resolved_at %} <span class="muted" style="font-size:0.78rem">(fetched on first use)</span>{% endif %}</td>
+      <td><span class="badge {{ 'badge-completed' if d.is_active else 'badge-cancelled' }}">{{ 'Active' if d.is_active else 'Inactive' }}</span></td>
+      <td><a href="/admin/drug-catalog/drugs/{{ d.id }}" class="btn btn-sm btn-secondary">{{ 'Edit' if can_edit else 'View' }}</a></td></tr>
+  {% endfor %}
+  </tbody></table></div>
+  {% include "_pagination.html" %}
+  {% else %}<div class="empty-state"><strong>No drugs found</strong>{{ 'Try a different search, or ' if q or source }}add one above{% if not q and not source %}, or load names from RxNorm{% endif %}.</div>{% endif %}
+</div>
+{% endblock %}

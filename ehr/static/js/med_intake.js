@@ -4,6 +4,8 @@
 //   * Medication: debounced 300 ms, searches only once 3+ characters are typed, stale responses are ignored.
 //   * Dosage unlocks after a medication is chosen; Frequency after a dosage; Eye as soon as a name exists.
 //   * An oral drug sets and locks the eye to PO; PO is not offered for a non-oral catalog drug.
+//   * A brand name finds its generic ("Coumadin" -> warfarin); the generic is what gets recorded.
+//   * The same form edits an existing medication (the row's Edit button), pre-filled; older free-text rows open as custom entries.
 //   * "Add Custom" (always in the list) turns Dosage and Frequency into free-text inputs and records is_custom.
 (function () {
   "use strict";
@@ -19,10 +21,11 @@
     dosage: $("medDosage"), dosageText: $("medDosageText"), dosageNote: $("medDosageNote"),
     freq: $("medFreq"), freqText: $("medFreqText"),
     indication: $("medIndication"), start: $("medStart"), note: $("medNote"),
-    submit: $("medSubmit"), back: $("medBackToList"), error: $("medIntakeError")
+    submit: $("medSubmit"), back: $("medBackToList"), error: $("medIntakeError"),
+    title: $("medIntakeTitle"), help: root.querySelector(".med-intake-help"), cancel: $("medCancelEdit")
   };
 
-  var state = { drug: null, dosage: null, isCustom: false, dosages: [], items: [], active: -1, seq: 0, ctrl: null };
+  var state = { drug: null, dosage: null, isCustom: false, dosages: [], items: [], active: -1, seq: 0, ctrl: null, editId: null };
 
   function option(value, text, disabled) {
     var o = document.createElement("option");
@@ -51,7 +54,8 @@
       li.id = "medOpt" + i; li.setAttribute("role", "option"); li.setAttribute("aria-selected", "false");
       li.className = "med-combo-option";
       var nm = document.createElement("span"); nm.textContent = d.name; li.appendChild(nm);
-      if (d.route) { var r = document.createElement("small"); r.className = "muted"; r.textContent = " " + d.route; li.appendChild(r); }
+      if (d.via_brand) { var v = document.createElement("small"); v.className = "muted"; v.textContent = " \u2014 brand: " + d.via_brand; li.appendChild(v); }
+      else if (d.route) { var r = document.createElement("small"); r.className = "muted"; r.textContent = " " + d.route; li.appendChild(r); }
       li.addEventListener("mousedown", function (e) { e.preventDefault(); selectDrug(d); });
       el.list.appendChild(li); state.items.push({ drug: d });
     });
@@ -124,12 +128,14 @@
     sel.innerHTML = ""; sel.appendChild(option("", placeholder)); sel.disabled = true;
   }
 
-  function selectDrug(d) {
+  // `pre` (edit mode only) = {dosageId, freqId, eye}: once each list has loaded, the saved choice is selected in it.
+  function selectDrug(d, pre) {
     state.drug = d; state.dosage = null; state.isCustom = false;
-    el.name.value = d.name; closeList(); el.nameStatus.textContent = ""; setError("");
+    el.name.value = d.name; closeList(); setError("");
+    el.nameStatus.textContent = d.via_brand ? d.via_brand + " is a brand of " + d.name + "." : "";
     fillSelect(el.freq, "Choose a dosage first");
     fillSelect(el.dosage, "Loading…");
-    window.NPV.api("GET", "/api/v1/drugs/" + d.id + "/dosages").then(function (data) {
+    var loaded = window.NPV.api("GET", "/api/v1/drugs/" + d.id + "/dosages").then(function (data) {
       if (state.drug !== d) return;
       state.dosages = data.dosages;
       el.dosage.innerHTML = "";
@@ -146,19 +152,24 @@
         b.type = "button"; b.className = "btn btn-sm btn-secondary"; b.textContent = "Enter dosage manually";
         b.addEventListener("click", function () { enterCustom(d.name); });
         el.dosageNote.appendChild(b);
+      } else if (pre && pre.dosageId) {
+        el.dosage.value = String(pre.dosageId);
+        return chooseDosage(pre);
       }
     }).catch(function (err) { if (state.drug === d) { fillSelect(el.dosage, "Could not load dosages"); setError(err.message); } });
     applyEye(); refresh();
+    return loaded;
   }
 
-  el.dosage.addEventListener("change", function () {
+  el.dosage.addEventListener("change", function () { chooseDosage(); });
+  function chooseDosage(pre) {
     var id = parseInt(el.dosage.value, 10);
     state.dosage = state.dosages.filter(function (x) { return x.id === id; })[0] || null;
     fillSelect(el.freq, state.dosage ? "Loading…" : "Choose a dosage first");
     applyEye(); refresh();
-    if (!state.dosage || !state.drug) return;
+    if (!state.dosage || !state.drug) return null;
     var d = state.drug, x = state.dosage;
-    window.NPV.api("GET", "/api/v1/drugs/" + d.id + "/frequencies?dosage_id=" + x.id).then(function (data) {
+    return window.NPV.api("GET", "/api/v1/drugs/" + d.id + "/frequencies?dosage_id=" + x.id).then(function (data) {
       if (state.drug !== d || state.dosage !== x) return;
       el.freq.innerHTML = ""; el.freq.appendChild(option("", "Choose a frequency…"));
       var pref = data.frequencies.filter(function (f) { return f.preferred; });
@@ -170,9 +181,14 @@
         rows.forEach(function (f) { g.appendChild(option(String(f.id), f.label)); });
       }
       group(null, pref); group(pref.length ? "Other frequencies" : null, rest);
-      el.freq.disabled = false; refresh();
+      el.freq.disabled = false;
+      if (pre) {
+        if (pre.freqId) el.freq.value = String(pre.freqId);
+        if (pre.eye && !el.eye.disabled) el.eye.value = pre.eye;
+      }
+      refresh();
     }).catch(function (err) { if (state.dosage === x) { fillSelect(el.freq, "Could not load frequencies"); setError(err.message); } });
-  });
+  }
   el.freq.addEventListener("change", refresh);
   [el.eye, el.dosageText, el.freqText].forEach(function (n) { n.addEventListener("input", refresh); n.addEventListener("change", refresh); });
 
@@ -237,10 +253,38 @@
     } else {
       body.drug_id = state.drug.id; body.dosage_id = state.dosage.id; body.frequency_id = parseInt(el.freq.value, 10);
     }
-    window.NPV.api("POST", "/api/v1/patients/" + encodeURIComponent(pid) + "/medications", body)
+    var url = "/api/v1/patients/" + encodeURIComponent(pid) + "/medications" + (state.editId ? "/" + state.editId : "");
+    window.NPV.api(state.editId ? "PUT" : "POST", url, body)
       .then(function () { window.location.assign("/patients/" + encodeURIComponent(pid) + "/medications"); })
       .catch(function (err) { setError(err.message); el.submit.disabled = !ready(); });
   });
+
+  // ---------- edit an existing medication through the same chain ----------
+  var tabUrl = "/patients/" + encodeURIComponent(pid) + "/medications";
+  function startEdit(id) {
+    setError("");
+    window.NPV.api("GET", "/api/v1/patients/" + encodeURIComponent(pid) + "/medications/" + id).then(function (m) {
+      state.editId = m.id;
+      el.title.textContent = "Edit medication"; el.help.hidden = true;
+      el.submit.textContent = "Save changes"; el.cancel.hidden = false;
+      el.indication.value = m.indication || ""; el.note.value = m.note || ""; el.start.value = m.start_date || "";
+      root.scrollIntoView({ behavior: "smooth", block: "start" });
+      if (m.as_custom) {                                            // custom entries, and older free-text rows, are edited as text
+        enterCustom(m.name);
+        el.dosageText.value = m.strength || ""; el.freqText.value = m.frequency || "";
+        if (m.eye) el.eye.value = m.eye;
+        refresh();
+        return;
+      }
+      el.name.value = m.drug.name;
+      return selectDrug(m.drug, { dosageId: m.dosage_id, freqId: m.frequency_id, eye: m.eye });
+    }).catch(function (err) { setError(err.message); });
+  }
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest ? e.target.closest("[data-med-edit]") : null;
+    if (b) startEdit(b.getAttribute("data-med-edit"));
+  });
+  el.cancel.addEventListener("click", function () { window.location.assign(tabUrl); });
 
   applyEye(); refresh();
 })();

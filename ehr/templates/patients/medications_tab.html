@@ -27,23 +27,12 @@
   {% for m in active_meds %}
     <tr>
       <td><strong>{{ m.name }}</strong>{% if m.note %}<div class="muted" style="font-size:0.78rem">{{ m.note }}</div>{% endif %}</td>
-      <td>{{ m.strength or '—' }}</td><td>{{ m.route or '—' }}{% if m.eye %} <span class="badge badge-scheduled">{{ m.eye }}</span>{% endif %}</td>
+      <td>{{ m.strength or '—' }}</td><td>{{ m.route or '—' }}{% if m.eye %} <span class="badge badge-scheduled">{{ 'N/A' if m.eye == 'NA' else m.eye }}</span>{% endif %}</td>
       <td>{{ m.frequency or '—' }}</td><td>{{ m.indication or '—' }}</td>
       <td>{% if med_classes.get(m.id) %}{{ med_classes[m.id]|join(', ') }}{% else %}<span class="muted">not classified</span>{% endif %}</td>
       <td style="white-space:nowrap">
         {% if can_edit_meds %}
-        <details style="display:inline-block"><summary class="btn btn-sm btn-secondary" style="cursor:pointer">Edit</summary>
-          <form method="post" action="/patients/{{ patient.id }}/medications/{{ m.id }}/edit" class="card" style="position:absolute;z-index:5;min-width:320px;margin-top:4px">
-            <label class="fld">Medication* <input name="name" required maxlength="160" value="{{ m.name }}"></label>
-            <label class="fld">Strength <input name="strength" maxlength="80" value="{{ m.strength or '' }}"></label>
-            <label class="fld">Route <input name="route" maxlength="40" value="{{ m.route or '' }}"></label>
-            <label class="fld">Eye <select name="eye"><option value="">&mdash;</option>{% for e in ('OD','OS','OU','PO') %}<option {{ 'selected' if m.eye == e }}>{{ e }}</option>{% endfor %}</select></label>
-            <label class="fld">Frequency <input name="frequency" maxlength="80" value="{{ m.frequency or '' }}"></label>
-            <label class="fld">For <input name="indication" maxlength="160" value="{{ m.indication or '' }}"></label>
-            <label class="fld">Started <input type="date" name="start_date" value="{{ m.start_date or '' }}"></label>
-            <label class="fld">Note <input name="note" maxlength="255" value="{{ m.note or '' }}"></label>
-            <button type="submit" class="btn btn-primary btn-sm">Save</button>
-          </form></details>
+        <button type="button" class="btn btn-sm btn-secondary" data-med-edit="{{ m.id }}">Edit</button>
         <form method="post" action="/patients/{{ patient.id }}/medications/{{ m.id }}/stop" style="display:inline" onsubmit="return confirm('Mark this medication as stopped?');"><button class="btn btn-sm btn-secondary" type="submit">Stop</button></form>
         {% endif %}
       </td>
@@ -69,6 +58,7 @@
         <select id="medEye" disabled>
           <option value="">Choose&hellip;</option><option value="OU">OU &mdash; both eyes</option><option value="OD">OD &mdash; right eye</option>
           <option value="OS">OS &mdash; left eye</option><option value="PO">PO &mdash; by mouth / systemic</option>
+          <option value="NA">NA &mdash; not applicable (not an eye medication)</option>
         </select>
         <div class="med-intake-status muted" id="medEyeNote"></div>
       </div>
@@ -92,6 +82,7 @@
     <div class="med-intake-actions">
       <button type="button" class="btn btn-primary" id="medSubmit" disabled>Add medication</button>
       <button type="button" class="btn btn-secondary" id="medBackToList" hidden>Search the catalog instead</button>
+      <button type="button" class="btn btn-secondary" id="medCancelEdit" hidden>Cancel edit</button>
     </div>
   </section>
   {% endif %}
