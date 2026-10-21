@@ -25,6 +25,12 @@
     <dt>ETA</dt><dd>{{ order.eta_date or '—' }}</dd>
     <dt>Placed</dt><dd>{{ order.placed_at.strftime('%Y-%m-%d %I:%M %p') if order.placed_at else '—' }}
       {% if order.placed_by %}by {{ order.placed_by.first_name }} {{ order.placed_by.last_name }}{% endif %}</dd>
+    {% if order.order_type == 'glasses' %}
+    <dt>Lens design</dt><dd id="lensDesignRow">{{ order.lens_design or '—' }}</dd>
+    <dt>PD (mm)</dt><dd class="mono-data" id="pdRow">{% if order.pd_distance is not none %}distance {{ order.pd_distance }}{% endif %}{% if order.pd_od is not none or order.pd_os is not none %} ({{ order.pd_od if order.pd_od is not none else '—' }} / {{ order.pd_os if order.pd_os is not none else '—' }}){% endif %}{% if order.pd_near is not none %}, near {{ order.pd_near }}{% endif %}{% if order.pd_distance is none and order.pd_od is none and order.pd_os is none %}—{% endif %}</dd>
+    {% if order.seg_height_od is not none or order.seg_height_os is not none %}<dt>Seg height (mm)</dt><dd class="mono-data" id="segRow">{{ order.seg_height_od if order.seg_height_od is not none else '—' }} / {{ order.seg_height_os if order.seg_height_os is not none else '—' }}</dd>{% endif %}
+    <dt></dt><dd class="muted" style="font-size:0.78rem">Internal measurements for the lab; never shown to the patient.</dd>
+    {% endif %}
     {% if order.remake_of_order_id %}<dt>Remake Of</dt><dd><a href="/orders/{{ order.remake_of_order_id }}">Order #{{ order.remake_of_order_id }}</a></dd>{% endif %}
     {% if order.notes %}<dt>Notes</dt><dd>{{ order.notes }}</dd>{% endif %}
   </dl></div>
@@ -64,9 +70,13 @@
 <div class="card" style="margin-top:1rem"><h3>Reorder / Remake</h3>
   <p style="color:var(--ink-muted);font-size:0.9rem">Place a new linked order against the same prescription and lab
     -- for a warranty redo or a job that came back wrong -- without losing this order's own history.</p>
+  {% if order.order_type == 'glasses' %}
+  <a href="/orders/{{ order.id }}/remake" class="btn btn-sm btn-secondary">Create Remake Order</a>
+  {% else %}
   <form method="post" action="/orders/{{ order.id }}/remake">
     <button type="submit" class="btn btn-sm btn-secondary">Create Remake Order</button>
   </form>
+  {% endif %}
 </div>
 {% endif %}
 

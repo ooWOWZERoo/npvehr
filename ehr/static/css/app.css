@@ -209,6 +209,7 @@ tr:hover td { background: var(--primary-soft); }
 .form-group input:focus, .form-group select:focus, .form-group textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .form-group textarea { min-height: 80px; resize: vertical; }
 .form-row { display: grid; gap: var(--space-4); margin-bottom: var(--space-4); }
+.form-row[hidden], .card[hidden] { display: none !important; }   /* the grid/card display rules must not defeat the hidden attribute */
 .form-row.cols-2 { grid-template-columns: 1fr 1fr; }
 .form-row.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
 .form-row.cols-4 { grid-template-columns: repeat(4, 1fr); }

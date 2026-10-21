@@ -988,9 +988,10 @@ class EyeExam(Base):
     # letter (ehr/services/pcp_letter.py) can rely on a recorded fact instead of a clinician's tick-box alone.
     dilated_exam_performed = Column(Boolean)
     dilation_note = Column(String)
-    # Keratometry and pupillary distance, taken in pre-testing alongside the auto-refraction starting point (which is a 'autorefraction'
-    # row in the refractions table). K readings per eye: flat and steep power in diopters, steep-meridian axis. PD in mm: distance
-    # (binocular), monocular OD/OS, and near. All optional.
+    # Keratometry, taken in pre-testing alongside the auto-refraction starting point (an 'autorefraction' row in the refractions table):
+    # K readings per eye -- flat and steep power in diopters, steep-meridian axis. All optional.
+    # The four pd_* columns were added in v3.03 and are NOT USED: PD is taken only when glasses are ordered and lives on the lab order
+    # (RxLabOrder.pd_*), never on the exam. Nothing writes or displays them; they are kept only so a deployed database needs no drop.
     k_od_flat = Column(Float); k_od_steep = Column(Float); k_od_axis = Column(Integer)
     k_os_flat = Column(Float); k_os_steep = Column(Float); k_os_axis = Column(Integer)
     pd_distance = Column(Float); pd_od = Column(Float); pd_os = Column(Float); pd_near = Column(Float)
@@ -1421,6 +1422,13 @@ class RxLabOrder(Base):
     # history (what was sent, when, to which lab) stays intact.
     remake_of_order_id = Column(Integer, ForeignKey("rx_lab_orders.id"))
     notes = Column(Text)
+    # Lab measurements for an EYEGLASSES order only (NULL on a contact lens order). Taken when the order is placed -- never at the exam
+    # -- and kept with the order for internal use (the lab); they are never shown to the patient or put on any patient-facing document.
+    # PD is always required for glasses (the distance PD, or the right and left PD, in mm; near is optional); seg height (per eye, mm) is
+    # required for every lens design except Single Vision. See ehr.services.rx_lab_orders.clean_glasses_measurements.
+    lens_design = Column(String)          # Single Vision / Bifocal / Trifocal / Progressive / Office-Computer (pre-filled from the Rx)
+    pd_distance = Column(Float); pd_od = Column(Float); pd_os = Column(Float); pd_near = Column(Float)
+    seg_height_od = Column(Float); seg_height_os = Column(Float)
 
     rx = relationship("Prescription")
     patient = relationship("Patient")

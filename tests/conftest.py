@@ -177,3 +177,10 @@ def drug_catalog_seed(live_server):
     finally:
         con.close()
 
+
+
+@pytest.fixture(scope="session")
+def live_db_path(live_server):
+    """Path of the live server's throwaway SQLite file, for tests that must read or seed rows the UI can't (e.g. legacy data)."""
+    return _LIVE_DB["path"]
+

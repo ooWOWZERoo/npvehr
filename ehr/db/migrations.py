@@ -1774,6 +1774,16 @@ def migration_064_exam_pretesting_and_disposition(conn):
         _add_column_if_missing(conn, "eye_exams", col, "TEXT")
 
 
+def migration_065_lab_order_measurements(conn):
+    """rx_lab_orders: lens_design plus the glasses-order measurements the lab needs (PD distance/right/left/near and seg height per eye,
+    in mm). All nullable: contact lens orders and every pre-existing order stay NULL. Idempotent."""
+    if not _table_exists(conn, "rx_lab_orders"):
+        return  # brand-new database; create_all() builds the table with these columns.
+    _add_column_if_missing(conn, "rx_lab_orders", "lens_design", "VARCHAR")
+    for col in ("pd_distance", "pd_od", "pd_os", "pd_near", "seg_height_od", "seg_height_os"):
+        _add_column_if_missing(conn, "rx_lab_orders", col, "FLOAT")
+
+
 # Ordered list of (id, function). Adding new migrations: append, never edit past entries.
 COLUMN_MIGRATIONS = [
     ("001_appointment_columns", migration_001_appointment_columns),
@@ -1822,6 +1832,7 @@ COLUMN_MIGRATIONS = [
     ("062_drug_catalog_resolved_at", migration_062_drug_catalog_resolved_at),
     ("063_drug_catalog_generic_checked_at", migration_063_drug_catalog_generic_checked_at),
     ("064_exam_pretesting_and_disposition", migration_064_exam_pretesting_and_disposition),
+    ("065_lab_order_measurements", migration_065_lab_order_measurements),
 ]
 def migration_055_seed_ros_catalog(conn):
     """Review-of-Systems decision-support catalog (ros_master / ros_icd10_test_mapping
@@ -2006,6 +2017,11 @@ def down_064_exam_pretesting_and_disposition(conn):
                     "rx_decision", "treatment_note", "referral_note", "education_note"):
             conn.execute(text(f"ALTER TABLE eye_exams DROP COLUMN {col}"))
 
+def down_065_lab_order_measurements(conn):
+    if _table_exists(conn, "rx_lab_orders"):
+        for col in ("lens_design", "pd_distance", "pd_od", "pd_os", "pd_near", "seg_height_od", "seg_height_os"):
+            conn.execute(text(f"ALTER TABLE rx_lab_orders DROP COLUMN {col}"))
+
 # 060_medication_catalog_columns deliberately has no down-migration: its columns are nullable foreign keys, which SQLite
 # cannot drop, and old code simply ignores them, so rolling the code back needs no schema change.
 # Sparse by design -- see this section's own docstring above. Extend this
@@ -2024,6 +2040,7 @@ DOWN_MIGRATIONS = {
     "048_ros_and_social_history": down_048_ros_and_social_history,
     "059_dilated_exam": down_059_dilated_exam,
     "064_exam_pretesting_and_disposition": down_064_exam_pretesting_and_disposition,
+    "065_lab_order_measurements": down_065_lab_order_measurements,
     "053_seed_services": down_053_seed_services,
 }
 

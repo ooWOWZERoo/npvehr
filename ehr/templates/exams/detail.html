@@ -28,9 +28,6 @@
     <dt>Keratometry</dt><dd class="mono-data" id="kRow">OD {{ exam.k_od_flat if exam.k_od_flat is not none else '—' }} / {{ exam.k_od_steep if exam.k_od_steep is not none else '—' }}{% if exam.k_od_axis %} @ {{ exam.k_od_axis }}{% endif %}
       &nbsp; OS {{ exam.k_os_flat if exam.k_os_flat is not none else '—' }} / {{ exam.k_os_steep if exam.k_os_steep is not none else '—' }}{% if exam.k_os_axis %} @ {{ exam.k_os_axis }}{% endif %}</dd>
     {% endif %}
-    {% if exam.pd_distance is not none or exam.pd_od is not none or exam.pd_os is not none or exam.pd_near is not none %}
-    <dt>PD (mm)</dt><dd class="mono-data" id="pdRow">{% if exam.pd_distance is not none %}distance {{ exam.pd_distance }}{% endif %}{% if exam.pd_od is not none or exam.pd_os is not none %} ({{ exam.pd_od if exam.pd_od is not none else '—' }} / {{ exam.pd_os if exam.pd_os is not none else '—' }}){% endif %}{% if exam.pd_near is not none %}, near {{ exam.pd_near }}{% endif %}</dd>
-    {% endif %}
     <dt>Dilated exam</dt><dd id="dilatedRow">{% if exam.dilated_exam_performed is sameas true %}Yes{% elif exam.dilated_exam_performed is sameas false %}No{% else %}<span class="muted">Not recorded</span>{% endif %}{% if exam.dilation_note %} <span class="muted">&mdash; {{ exam.dilation_note }}</span>{% endif %}</dd>
     <dt>Dx Codes</dt><dd class="mono-data">{{ exam.diagnosis_codes or '—' }}</dd>
     <dt>Follow-up</dt><dd>
