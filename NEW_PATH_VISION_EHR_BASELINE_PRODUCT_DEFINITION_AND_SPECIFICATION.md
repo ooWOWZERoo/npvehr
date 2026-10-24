@@ -5728,7 +5728,7 @@ A review of the New Exam form against a real visit (technician intake, phoropter
 
 ### 130.3 Limits
 
-PD is recorded but not carried onto the prescription (the Rx form has no PD field). Medications prescribed, referral and education are free text, and tests to order are still set up in the specialty panels and Return visit rather than in the new step. The dilation record stays with the fundus exam, with a pointer from the Cycloplegic tab. The new order follows common optometry practice; it should be confirmed with the practice's own technicians and doctors.
+(PD was removed from the exam in §131: it belongs to the lab order.) Medications prescribed, referral and education are free text, and tests to order are still set up in the specialty panels and Return visit rather than in the new step. The dilation record stays with the fundus exam, with a pointer from the Cycloplegic tab. The new order follows common optometry practice; it should be confirmed with the practice's own technicians and doctors.
 
 ### 130.4 Tests
 
@@ -5742,4 +5742,37 @@ An end-to-end test of the step order (rail and page), where each field lives (ac
 | Rx | Write Rx pre-filled from the manifest refraction. |
 | Exam page | Auto-refraction, K, PD and an Rx & treatment card. |
 | Schema | 14 nullable `eye_exams` columns (migration 064); `autorefraction` refraction type. |
+
+## 131. PD and Seg Height Belong to the Glasses Order (v3.04)
+
+### 131.1 Request
+
+PD (pupillary distance) and seg height are measured only when glasses are ordered; PD can change slightly from order to order and is never shared with patients. They must be required to place an eyeglasses order, kept with that order for internal use (for example, submitting it to a lab), recorded for eyeglasses orders only, and never put on any patient-visible document. PD is always required; seg height is required only when the lens is not single vision.
+
+### 131.2 What changed
+
+* **PD is no longer taken at the exam.** The four PD inputs are gone from the Starting point step (v3.03) and from the exam page. The four `eye_exams.pd_*` columns from migration 064 remain in the database, **unused**: nothing writes, shows or exports them. (They were never on a patient-facing page.)
+* **The glasses lab order records them** (migration 065, new nullable columns on `rx_lab_orders`): lens design (pre-filled from the prescription's lens type; required, because it decides whether seg height is needed), PD (distance, right, left, near), and seg height (right and left).
+* **Rules** (enforced on the server; the form only shows or hides fields): PD is **always** required for glasses: the distance PD, or both the right and left PD (the total is then their sum); near PD is optional. Seg height (both eyes) is required for every lens design **except Single Vision**; for Single Vision any seg height sent is discarded. Misplaced-decimal guards reject an implausible value (e.g. a PD of 6.3 mm). Every problem is listed at once and what was typed is kept.
+* **Contact lens orders store none of it** (lens design, PD and seg height stay empty even if posted). Only "glasses" or "contacts" are accepted as an order type.
+* **Remakes are orders too.** A glasses remake opens a form pre-filled from the original order (PD may be corrected: it can differ a little each time) and must pass the same rules; an order placed before this change has no measurements, so its remake page starts blank and insists on them. A contact lens remake is placed in one click, as before.
+* **Staff-only display:** the lab order page shows lens design, PD and seg height with a note that they are internal and never shown to the patient. Order pages require a staff sign-in; a patient session cannot open them.
+* A stylesheet fix found while testing: the form-row and card display rules no longer override the `hidden` attribute (the seg height row stayed visible for Single Vision).
+
+### 131.3 Limits
+
+The app tracks lab orders but does not transmit them: there is no lab submission feed, so the measurements are for staff to read from the order. The typo guards use wide ranges (PD total 40-85 mm, each side 18-45, near 40-80; seg height 5-40) and can be adjusted if a real fitting falls outside them.
+
+### 131.4 Tests
+
+Unit tests for the rules (PD required in every design, monocular-only PD summed, seg height required for bifocal / trifocal / progressive / office-computer but not single vision, every error reported together, typo guards). End-to-end tests: the order form (opens on the Rx's lens design, seg row follows the design, contacts hide the block), each refusal and acceptance, single vision discarding seg height, a contact lens order storing nothing (checked in the database), remake pre-fill and refusal, a legacy order, and **a privacy test that puts distinctive PD and seg height values on a lab order and on the retired exam columns and finds none of them on the patient portal, the printed prescription, the prescription page, the exam page or the chart tabs** (and that a patient session cannot open the order pages). A migration test for 065. The exam-form tests now assert no PD field exists on the exam. Full suite green.
+
+**Version 3.04 change log (relative to v3.03):**
+
+| Area | Change |
+| --- | --- |
+| Exam | PD removed from the Starting point step and the exam page (columns left unused). |
+| Lab order | Lens design, PD and seg height, required for glasses (seg height not for Single Vision), none for contacts; remake confirms them. |
+| Privacy | PD and seg height appear only on staff order pages; tested absent from every patient-facing page and document. |
+| Schema | Seven nullable `rx_lab_orders` columns (migration 065). |
 

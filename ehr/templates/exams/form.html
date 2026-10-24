@@ -148,7 +148,7 @@
     </section>
 
     <section class="exam-section" id="step-startpoint" data-step="startpoint">
-      <div class="exam-section-head"><div><span class="eyebrow">Technician &middot; right eye first</span><h2>Starting point: auto-refraction, K &amp; PD</h2>
+      <div class="exam-section-head"><div><span class="eyebrow">Technician &middot; right eye first</span><h2>Starting point: auto-refraction &amp; K</h2>
         <p class="exam-section-sub">From the auto-refractor and keratometer (or retinoscopy). Refraction starts from these numbers.</p></div></div>
       <div class="eye-pair">
         {% for eye, EYE, ename in [('od', 'OD', 'Right eye'), ('os', 'OS', 'Left eye')] %}
@@ -173,12 +173,6 @@
           </div>
         </div>
         {% endfor %}
-      </div>
-      <div class="exam-strip">
-        <label class="fld">PD distance (mm)<input class="mono" name="pd_distance" type="number" step="0.5" min="0"></label>
-        <label class="fld">PD right (mm)<input class="mono" name="pd_od" type="number" step="0.5" min="0"></label>
-        <label class="fld">PD left (mm)<input class="mono" name="pd_os" type="number" step="0.5" min="0"></label>
-        <label class="fld">PD near (mm)<input class="mono" name="pd_near" type="number" step="0.5" min="0"></label>
       </div>
     </section>
 

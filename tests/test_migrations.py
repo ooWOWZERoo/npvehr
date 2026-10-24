@@ -404,3 +404,20 @@ def test_exam_pretesting_and_disposition_columns_are_added_to_an_existing_table_
     with fresh_engine.begin() as conn:
         conn.execute(text("DROP TABLE eye_exams"))
         mig.migration_064_exam_pretesting_and_disposition(conn)          # no table yet: skipped, not an error
+
+
+def test_lab_order_measurement_columns_are_added_to_an_existing_table_and_rerun_is_safe(fresh_engine):
+    """Migration 065: an rx_lab_orders table from before PD/seg height gains lens_design and the six measurement columns, existing orders read
+    NULL; re-run is a no-op."""
+    with fresh_engine.begin() as conn:
+        conn.execute(text("CREATE TABLE rx_lab_orders (id INTEGER PRIMARY KEY, rx_id INTEGER, order_type VARCHAR)"))
+        conn.execute(text("INSERT INTO rx_lab_orders (rx_id, order_type) VALUES (1, 'glasses')"))
+    for _ in range(2):
+        with fresh_engine.begin() as conn:
+            mig.migration_065_lab_order_measurements(conn)
+    with fresh_engine.connect() as conn:
+        row = conn.execute(text("SELECT lens_design, pd_distance, pd_od, pd_os, pd_near, seg_height_od, seg_height_os FROM rx_lab_orders")).one()
+        assert tuple(row) == (None,) * 7
+    with fresh_engine.begin() as conn:
+        conn.execute(text("DROP TABLE rx_lab_orders"))
+        mig.migration_065_lab_order_measurements(conn)          # no table yet: skipped, not an error

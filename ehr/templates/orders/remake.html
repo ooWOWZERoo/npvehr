@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Remake Lab Order &mdash; New Path Vision EHR{% endblock %}
+{% block content %}
+<div class="page-header"><div><span class="page-eyebrow">Orders</span><h1>Remake Order #{{ order.id }}</h1></div></div>
+<p style="color:var(--ink-muted);margin-top:-0.75rem">
+  A new glasses order against the same prescription and lab ({{ order.lab_name }}). A remake is still an order, so confirm the lab
+  measurements below: they start from the original order and can be corrected.
+</p>
+{% if errors %}<div class="alert alert-error" style="margin-bottom:var(--space-4)" role="alert"><ul style="margin:0;padding-left:1.2rem">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul></div>{% endif %}
+<div class="card form-card">
+  <form method="post" action="/orders/{{ order.id }}/remake">
+    {% include "orders/_measurements.html" %}
+    <button type="submit" class="btn btn-primary">Place Remake Order</button>
+    <a href="/orders/{{ order.id }}" class="btn btn-secondary">Cancel</a>
+  </form>
+</div>
+{% endblock %}
