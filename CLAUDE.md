@@ -90,6 +90,15 @@ margin against `datetime.utcnow()` actually holds at every hour of the day
 before assuming a code regression; a `weekday_offset` of 1-2 days is often
 not enough margin against a same-order-of-magnitude cutoff window.
 
+## A date-offset collision trap in Playwright tests
+
+All e2e tests share one server and database for the whole session, and several book or close dates a fixed number of days out
+(`utcnow() + timedelta(days=20..29)`); at least one (the precheck-closure test, +25 days) leaves its practice closure behind. A test
+that searches "the first Sunday on or after today + N days" can land on one of those dates only on certain days of the week/month, so it
+passes for weeks and then fails (`test_provider_working_hours_can_be_edited...` did on 2026-10-21, when today + 25 days was that Sunday).
+When a test needs an open date, pick one **well outside the 20-29 day window** (the working-hours test now uses +45), or delete what the
+test created. A failure that appears only in the full suite, only on some days, and passes alone is this.
+
 ## Workflow
 
 - One PR per logical change. Full suite green (or a confirmed-unrelated

@@ -174,7 +174,6 @@ async def create_exam(request: Request, db: Session = Depends(get_db)):
         dilated_exam_performed=_b(g("dilated_exam_performed")), dilation_note=(g("dilation_note") or "").strip()[:255] or None,
         k_od_flat=_f(g("k_od_flat")), k_od_steep=_f(g("k_od_steep")), k_od_axis=_i(g("k_od_axis")),
         k_os_flat=_f(g("k_os_flat")), k_os_steep=_f(g("k_os_steep")), k_os_axis=_i(g("k_os_axis")),
-        pd_distance=_f(g("pd_distance")), pd_od=_f(g("pd_od")), pd_os=_f(g("pd_os")), pd_near=_f(g("pd_near")),
         rx_decision=g("rx_decision") if g("rx_decision") in RX_DECISIONS else None,
         treatment_note=(g("treatment_note") or "").strip() or None, referral_note=(g("referral_note") or "").strip() or None,
         education_note=(g("education_note") or "").strip() or None,

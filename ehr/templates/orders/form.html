@@ -6,23 +6,25 @@
   For {{ rx.patient.last_name }}, {{ rx.patient.first_name }} &mdash; {{ rx.rx_type|title }} Rx signed
   {{ rx.signed_at.strftime('%Y-%m-%d') if rx.signed_at else '' }} by Dr. {{ rx.signed_by.last_name }}.
 </p>
+{% if errors %}<div class="alert alert-error" style="margin-bottom:var(--space-4)" role="alert"><ul style="margin:0;padding-left:1.2rem">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul></div>{% endif %}
 <div class="card form-card">
   <form method="post" action="/orders/new">
     <input type="hidden" name="rx_id" value="{{ rx.id }}">
     <div class="form-row cols-3">
       <div class="form-group"><label>Order Type* <select name="order_type" required>
-          <option value="glasses" {{ 'selected' if rx.rx_type == 'glasses' }}>Glasses</option>
-          <option value="contacts" {{ 'selected' if rx.rx_type == 'contacts' }}>Contacts</option>
+          <option value="glasses" {{ 'selected' if values.get('order_type') == 'glasses' }}>Glasses</option>
+          <option value="contacts" {{ 'selected' if values.get('order_type') == 'contacts' }}>Contacts</option>
         </select></label>
       </div>
-      <div class="form-group"><label>Lab* <input name="lab_name" list="common_labs" required placeholder="Select or type a lab name"></label>
+      <div class="form-group"><label>Lab* <input name="lab_name" list="common_labs" required value="{{ values.get('lab_name', '') }}" placeholder="Select or type a lab name"></label>
         <datalist id="common_labs">
           {% for lab in common_labs %}<option value="{{ lab }}">{% endfor %}
         </datalist>
       </div>
-      <div class="form-group"><label>Expected Ready (ETA) <input type="date" name="eta_date"></label></div>
+      <div class="form-group"><label>Expected Ready (ETA) <input type="date" name="eta_date" value="{{ values.get('eta_date', '') }}"></label></div>
     </div>
-    <div class="form-group"><label>Notes <textarea name="notes" rows="2" placeholder="Anything the lab or front desk should know"></textarea></label></div>
+    {% include "orders/_measurements.html" %}
+    <div class="form-group"><label>Notes <textarea name="notes" rows="2" placeholder="Anything the lab or front desk should know">{{ values.get('notes', '') }}</textarea></label></div>
     <button type="submit" class="btn btn-primary">Place Order</button>
     <a href="/prescriptions/{{ rx.id }}" class="btn btn-secondary">Cancel</a>
   </form>

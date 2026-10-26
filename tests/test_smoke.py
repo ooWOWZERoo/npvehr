@@ -1990,6 +1990,8 @@ def test_rx_lab_order_lifecycle_and_remake(logged_in_page, live_server):
     page.goto(live_server + f"/orders/new?rx_id={rx_id}")
     page.fill('input[name="lab_name"]', "Regression Test Lab")
     page.select_option('select[name="order_type"]', "glasses")
+    page.select_option('select[name="lens_design"]', "Single Vision")      # glasses orders carry a lens design and a PD (see the PD/seg height test)
+    page.fill('input[name="pd_distance"]', "63")
     page.locator('button[type="submit"]', has_text="Place Order").click()
     page.wait_for_url(re.compile(r"/orders/\d+$"))
     order_id = page.url.rstrip("/").split("/")[-1]
@@ -2006,8 +2008,9 @@ def test_rx_lab_order_lifecycle_and_remake(logged_in_page, live_server):
     assert page.locator(".badge", has_text="Dispensed").count() >= 1
     assert page.locator("form[action$='/transition']").count() == 0  # terminal state, no further transitions
 
-    # An already-dispensed order allows a remake, which links back to it.
-    page.locator("form[action$='/remake'] button").click()
+    # An already-dispensed order allows a remake, which links back to it (a glasses remake confirms its measurements first).
+    page.locator("a[href$='/remake']").click()
+    page.locator('button[type="submit"]', has_text="Place Remake Order").click()
     page.wait_for_url(re.compile(r"/orders/\d+$"))
     remake_id = page.url.rstrip("/").split("/")[-1]
     assert remake_id != order_id
@@ -3646,7 +3649,9 @@ def test_provider_working_hours_can_be_edited_and_deactivated_and_drive_slot_sea
     page.goto(live_server + "/appointments/new")
     provider_id = page.locator('select[name="provider_id"] option').first.get_attribute("value")
     type_id = page.locator('select[name="appointment_type_version_id"] option[value]:not([value=""])').first.get_attribute("value")
-    d = date.today() + timedelta(days=21)
+    # A Sunday well beyond every other test's date window (they book and close dates 20-29 days out, and one leaves its closure behind):
+    # at +21 days the first Sunday collided with that leftover closure on days when the weekdays line up (it did on 2026-10-21).
+    d = date.today() + timedelta(days=45)
     sunday = d + timedelta(days=(6 - d.weekday()) % 7)
 
     def sunday_slots():
@@ -5449,8 +5454,10 @@ def test_exam_form_follows_the_visit_in_order_and_acuity_lives_in_pre_testing(lo
     assert "before any dilating drops" in page.locator("#step-entrance .exam-section-sub").inner_text()
     # Review of systems sits with intake; the starting point holds auto-refraction, K and PD.
     assert page.locator('#step-systems [name="ros_cardiovascular"]').count() == 1
-    for name in ("auto_od_sphere", "auto_os_axis", "k_od_flat", "k_os_steep", "k_od_axis", "pd_distance", "pd_od", "pd_os", "pd_near"):
+    for name in ("auto_od_sphere", "auto_os_axis", "k_od_flat", "k_os_steep", "k_od_axis"):
         assert page.locator(f'#step-startpoint [name="{name}"]').count() == 1, name
+    # PD is NOT taken at the exam: it is measured when glasses are ordered and kept with the lab order.
+    assert page.locator('[name^="pd_"], [name^="seg_height"]').count() == 0 and "PD" not in page.locator("#step-startpoint").inner_text()
     # The doctor's part starts at focus areas; Refraction opens on Habitual and says the cycloplegic drops are recorded with the fundus.
     assert page.locator("#rx-tab-hab").get_attribute("aria-selected") == "true"
     assert "Lensometry" in page.locator('[data-rx-group="hab"] .rx-group-hint').first.text_content()
@@ -5469,10 +5476,6 @@ def test_pre_testing_starting_point_and_disposition_are_saved_shown_and_the_rx_o
     page.fill('input[name="k_od_flat"]', "43.5")
     page.fill('input[name="k_od_steep"]', "44.25")
     page.fill('input[name="k_od_axis"]', "90")
-    page.fill('input[name="pd_distance"]', "63")
-    page.fill('input[name="pd_od"]', "31.5")
-    page.fill('input[name="pd_os"]', "31.5")
-    page.fill('input[name="pd_near"]', "60")
     page.locator("#rx-tab-man").click()
     page.fill('input[name="man_od_sphere"]', "-3.25")
     page.fill('input[name="man_od_cylinder"]', "-0.75")
@@ -5488,9 +5491,9 @@ def test_pre_testing_starting_point_and_disposition_are_saved_shown_and_the_rx_o
     exam_url = page.url
 
     body = page.locator("body").inner_text()
-    assert "Auto-refraction / Retinoscopy" in body and "Keratometry" in body and "PD (mm)" in body
+    assert "Auto-refraction / Retinoscopy" in body and "Keratometry" in body
     assert "OD 43.5 / 44.25 @ 90" in page.locator("#kRow").inner_text()
-    assert "distance 63.0 (31.5 / 31.5), near 60.0" in page.locator("#pdRow").inner_text()
+    assert "PD" not in page.locator(".detail-grid").first.inner_text().replace("APD", "")        # PD is never part of the exam record
     card = page.locator("#dispositionCard").inner_text()
     assert "Glasses prescription" in card and "Artificial tears QID OU" in card and "Retina consult for lattice" in card and "Drop technique reviewed" in card
     assert page.locator("a", has_text="Write glasses Rx").count() == 1
@@ -5522,3 +5525,184 @@ def test_pre_testing_starting_point_and_disposition_are_saved_shown_and_the_rx_o
     assert page.locator("#rxPrefillNote").count() == 0 and page.locator('input[name="od_sphere"]').input_value() == ""
     page.goto(f"{live_server}/prescriptions/new")
     assert page.locator("#rxPrefillNote").count() == 0
+
+
+def _signed_rx(page, live_server, last, first, lens_type=""):
+    """A signed glasses prescription for the named patient (a lab order can only be placed against a signed Rx). Returns the Rx id."""
+    page.goto(live_server + "/prescriptions/new")
+    page.select_option('select[name="patient_id"]', label=f"{last}, {first}")
+    if lens_type:
+        page.select_option('select[name="lens_type"]', lens_type)
+    page.locator('button[type="submit"]', has_text="Save Prescription").click()
+    page.wait_for_url(re.compile(r"/prescriptions/\d+$"))
+    rx_id = page.url.rstrip("/").split("/")[-1]
+    page.once("dialog", lambda d: d.accept())
+    page.locator("form[action$='/sign'] button[type=\"submit\"]").click()
+    page.wait_for_load_state("networkidle")
+    return rx_id
+
+
+def _place(page, live_server, rx_id, **fields):
+    """POST a lab order straight to the server (so the server's own rules are what's under test, not the browser's)."""
+    token = page.locator('meta[name="csrf-token"]').get_attribute("content")
+    return page.request.post(live_server + "/orders/new", max_redirects=0,
+                             form={"rx_id": rx_id, "lab_name": "Measurement Lab", "order_type": "glasses", "csrf_token": token, **fields})
+
+
+def test_glasses_orders_require_pd_and_seg_height_only_for_non_single_vision_and_contacts_record_neither(logged_in_page, live_server, live_db_path):
+    import sqlite3
+    page = logged_in_page
+    rx_id = _signed_rx(page, live_server, "Davis", "Carol", lens_type="Progressive")
+
+    # The form opens on the Rx's lens design; seg height shows only for a non-single-vision lens; contacts hide the whole block.
+    page.goto(live_server + f"/orders/new?rx_id={rx_id}")
+    assert page.locator("#lensDesign").input_value() == "Progressive" and page.locator("#segRow").is_visible()
+    page.select_option("#lensDesign", "Single Vision")
+    assert page.locator("#segRow").is_hidden() and page.locator("#glassesMeasurements").is_visible()
+    page.select_option("#lensDesign", "Bifocal")
+    assert page.locator("#segRow").is_visible()
+    page.select_option('select[name="order_type"]', "contacts")
+    assert page.locator("#glassesMeasurements").is_hidden()
+    assert "never shown to the patient" in page.locator("#glassesMeasurements").text_content()
+
+    # Server rules. Nothing is saved on a refusal; the form comes back with every problem listed and the entries kept.
+    for fields, expected in (
+        ({"lens_design": "Progressive"}, ["PD is required", "Seg height is required"]),
+        ({"lens_design": "Progressive", "pd_distance": "63"}, ["Seg height is required"]),
+        ({"lens_design": "Single Vision"}, ["PD is required"]),
+        ({"lens_design": "Single Vision", "pd_od": "31.5"}, ["PD is required"]),
+        ({"lens_design": "Single Vision", "pd_distance": "6.3"}, ["looks wrong"]),
+        ({"pd_distance": "63"}, ["Choose the lens design"]),
+    ):
+        r = _place(page, live_server, rx_id, **fields)
+        assert r.status == 400 and all(e in r.text() for e in expected), (fields, r.text()[:300])
+    assert 'value="Measurement Lab"' in _place(page, live_server, rx_id, lens_design="Progressive").text()      # entries kept on the redisplayed form
+
+    # Accepted: progressive with right/left PD only (the total is their sum) and seg heights; staff see them on the order.
+    ok = _place(page, live_server, rx_id, lens_design="Progressive", pd_od="31.5", pd_os="32", pd_near="60", seg_height_od="18", seg_height_os="17.5")
+    assert ok.status == 303
+    page.goto(live_server + ok.headers["location"])
+    assert page.locator("#lensDesignRow").inner_text() == "Progressive"
+    assert page.locator("#pdRow").inner_text() == "distance 63.5 (31.5 / 32.0), near 60.0"
+    assert page.locator("#segRow").inner_text() == "18.0 / 17.5"
+    assert "never shown to the patient" in page.locator(".detail-grid").first.inner_text()
+
+    # Single vision: PD is enough, and a seg height sent anyway is not kept.
+    sv = _place(page, live_server, rx_id, lens_design="Single Vision", pd_distance="64", seg_height_od="20", seg_height_os="20")
+    assert sv.status == 303
+    page.goto(live_server + sv.headers["location"])
+    assert page.locator("#pdRow").inner_text() == "distance 64.0" and page.locator("#segRow").count() == 0
+
+    # A contact lens order records NONE of it, even if the fields are posted.
+    cl = _place(page, live_server, rx_id, order_type="contacts", lens_design="Progressive", pd_distance="64", pd_od="32", pd_os="32",
+                pd_near="60", seg_height_od="18", seg_height_os="18")
+    assert cl.status == 303
+    order_id = int(cl.headers["location"].rstrip("/").split("/")[-1])
+    page.goto(live_server + cl.headers["location"])
+    assert page.locator("#pdRow").count() == 0 and page.locator("#lensDesignRow").count() == 0
+    con = sqlite3.connect(live_db_path)
+    try:
+        row = con.execute("SELECT order_type, lens_design, pd_distance, pd_od, pd_os, pd_near, seg_height_od, seg_height_os FROM rx_lab_orders WHERE id = ?", (order_id,)).fetchone()
+    finally:
+        con.close()
+    assert row == ("contacts", None, None, None, None, None, None, None)
+    assert _place(page, live_server, rx_id, order_type="bifocals", lens_design="Single Vision", pd_distance="63").status == 400   # only glasses or contacts
+
+
+def test_a_glasses_remake_confirms_its_measurements_and_a_legacy_order_needs_them_entered(logged_in_page, live_server, live_db_path):
+    import sqlite3
+    page = logged_in_page
+    rx_id = _signed_rx(page, live_server, "Davis", "Carol", lens_type="Bifocal")
+    placed = _place(page, live_server, rx_id, lens_design="Bifocal", pd_distance="62", seg_height_od="19", seg_height_os="19.5")
+    order_id = placed.headers["location"].rstrip("/").split("/")[-1]
+    token = page.locator('meta[name="csrf-token"]').get_attribute("content")
+    page.request.post(live_server + f"/orders/{order_id}/transition", form={"new_status": "dispensed", "csrf_token": token})
+
+    # The remake page opens pre-filled from the original; a remake without a PD is refused; with one it is placed and linked back.
+    page.goto(live_server + f"/orders/{order_id}")
+    page.locator("a[href$='/remake']").click()
+    assert page.locator('input[name="pd_distance"]').input_value() == "62.0" and page.locator('input[name="seg_height_os"]').input_value() == "19.5"
+    assert page.locator("#lensDesign").input_value() == "Bifocal"
+    r = page.request.post(live_server + f"/orders/{order_id}/remake", max_redirects=0, form={"csrf_token": token, "lens_design": "Bifocal", "seg_height_od": "19", "seg_height_os": "19.5"})
+    assert r.status == 400 and "PD is required" in r.text()
+    page.fill('input[name="pd_distance"]', "62.5")                                   # PD can differ a little from order to order
+    page.locator('button[type="submit"]', has_text="Place Remake Order").click()
+    page.wait_for_url(re.compile(r"/orders/\d+$"))
+    assert f"Order #{order_id}" in page.content() and page.locator("#pdRow").inner_text() == "distance 62.5" and page.locator("#segRow").inner_text() == "19.0 / 19.5"
+
+    # An order placed before this rule existed has no measurements: its remake page is blank and insists on them.
+    con = sqlite3.connect(live_db_path)
+    try:
+        pid = con.execute("SELECT patient_id FROM prescriptions WHERE id = ?", (rx_id,)).fetchone()[0]
+        cur = con.execute("INSERT INTO rx_lab_orders (rx_id, patient_id, order_type, lab_name, status, placed_at) VALUES (?, ?, 'glasses', 'Legacy Lab', 'dispensed', datetime('now'))", (rx_id, pid))
+        legacy_id = cur.lastrowid
+        con.commit()
+    finally:
+        con.close()
+    page.goto(live_server + f"/orders/{legacy_id}/remake")
+    assert page.locator('input[name="pd_distance"]').input_value() == "" and page.locator("#lensDesign").input_value() == ""
+    assert page.request.post(live_server + f"/orders/{legacy_id}/remake", max_redirects=0, form={"csrf_token": token}).status == 400
+
+    # A contact lens order's remake has no measurements and goes straight through from the order page.
+    cl = _place(page, live_server, rx_id, order_type="contacts")
+    cl_id = cl.headers["location"].rstrip("/").split("/")[-1]
+    page.request.post(live_server + f"/orders/{cl_id}/transition", form={"new_status": "dispensed", "csrf_token": token})
+    page.goto(live_server + f"/orders/{cl_id}")
+    assert page.locator("a[href$='/remake']").count() == 0
+    with page.expect_navigation():
+        page.locator("form[action$='/remake'] button").click()
+    assert f"Order #{cl_id}" in page.content() and page.locator("#pdRow").count() == 0
+
+
+def test_pd_and_seg_height_never_reach_the_patient_or_any_patient_facing_document(logged_in_page, live_server, live_db_path, rxnav_stub):
+    """Distinctive PD / seg height values are put on a lab order (and, directly in the database, on the retired exam PD columns); none
+    appears on the patient portal, the printed prescription, the prescription page, the exam page, or the patient's chart tabs."""
+    import sqlite3
+    page = logged_in_page
+    rx_id = _signed_rx(page, live_server, "Davis", "Carol", lens_type="Progressive")
+    placed = _place(page, live_server, rx_id, lens_design="Progressive", pd_distance="66.5", pd_od="33.25", pd_os="33.25", pd_near="62.75",
+                    seg_height_od="19.75", seg_height_os="19.25")
+    assert placed.status == 303
+    con = sqlite3.connect(live_db_path)
+    try:
+        pid, = con.execute("SELECT patient_id FROM prescriptions WHERE id = ?", (rx_id,)).fetchone()
+        exam_ids = [r[0] for r in con.execute("SELECT id FROM eye_exams WHERE patient_id = ?", (pid,)).fetchall()]
+        assert exam_ids, "the seeded demo patient should have exams"
+        con.execute("UPDATE eye_exams SET pd_distance = 67.25, pd_od = 33.5, pd_os = 33.5, pd_near = 63.25 WHERE patient_id = ?", (pid,))
+        con.commit()
+    finally:
+        con.close()
+    secrets = ["66.5", "33.25", "62.75", "19.75", "19.25", "67.25", "33.5", "63.25"]
+
+    def assert_clean(text, where):
+        low = text.lower()
+        for s in secrets:
+            assert s not in text, f"{s} (a PD / seg height value) appears on {where}"
+        assert "pupillary" not in low and "seg height" not in low and "pd (mm)" not in low, f"PD wording appears on {where}"
+
+    # Staff-side pages about the exam and the prescription (the printed Rx is handed to the patient).
+    assert page.request.get(live_server + f"/prescriptions/{rx_id}/print").status == 200
+    for path in (f"/prescriptions/{rx_id}/print", f"/prescriptions/{rx_id}", f"/patients/{pid}", f"/patients/{pid}/rx", *[f"/exams/{e}" for e in exam_ids]):
+        r = page.request.get(live_server + path)
+        assert r.status == 200, path
+        assert_clean(r.text(), path)
+    # ...while the lab order itself, internal, does show them.
+    order_page = page.request.get(live_server + placed.headers["location"]).text()
+    assert "66.5" in order_page and "19.75" in order_page
+
+    # The patient's own view: sign in to the portal as the patient.
+    ctx = page.context.browser.new_context()
+    pp = ctx.new_page()
+    pp.goto(live_server + "/portal/login")
+    pp.fill("#email", "carol@example.com")
+    pp.click("button[type=submit]")
+    pp.wait_for_load_state("networkidle")
+    pp.goto(pp.locator("a", has_text="Sign in as Carol Davis").get_attribute("href"))
+    pp.wait_for_url(re.compile(r"/portal/$"))
+    for path in ("/portal/", "/portal/records", "/portal/records/visits", "/portal/records/prescriptions", *[f"/portal/records/visits/{e}" for e in exam_ids]):
+        r = pp.request.get(live_server + path)
+        assert r.status == 200, path
+        assert_clean(r.text(), path)
+    staff_only = pp.request.get(live_server + "/orders/").text()                      # a patient session can't open the staff order pages
+    assert "Measurement Lab" not in staff_only and "Lab Order" not in staff_only
+    ctx.close()
