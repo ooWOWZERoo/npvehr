@@ -421,3 +421,27 @@ def test_lab_order_measurement_columns_are_added_to_an_existing_table_and_rerun_
     with fresh_engine.begin() as conn:
         conn.execute(text("DROP TABLE rx_lab_orders"))
         mig.migration_065_lab_order_measurements(conn)          # no table yet: skipped, not an error
+
+
+def test_exam_pd_columns_are_dropped_keeping_everything_else_and_rerun_is_safe(fresh_engine):
+    """Migration 066: the unused eye_exams.pd_* columns (added by 064, never used since v3.04) are dropped, their values with them; other columns and
+    rows are untouched; a re-run, a table that never had them and a missing table are all no-ops."""
+    with fresh_engine.begin() as conn:
+        conn.execute(text("CREATE TABLE eye_exams (id INTEGER PRIMARY KEY, patient_id INTEGER, k_od_flat FLOAT, "
+                          "pd_distance FLOAT, pd_od FLOAT, pd_os FLOAT, pd_near FLOAT)"))
+        conn.execute(text("INSERT INTO eye_exams (patient_id, k_od_flat, pd_distance, pd_od, pd_os, pd_near) VALUES (7, 43.5, 63, 31.5, 31.5, 60)"))
+    for _ in range(2):
+        with fresh_engine.begin() as conn:
+            mig.migration_066_drop_exam_pd_columns(conn)
+    with fresh_engine.connect() as conn:
+        assert mig._existing_columns(conn, "eye_exams") == {"id", "patient_id", "k_od_flat"}
+        assert tuple(conn.execute(text("SELECT patient_id, k_od_flat FROM eye_exams")).one()) == (7, 43.5)
+    with fresh_engine.begin() as conn:
+        mig.down_066_drop_exam_pd_columns(conn)                      # rollback puts the (empty) columns back...
+        mig.down_066_drop_exam_pd_columns(conn)                      # ...idempotently
+    with fresh_engine.connect() as conn:
+        assert {"pd_distance", "pd_od", "pd_os", "pd_near"} <= mig._existing_columns(conn, "eye_exams")
+        assert tuple(conn.execute(text("SELECT pd_distance, k_od_flat FROM eye_exams")).one()) == (None, 43.5)
+    with fresh_engine.begin() as conn:
+        conn.execute(text("DROP TABLE eye_exams"))
+        mig.migration_066_drop_exam_pd_columns(conn)                 # no table yet: skipped, not an error

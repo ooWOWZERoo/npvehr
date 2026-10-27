@@ -990,11 +990,10 @@ class EyeExam(Base):
     dilation_note = Column(String)
     # Keratometry, taken in pre-testing alongside the auto-refraction starting point (an 'autorefraction' row in the refractions table):
     # K readings per eye -- flat and steep power in diopters, steep-meridian axis. All optional.
-    # The four pd_* columns were added in v3.03 and are NOT USED: PD is taken only when glasses are ordered and lives on the lab order
-    # (RxLabOrder.pd_*), never on the exam. Nothing writes or displays them; they are kept only so a deployed database needs no drop.
+    # (PD is NOT an exam field: it is measured when glasses are ordered and lives on the lab order, RxLabOrder.pd_*. The unused
+    # eye_exams.pd_* columns that v3.03 added were dropped by migration 066.)
     k_od_flat = Column(Float); k_od_steep = Column(Float); k_od_axis = Column(Integer)
     k_os_flat = Column(Float); k_os_steep = Column(Float); k_os_axis = Column(Integer)
-    pd_distance = Column(Float); pd_od = Column(Float); pd_os = Column(Float); pd_near = Column(Float)
     # Disposition (the last clinical step): whether a glasses/contact-lens prescription is to be written (none | glasses | contacts | both),
     # plus free-text treatment/medications prescribed, referral (to whom, why) and patient education given. The prescription itself is
     # written on the Rx form, which opens pre-filled from this exam's manifest refraction.

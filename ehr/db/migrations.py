@@ -1784,6 +1784,18 @@ def migration_065_lab_order_measurements(conn):
         _add_column_if_missing(conn, "rx_lab_orders", col, "FLOAT")
 
 
+def migration_066_drop_exam_pd_columns(conn):
+    """Drops the four unused eye_exams.pd_* columns that migration 064 added in v3.03. PD is measured only when glasses are ordered and
+    belongs to the lab order (rx_lab_orders), never the exam; nothing has written or displayed these columns since v3.04. Irreversible for any
+    value they held (there should be none). Drops only the columns that exist, so a re-run, or a database that never had them, is a no-op."""
+    if not _table_exists(conn, "eye_exams"):
+        return  # brand-new database: create_all() builds eye_exams without them.
+    existing = _existing_columns(conn, "eye_exams")
+    for col in ("pd_distance", "pd_od", "pd_os", "pd_near"):
+        if col in existing:
+            conn.execute(text(f"ALTER TABLE eye_exams DROP COLUMN {col}"))
+
+
 # Ordered list of (id, function). Adding new migrations: append, never edit past entries.
 COLUMN_MIGRATIONS = [
     ("001_appointment_columns", migration_001_appointment_columns),
@@ -1833,6 +1845,7 @@ COLUMN_MIGRATIONS = [
     ("063_drug_catalog_generic_checked_at", migration_063_drug_catalog_generic_checked_at),
     ("064_exam_pretesting_and_disposition", migration_064_exam_pretesting_and_disposition),
     ("065_lab_order_measurements", migration_065_lab_order_measurements),
+    ("066_drop_exam_pd_columns", migration_066_drop_exam_pd_columns),
 ]
 def migration_055_seed_ros_catalog(conn):
     """Review-of-Systems decision-support catalog (ros_master / ros_icd10_test_mapping
@@ -2013,14 +2026,22 @@ def down_059_dilated_exam(conn):
 
 def down_064_exam_pretesting_and_disposition(conn):
     if _table_exists(conn, "eye_exams"):
+        existing = _existing_columns(conn, "eye_exams")        # the pd_* columns are gone once 066 has run
         for col in ("k_od_flat", "k_od_steep", "k_od_axis", "k_os_flat", "k_os_steep", "k_os_axis", "pd_distance", "pd_od", "pd_os", "pd_near",
                     "rx_decision", "treatment_note", "referral_note", "education_note"):
-            conn.execute(text(f"ALTER TABLE eye_exams DROP COLUMN {col}"))
+            if col in existing:
+                conn.execute(text(f"ALTER TABLE eye_exams DROP COLUMN {col}"))
 
 def down_065_lab_order_measurements(conn):
     if _table_exists(conn, "rx_lab_orders"):
         for col in ("lens_design", "pd_distance", "pd_od", "pd_os", "pd_near", "seg_height_od", "seg_height_os"):
             conn.execute(text(f"ALTER TABLE rx_lab_orders DROP COLUMN {col}"))
+
+def down_066_drop_exam_pd_columns(conn):
+    """Schema-only rollback: puts back four empty nullable columns (any value they held is gone)."""
+    if _table_exists(conn, "eye_exams"):
+        for col in ("pd_distance", "pd_od", "pd_os", "pd_near"):
+            _add_column_if_missing(conn, "eye_exams", col, "FLOAT")
 
 # 060_medication_catalog_columns deliberately has no down-migration: its columns are nullable foreign keys, which SQLite
 # cannot drop, and old code simply ignores them, so rolling the code back needs no schema change.
@@ -2041,6 +2062,7 @@ DOWN_MIGRATIONS = {
     "059_dilated_exam": down_059_dilated_exam,
     "064_exam_pretesting_and_disposition": down_064_exam_pretesting_and_disposition,
     "065_lab_order_measurements": down_065_lab_order_measurements,
+    "066_drop_exam_pd_columns": down_066_drop_exam_pd_columns,
     "053_seed_services": down_053_seed_services,
 }
 
