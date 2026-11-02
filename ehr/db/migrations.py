@@ -1796,6 +1796,15 @@ def migration_066_drop_exam_pd_columns(conn):
             conn.execute(text(f"ALTER TABLE eye_exams DROP COLUMN {col}"))
 
 
+def migration_067_medication_prescribed_exam(conn):
+    """Nullable patient_medications.prescribed_exam_id (FK to eye_exams, ON DELETE SET NULL): the exam whose Prescription &
+    treatment step prescribed the medication. Existing rows read NULL. Idempotent; skipped when either table is missing
+    (a brand-new database gets the column from create_all())."""
+    if not _table_exists(conn, "patient_medications") or not _table_exists(conn, "eye_exams"):
+        return
+    _add_column_if_missing(conn, "patient_medications", "prescribed_exam_id", "INTEGER REFERENCES eye_exams(id) ON DELETE SET NULL")
+
+
 # Ordered list of (id, function). Adding new migrations: append, never edit past entries.
 COLUMN_MIGRATIONS = [
     ("001_appointment_columns", migration_001_appointment_columns),
@@ -1957,6 +1966,7 @@ POST_CREATE_ALL_MIGRATIONS = [
     ("056_seed_safety_flag_types", migration_056_seed_safety_flag_types),
     ("057_seed_pcp_letter_template", migration_057_seed_pcp_letter_template),
     ("060_medication_catalog_columns", migration_060_medication_catalog_columns),
+    ("067_medication_prescribed_exam", migration_067_medication_prescribed_exam),
     ("061_seed_drug_frequencies", migration_061_seed_drug_frequencies),
 ]
 
@@ -2043,7 +2053,7 @@ def down_066_drop_exam_pd_columns(conn):
         for col in ("pd_distance", "pd_od", "pd_os", "pd_near"):
             _add_column_if_missing(conn, "eye_exams", col, "FLOAT")
 
-# 060_medication_catalog_columns deliberately has no down-migration: its columns are nullable foreign keys, which SQLite
+# 060_medication_catalog_columns and 067_medication_prescribed_exam deliberately have no down-migration: their columns are nullable foreign keys, which SQLite
 # cannot drop, and old code simply ignores them, so rolling the code back needs no schema change.
 # Sparse by design -- see this section's own docstring above. Extend this
 # alongside any new migration that a reviewer has actually confirmed is safe

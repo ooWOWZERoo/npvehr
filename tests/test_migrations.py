@@ -445,3 +445,26 @@ def test_exam_pd_columns_are_dropped_keeping_everything_else_and_rerun_is_safe(f
     with fresh_engine.begin() as conn:
         conn.execute(text("DROP TABLE eye_exams"))
         mig.migration_066_drop_exam_pd_columns(conn)                 # no table yet: skipped, not an error
+
+
+def test_medication_prescribed_exam_column_is_added_to_an_existing_table_and_rerun_is_safe(fresh_engine):
+    """Migration 067: a patient_medications table from before the Prescription & treatment step gains prescribed_exam_id, existing rows read NULL
+    and keep their data; re-run is a no-op; either table missing is skipped."""
+    with fresh_engine.begin() as conn:
+        conn.execute(text("CREATE TABLE eye_exams (id INTEGER PRIMARY KEY)"))
+        conn.execute(text("CREATE TABLE patient_medications (id INTEGER PRIMARY KEY, patient_id INTEGER, name VARCHAR(160))"))
+        conn.execute(text("INSERT INTO patient_medications (patient_id, name) VALUES (1, 'Latanoprost')"))
+    for _ in range(2):
+        with fresh_engine.begin() as conn:
+            mig.migration_067_medication_prescribed_exam(conn)
+    with fresh_engine.connect() as conn:
+        assert tuple(conn.execute(text("SELECT name, prescribed_exam_id FROM patient_medications")).one()) == ("Latanoprost", None)
+    with fresh_engine.begin() as conn:
+        conn.execute(text("DROP TABLE patient_medications"))
+        mig.migration_067_medication_prescribed_exam(conn)          # no medications table: skipped, not an error
+    with fresh_engine.begin() as conn:
+        conn.execute(text("CREATE TABLE patient_medications (id INTEGER PRIMARY KEY)"))
+        conn.execute(text("DROP TABLE eye_exams"))
+        mig.migration_067_medication_prescribed_exam(conn)          # no exams table (the FK target): skipped too
+    with fresh_engine.connect() as conn:
+        assert "prescribed_exam_id" not in mig._existing_columns(conn, "patient_medications")

@@ -5799,3 +5799,41 @@ A migration test for 066 (columns and values dropped, other columns and rows int
 | Schema | Four unused `eye_exams.pd_*` columns dropped (migration 066); removed from the `EyeExam` model. |
 | Rollback | `down_066` restores empty columns; `down_064` tolerates their absence. |
 | Tests | Migration 066 test; privacy test asserts the exam has no PD column. |
+
+## 133. Structured Medications and Orders in the Prescription & Treatment Step (v3.06)
+
+### 133.1 Request
+
+"Build the structured medications and orders step": replace the free-text "Treatment & medications prescribed" box and the pointer to the specialty panels (§130) with real, structured entries: the medications prescribed at the visit, and the tests ordered.
+
+### 133.2 What changed
+
+* **Medications prescribed.** The step embeds the guided medication intake (§§ medication catalog and intake): search the catalog (brand names find their generic), choose dosage and frequency, choose the eye (OD / OS / OU / PO / NA), or use Add Custom. Each entry is checked at once by a new endpoint, `POST /api/v1/medications/resolve` (same rules as the Medications tab, saves nothing), listed under the form with a Remove button, and carried in the hidden `prescribed_meds` field. "For" and "Instructions" (for example "x 7 days, then taper") are optional. Enter in this panel stages the entry; it never submits the exam.
+* **On Save Exam**, the server re-validates every staged entry (a hand-built request cannot record a dosage of another drug or PO for an eye drop; a bad entry refuses the whole save and no exam is created) and adds each one to the patient's medication list as an **active** medication with `source = 'prescribed'`, started on the exam date and linked to the exam (`patient_medications.prescribed_exam_id`, migration 067: nullable, `ON DELETE SET NULL`). Prescribing something already active with the same name, strength and eye **replaces** it: the earlier entry is stopped (audited like any stop) so the list shows it once; a different strength or eye is kept as its own entry. Because the entries join the medication list, the existing medication-based safety flags see them.
+* **Orders.** Under the medications, the same test chips used by Return visit create real `DiagnosticOrder` rows tied to the exam (status `ordered`, optional order note). A test already ordered for this exam from another panel is not ordered twice; unknown or deactivated codes are ignored. They get the **same NCCI billing gate** as the return-visit tests: an advisory banner as soon as a flagged pair is ticked, a refused save without the override checkbox + reason (providers and administrators only), a never-overridable pair stays blocked, and every override is logged (`BillingOverrideEvent`).
+* **Free text that remains:** "Other treatment (not a medication)" (still `treatment_note`, so older notes are kept; on the exam page it reads "Treatment notes"), referral, and patient education. Referral is still free text.
+* **Exam page:** the Prescription & Treatment card now lists the medications prescribed at that visit (with a note if one has since been stopped) and every order placed from that exam, with its status; the card also appears for an exam that has only these.
+* The intake form is now a shared partial (`patients/_med_intake_form.html`) used by the Medications tab and this step; `med_intake.js` gained a stage mode (`data-mode="stage"`).
+
+### 133.3 Limits
+
+* A prescribed medication is a row in the patient's own list. **Nothing is e-prescribed or transmitted**, and there is no quantity, refill count or pharmacy: the Instructions field is free text.
+* Prescribing and ordering are open to everyone who can edit an exam (technicians included), as they already are for the Medications tab and Return visit tests. Narrowing this to providers is a one-line permission change if the practice wants it.
+* The safety rules' keyword match still reads the exam's own free text (chief complaint, assessment, plan, ROS notes); a prescribed drug's name is not added to that text. Flags derived from the medication list do count it.
+* Only a new exam can prescribe or order through the step; the form does not edit a saved exam.
+* Migration 067 has no down-migration (SQLite cannot drop a foreign-key column), as with migration 060.
+
+### 133.4 Tests
+
+Unit tests for staged-data parsing and validation (empty, unreadable, over the cap, bad entries named, oral forced to PO), adding prescribed medications (linked to the exam, started on the exam date, identical active entry replaced, different strength or eye kept) and choosing tests to order (once, known, active, not already ordered). A migration test for 067. End-to-end tests: staging a catalog drug, an oral drug and a custom entry; Enter staging instead of submitting; Remove; the saved exam page, the database rows and the Medications tab; a tampered entry refusing the save with no exam created; and the Orders billing-rule banner, refusal and override. Full suite green.
+
+**Version 3.06 change log (relative to v3.05):**
+
+| Area | Change |
+| --- | --- |
+| Exam form | Prescription & treatment step: structured medications prescribed (guided intake, staged) and Orders (tracked tests with the NCCI gate). |
+| Medication list | Prescribed medications join it as active, linked to the exam; an identical active entry is replaced. |
+| API | `POST /api/v1/medications/resolve` validates an entry without saving. |
+| Exam page | Card lists medications prescribed and orders placed at the visit. |
+| Schema | Nullable `patient_medications.prescribed_exam_id` (migration 067). |
+

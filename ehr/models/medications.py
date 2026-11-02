@@ -36,7 +36,7 @@ class PatientMedication(Base):
     status: Mapped[str] = mapped_column(String(8), default="active")     # active | stopped
     start_date: Mapped[Optional[date]] = mapped_column(Date)
     stop_date: Mapped[Optional[date]] = mapped_column(Date)
-    source: Mapped[str] = mapped_column(String(20), default="staff")     # staff | patient | imported
+    source: Mapped[str] = mapped_column(String(20), default="staff")     # staff | patient | imported | prescribed
     # Catalog link from the guided intake (all NULL for older rows and custom entries). The text columns above stay the
     # record of what was entered; these only say which catalog rows were picked. SET NULL so removing a catalog row never
     # touches a patient's history.
@@ -46,6 +46,9 @@ class PatientMedication(Base):
     drug_rxcui: Mapped[Optional[str]] = mapped_column(String(20))        # RxNorm id copied at entry time
     is_custom: Mapped[bool] = mapped_column(Boolean, default=False)      # True when typed free-text rather than picked from the catalog
     note: Mapped[Optional[str]] = mapped_column(String(255))
+    # The exam whose Prescription & treatment step prescribed this medication (source 'prescribed'); NULL for everything entered
+    # on the Medications tab or imported. SET NULL so removing an exam never touches the patient's medication history.
+    prescribed_exam_id: Mapped[Optional[int]] = mapped_column(ForeignKey("eye_exams.id", ondelete="SET NULL"))
     recorded_by_user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"))
     recorded_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
