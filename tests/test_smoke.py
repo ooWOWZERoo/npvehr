@@ -5655,8 +5655,8 @@ def test_a_glasses_remake_confirms_its_measurements_and_a_legacy_order_needs_the
 
 
 def test_pd_and_seg_height_never_reach_the_patient_or_any_patient_facing_document(logged_in_page, live_server, live_db_path, rxnav_stub):
-    """Distinctive PD / seg height values are put on a lab order (and, directly in the database, on the retired exam PD columns); none
-    appears on the patient portal, the printed prescription, the prescription page, the exam page, or the patient's chart tabs."""
+    """Distinctive PD / seg height values are put on a lab order; none appears on the patient portal, the printed prescription, the prescription
+    page, the exam page, or the patient's chart tabs. The exam has no PD columns at all (dropped by migration 066)."""
     import sqlite3
     page = logged_in_page
     rx_id = _signed_rx(page, live_server, "Davis", "Carol", lens_type="Progressive")
@@ -5668,11 +5668,12 @@ def test_pd_and_seg_height_never_reach_the_patient_or_any_patient_facing_documen
         pid, = con.execute("SELECT patient_id FROM prescriptions WHERE id = ?", (rx_id,)).fetchone()
         exam_ids = [r[0] for r in con.execute("SELECT id FROM eye_exams WHERE patient_id = ?", (pid,)).fetchall()]
         assert exam_ids, "the seeded demo patient should have exams"
-        con.execute("UPDATE eye_exams SET pd_distance = 67.25, pd_od = 33.5, pd_os = 33.5, pd_near = 63.25 WHERE patient_id = ?", (pid,))
-        con.commit()
+        exam_columns = {r[1] for r in con.execute("PRAGMA table_info(eye_exams)").fetchall()}
+        assert not {"pd_distance", "pd_od", "pd_os", "pd_near"} & exam_columns            # PD is not stored on the exam at all
+        assert {"pd_distance", "seg_height_od"} <= {r[1] for r in con.execute("PRAGMA table_info(rx_lab_orders)").fetchall()}   # ...only on the order
     finally:
         con.close()
-    secrets = ["66.5", "33.25", "62.75", "19.75", "19.25", "67.25", "33.5", "63.25"]
+    secrets = ["66.5", "33.25", "62.75", "19.75", "19.25"]
 
     def assert_clean(text, where):
         low = text.lower()

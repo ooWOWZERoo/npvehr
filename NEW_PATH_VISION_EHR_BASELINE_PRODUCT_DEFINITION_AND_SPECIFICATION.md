@@ -5751,7 +5751,7 @@ PD (pupillary distance) and seg height are measured only when glasses are ordere
 
 ### 131.2 What changed
 
-* **PD is no longer taken at the exam.** The four PD inputs are gone from the Starting point step (v3.03) and from the exam page. The four `eye_exams.pd_*` columns from migration 064 remain in the database, **unused**: nothing writes, shows or exports them. (They were never on a patient-facing page.)
+* **PD is no longer taken at the exam.** The four PD inputs are gone from the Starting point step (v3.03) and from the exam page. The four `eye_exams.pd_*` columns from migration 064 remained in the database, **unused**, in v3.04 (dropped in §132).
 * **The glasses lab order records them** (migration 065, new nullable columns on `rx_lab_orders`): lens design (pre-filled from the prescription's lens type; required, because it decides whether seg height is needed), PD (distance, right, left, near), and seg height (right and left).
 * **Rules** (enforced on the server; the form only shows or hides fields): PD is **always** required for glasses: the distance PD, or both the right and left PD (the total is then their sum); near PD is optional. Seg height (both eyes) is required for every lens design **except Single Vision**; for Single Vision any seg height sent is discarded. Misplaced-decimal guards reject an implausible value (e.g. a PD of 6.3 mm). Every problem is listed at once and what was typed is kept.
 * **Contact lens orders store none of it** (lens design, PD and seg height stay empty even if posted). Only "glasses" or "contacts" are accepted as an order type.
@@ -5776,3 +5776,26 @@ Unit tests for the rules (PD required in every design, monocular-only PD summed,
 | Privacy | PD and seg height appear only on staff order pages; tested absent from every patient-facing page and document. |
 | Schema | Seven nullable `rx_lab_orders` columns (migration 065). |
 
+## 132. The Unused Exam PD Columns Are Dropped (v3.05)
+
+### 132.1 Request
+
+"Drop the unused exam PD columns": the four `eye_exams.pd_*` columns that v3.03 added (migration 064) and v3.04 stopped using.
+
+### 132.2 What changed
+
+* **Migration 066** drops `eye_exams.pd_distance`, `pd_od`, `pd_os` and `pd_near`. It drops only the columns that exist, so a re-run, a brand-new database (which never creates them) and a deployment without the table are all no-ops. The columns are removed from the `EyeExam` model.
+* **Irreversible for any value they held.** Nothing has written them since v3.04, so there should be none; any test values entered on the exam during v3.03 are permanently gone. A schema-only rollback (`down_066`) puts four empty nullable columns back; `down_064` now drops only the columns that exist, so rolling back past 064 still works after 066.
+* PD and seg height now exist in exactly one place: the `rx_lab_orders` row of an eyeglasses order (§131).
+
+### 132.3 Tests
+
+A migration test for 066 (columns and values dropped, other columns and rows intact, re-run, rollback and missing table safe). The privacy test from §131 no longer seeds exam PD values (there is nowhere to put them); it asserts instead that `eye_exams` has no `pd_*` column and that the order has them. Full suite green.
+
+**Version 3.05 change log (relative to v3.04):**
+
+| Area | Change |
+| --- | --- |
+| Schema | Four unused `eye_exams.pd_*` columns dropped (migration 066); removed from the `EyeExam` model. |
+| Rollback | `down_066` restores empty columns; `down_064` tolerates their absence. |
+| Tests | Migration 066 test; privacy test asserts the exam has no PD column. |
