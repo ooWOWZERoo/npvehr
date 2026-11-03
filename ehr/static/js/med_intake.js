@@ -7,6 +7,9 @@
 //   * A brand name finds its generic ("Coumadin" -> warfarin); the generic is what gets recorded.
 //   * The same form edits an existing medication (the row's Edit button), pre-filled; older free-text rows open as custom entries.
 //   * "Add Custom" (always in the list) turns Dosage and Frequency into free-text inputs and records is_custom.
+//   * data-mode="stage" (the exam form's Prescription & treatment step): nothing is saved here. Each entry is checked with
+//     POST /api/v1/medications/resolve, listed under the form, and carried in the hidden `prescribed_meds` field as JSON; the
+//     exam save re-validates and records them.
 (function () {
   "use strict";
   var root = document.getElementById("medIntake");
@@ -14,6 +17,7 @@
 
   var MIN_CHARS = 3, DEBOUNCE_MS = 300;
   var pid = root.getAttribute("data-patient-id");
+  var stageMode = root.getAttribute("data-mode") === "stage";
   var $ = function (id) { return document.getElementById(id); };
   var el = {
     name: $("medName"), list: $("medNameList"), nameStatus: $("medNameStatus"),
@@ -239,12 +243,46 @@
   }
   function refresh() { applyEye(); el.submit.disabled = !ready(); }
 
+  // ---------- stage mode: the entries wait in the page until the exam is saved ----------
+  var staged = [];
+  function stagedField() { return document.getElementById("prescribedMeds"); }
+  function renderStaged() {
+    var ul = document.getElementById("rxStaged"), field = stagedField();
+    if (!ul || !field) return;
+    ul.innerHTML = ""; ul.hidden = !staged.length;
+    staged.forEach(function (s, i) {
+      var li = document.createElement("li"); li.className = "rx-staged-item";
+      var t = document.createElement("span");
+      t.textContent = [s.summary.name, s.summary.strength, s.summary.frequency, s.summary.eye === "NA" ? "N/A" : s.summary.eye].filter(Boolean).join(" \u2014 ");
+      li.appendChild(t);
+      var b = document.createElement("button"); b.type = "button"; b.className = "btn btn-sm btn-secondary"; b.textContent = "Remove";
+      b.setAttribute("aria-label", "Remove " + s.summary.name);
+      b.addEventListener("click", function () { staged.splice(i, 1); renderStaged(); });
+      li.appendChild(b); ul.appendChild(li);
+    });
+    field.value = staged.length ? JSON.stringify(staged.map(function (s) { return s.body; })) : "";
+    field.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+  function resetAll() {
+    if (state.isCustom) el.back.click();
+    el.name.value = ""; resetDrug(); closeList(); el.nameStatus.textContent = "";
+    el.indication.value = ""; el.note.value = ""; el.name.focus();
+  }
+  // Enter in a text box of this panel must not submit the whole exam form; it stages the entry when ready.
+  if (stageMode) {
+    root.addEventListener("keydown", function (e) {
+      if (e.key !== "Enter" || e.target.tagName === "BUTTON") return;
+      e.preventDefault();
+      if (e.target !== el.name && ready()) el.submit.click();
+    });
+  }
+
   el.submit.addEventListener("click", function () {
     if (!ready()) return;
     el.submit.disabled = true; setError("");
     var body = {
       is_custom: state.isCustom, eye: el.eye.value,
-      indication: el.indication.value.trim() || null, note: el.note.value.trim() || null, start_date: el.start.value || null
+      indication: el.indication.value.trim() || null, note: el.note.value.trim() || null, start_date: el.start ? (el.start.value || null) : null
     };
     if (state.isCustom) {
       body.name = el.name.value.trim();
@@ -252,6 +290,12 @@
       body.frequency_text = el.freqText.value.trim() || null;
     } else {
       body.drug_id = state.drug.id; body.dosage_id = state.dosage.id; body.frequency_id = parseInt(el.freq.value, 10);
+    }
+    if (stageMode) {
+      window.NPV.api("POST", "/api/v1/medications/resolve", body)
+        .then(function (r) { staged.push({ body: body, summary: r }); renderStaged(); resetAll(); })
+        .catch(function (err) { setError(err.message); el.submit.disabled = !ready(); });
+      return;
     }
     var url = "/api/v1/patients/" + encodeURIComponent(pid) + "/medications" + (state.editId ? "/" + state.editId : "");
     window.NPV.api(state.editId ? "PUT" : "POST", url, body)
@@ -267,7 +311,7 @@
       state.editId = m.id;
       el.title.textContent = "Edit medication"; el.help.hidden = true;
       el.submit.textContent = "Save changes"; el.cancel.hidden = false;
-      el.indication.value = m.indication || ""; el.note.value = m.note || ""; el.start.value = m.start_date || "";
+      el.indication.value = m.indication || ""; el.note.value = m.note || ""; if (el.start) el.start.value = m.start_date || "";
       root.scrollIntoView({ behavior: "smooth", block: "start" });
       if (m.as_custom) {                                            // custom entries, and older free-text rows, are edited as text
         enterCustom(m.name);

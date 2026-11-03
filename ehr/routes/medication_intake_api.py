@@ -11,6 +11,8 @@ drug / patient outside the caller's access, 422 validation. Mutations need the s
     POST /api/v1/patients/{patient_id}/medications  add a medication (catalog pick or custom entry); MEDICATION_EDIT only
     GET  /api/v1/patients/{patient_id}/medications/{med_id}   one medication with its catalog state, to pre-fill an edit
     PUT  /api/v1/patients/{patient_id}/medications/{med_id}   re-save it through the same rules as POST; MEDICATION_EDIT only
+    POST /api/v1/medications/resolve                validate a choice and return what would be recorded, saving nothing (the exam
+                                                    form's Prescription & treatment step stages medications with it); MEDICATION_EDIT only
 """
 from typing import Literal, Optional
 
@@ -187,6 +189,26 @@ def add_patient_medication(request: Request, patient_id: int, body: MedicationIn
     db.commit()
     return _json(MedicationOut(id=m.id, patient_id=patient_id, name=m.name, strength=m.strength, frequency=m.frequency,
                                eye=m.eye, route=m.route, is_custom=m.is_custom, drug_id=m.drug_id), 201)
+
+
+class ResolvedOut(BaseModel):
+    name: str
+    strength: Optional[str]
+    frequency: Optional[str]
+    eye: str
+    route: Optional[str]
+    is_custom: bool
+
+
+@router.post("/medications/resolve", dependencies=[Depends(get_current_user), Depends(require_role(*MEDICATION_EDIT))])
+def resolve_medication(request: Request, body: MedicationIn, db: Session = Depends(get_db)):
+    csrf.verify_or_403(request.state.csrf_token, request.headers.get("x-csrf-token"))
+    try:
+        values = catalog.resolve_selection(db, body)
+    except ValueError as e:
+        return _bad(str(e))
+    return _json(ResolvedOut(name=values["name"], strength=values["strength"], frequency=values["frequency"], eye=values["eye"],
+                             route=values["route"], is_custom=values["is_custom"]))
 
 
 def _patient_med(db, request, patient_id, med_id):

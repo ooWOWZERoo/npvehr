@@ -649,12 +649,31 @@
         <label class="test-chip"><input type="radio" name="rx_decision" value="{{ val }}"> {{ label }}</label>
         {% endfor %}
       </div>
+      <h3 class="exam-subhead" id="rxMedsHead">Medications prescribed</h3>
+      <p class="exam-section-sub">Each one is added to the patient's medication list when you save the exam, started today. Prescribing something already on the list with the same strength and eye replaces the old entry.</p>
+      <ul class="rx-staged" id="rxStaged" aria-label="Medications prescribed at this visit" hidden></ul>
+      <input type="hidden" name="prescribed_meds" id="prescribedMeds">
+      {% set stage = true %}{% include "patients/_med_intake_form.html" %}
+      <h3 class="exam-subhead" id="rxOrdersHead">Orders</h3>
+      <p class="exam-section-sub">Tests to order now. Each creates a real tracked order for this patient (the same as the specialty panels and Return visit), shown on the exam page and the patient overview.</p>
+      <div class="test-chip-list" role="group" aria-labelledby="rxOrdersHead">
+        {% for t in tests %}
+        <label class="test-chip"><input type="checkbox" name="rx_order_codes" value="{{ t.code }}" data-cpt="{{ t.cpt_code or '' }}" onchange="checkOrderNcciWarnings()"> {{ t.calendar_abbreviation }}</label>
+        {% endfor %}
+      </div>
+      <div id="rx-order-ncci-banner" class="alert alert-warning" style="display:none"></div>
+      {% if can_override_billing %}
+      <div class="form-row cols-2">
+        <div class="form-group checkbox-row"><input type="checkbox" name="rx_billing_override" value="true" id="rx_billing_override"><label for="rx_billing_override" style="margin:0">Override Billing Rule</label></div>
+        <div class="form-group"><label>Billing Override Reason <input name="rx_billing_override_reason" id="rx_billing_override_reason"></label></div>
+      </div>
+      {% endif %}
+      <label class="fld">Order note (optional)<input name="rx_order_note" maxlength="500" placeholder="e.g. before the next pressure check"></label>
       <div class="form-row cols-3" style="margin-top:var(--space-4)">
-        <label class="fld">Treatment &amp; medications prescribed<textarea name="treatment_note" rows="3" placeholder="e.g. Pred Forte QID x 1 week, then taper&hellip;"></textarea></label>
+        <label class="fld">Other treatment (not a medication)<textarea name="treatment_note" rows="3" placeholder="e.g. warm compresses, lid hygiene, patching schedule&hellip;"></textarea></label>
         <label class="fld">Referral (to whom, and why)<textarea name="referral_note" rows="3" placeholder="e.g. Retina consult for&hellip;"></textarea></label>
         <label class="fld">Patient education given<textarea name="education_note" rows="3" placeholder="e.g. Drop technique reviewed; return precautions&hellip;"></textarea></label>
       </div>
-      <p class="exam-section-sub">Tests to order are set up in the specialty panels above and under Return visit; those create real orders.</p>
     </section>
 
     <section class="exam-section exam-return" id="step-return" data-step="return">
@@ -933,7 +952,14 @@ var NCCI_PAIRS = {{ ncci_pairs|tojson }};
 // blocks isn't being billed together on the same future visit, so it's not
 // this check's concern).
 function checkFollowUpNcciWarnings(suffix) {
-  var checked = document.querySelectorAll('input[name="return_visit_diagnostic_orders' + suffix + '"]:checked');
+  renderNcciWarnings('return_visit_diagnostic_orders' + suffix, 'followup-ncci-warning-banner' + suffix);
+}
+// The Orders list in Prescription & treatment: one group, checked the same way.
+function checkOrderNcciWarnings() {
+  renderNcciWarnings('rx_order_codes', 'rx-order-ncci-banner');
+}
+function renderNcciWarnings(inputName, bannerId) {
+  var checked = document.querySelectorAll('input[name="' + inputName + '"]:checked');
   var codes = [];
   checked.forEach(function (el) {
     var cpt = el.getAttribute('data-cpt');
@@ -950,7 +976,7 @@ function checkFollowUpNcciWarnings(suffix) {
       });
     }
   }
-  var banner = document.getElementById('followup-ncci-warning-banner' + suffix);
+  var banner = document.getElementById(bannerId);
   if (messages.length > 0) {
     banner.innerHTML = messages.join('<br>');
     banner.style.display = '';
@@ -1511,5 +1537,6 @@ function removeReturnVisit2() {
 <script src="/static/js/ros_assist.js"></script>
 <script src="/static/js/safety_banner.js"></script>
 <script src="/static/js/exam_meds_card.js"></script>
+<script src="/static/js/med_intake.js"></script>
 <script src="/static/js/voice_scribe.js"></script>
 {% endblock %}

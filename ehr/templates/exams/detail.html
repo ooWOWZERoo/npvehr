@@ -407,11 +407,13 @@
   </div>
 </div>
 {% set rx_labels = {'none': 'No prescription change', 'glasses': 'Glasses prescription', 'contacts': 'Contact lens prescription', 'both': 'Glasses and contact lenses'} %}
-{% if exam.rx_decision or exam.treatment_note or exam.referral_note or exam.education_note %}
+{% if exam.rx_decision or exam.treatment_note or exam.referral_note or exam.education_note or prescribed_meds or exam_orders %}
 <div class="card" style="margin-top:1rem" id="dispositionCard"><h3>Prescription &amp; Treatment</h3>
   <dl class="dl-grid">
     <dt>Prescription</dt><dd id="rxDecisionRow">{{ rx_labels.get(exam.rx_decision) or '—' }}</dd>
-    <dt>Treatment &amp; medications</dt><dd style="white-space:pre-wrap">{{ exam.treatment_note or '—' }}</dd>
+    <dt>Medications prescribed</dt><dd id="rxPrescribedRow">{% if prescribed_meds %}<ul style="margin:0;padding-left:1.1rem">{% for m in prescribed_meds %}<li>{{ m.name }}{% if m.strength %} &mdash; {{ m.strength }}{% endif %}{% if m.frequency %} &mdash; {{ m.frequency }}{% endif %}{% if m.eye %} <span class="badge badge-scheduled">{{ 'N/A' if m.eye == 'NA' else m.eye }}</span>{% endif %}{% if m.indication %} <span class="muted">for {{ m.indication }}</span>{% endif %}{% if m.note %} <span class="muted">({{ m.note }})</span>{% endif %}{% if m.status == 'stopped' %} <span class="muted">&mdash; since stopped</span>{% endif %}</li>{% endfor %}</ul>{% else %}—{% endif %}</dd>
+    <dt>Orders</dt><dd id="rxOrdersRow">{% if exam_orders %}<ul style="margin:0;padding-left:1.1rem">{% for o in exam_orders %}<li>{{ o.diagnostic_test.display_name }} <span class="badge badge-scheduled">{{ o.status|replace('_', ' ') }}</span>{% if o.follow_up_id %} <span class="muted">(return visit)</span>{% endif %}</li>{% endfor %}</ul>{% else %}—{% endif %}</dd>
+    <dt>Treatment notes</dt><dd style="white-space:pre-wrap">{{ exam.treatment_note or '—' }}</dd>
     <dt>Referral</dt><dd style="white-space:pre-wrap">{{ exam.referral_note or '—' }}</dd>
     <dt>Patient education</dt><dd style="white-space:pre-wrap">{{ exam.education_note or '—' }}</dd>
   </dl>

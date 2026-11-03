@@ -5707,3 +5707,166 @@ def test_pd_and_seg_height_never_reach_the_patient_or_any_patient_facing_documen
     staff_only = pp.request.get(live_server + "/orders/").text()                      # a patient session can't open the staff order pages
     assert "Measurement Lab" not in staff_only and "Lab Order" not in staff_only
     ctx.close()
+
+
+def _fresh_patient(page, live_server, first, last):
+    page.goto(live_server + "/patients/new")
+    page.fill('input[name="first_name"]', first)
+    page.fill('input[name="last_name"]', last)
+    page.locator('button[type="submit"]', has_text="Create Patient").click()
+    page.wait_for_url(re.compile(r"/patients/\d+$"))
+    return int(page.url.rstrip("/").split("/")[-1])
+
+
+def _stage_catalog_med(page, search, option, dosage, eye=None):
+    page.fill("#medName", search)
+    page.locator(".med-combo-option", has_text=option).click()
+    page.wait_for_function("!document.getElementById('medDosage').disabled")
+    page.select_option("#medDosage", label=dosage)
+    page.wait_for_function("!document.getElementById('medFreq').disabled")
+    page.select_option("#medFreq", index=1)
+    if eye:
+        page.select_option("#medEye", eye)
+    page.click("#medSubmit")
+
+
+def test_exam_prescription_step_stages_medications_and_orders_and_records_them_on_save(logged_in_page, live_server, live_db_path, drug_catalog_seed):
+    """Prescription & treatment (v3.06): medications are staged through the guided intake, tests are ticked under Orders, and one Save Exam
+    records them: active 'prescribed' medications linked to the exam, real tracked orders, both shown on the exam page."""
+    import sqlite3
+    page = logged_in_page
+    pid = _fresh_patient(page, live_server, "Rxstep", "Flowpatient")
+    page.goto(live_server + f"/exams/new?patient_id={pid}")
+    page.select_option('select[name="provider_id"]', index=1)
+    exam_form_url = page.url
+
+    panel = page.locator("#step-disposition #medIntake")
+    assert panel.get_attribute("data-mode") == "stage" and panel.locator("#medStart").count() == 0          # stage mode: no start date (the exam date is used)
+    assert page.locator("#rxStaged").is_hidden() and page.locator("#prescribedMeds").input_value() == ""
+
+    _stage_catalog_med(page, "zzdrop", "Zzdrop Ophthalmic Test", "0.005% ophthalmic solution", eye="OS")
+    page.locator("#rxStaged li").first.wait_for()
+    assert page.locator("#rxStaged li").count() == 1 and "Zzdrop Ophthalmic Test" in page.locator("#rxStaged").inner_text()
+    assert "OS" in page.locator("#rxStaged").inner_text()
+    assert page.locator("#medName").input_value() == "" and page.locator("#medSubmit").is_disabled()          # the form is clear for the next one
+    assert page.url == exam_form_url                                                                          # nothing was saved or navigated
+
+    _stage_catalog_med(page, "zzpill", "Zzpill Oral Test", "10 mg oral tablet")                              # oral: eye locked to PO
+    page.wait_for_function("document.querySelectorAll('#rxStaged li').length === 2")
+    page.fill("#medName", "Zzcustom Rx Drops")
+    page.locator(".med-combo-custom").click()
+    page.fill("#medFreqText", "nightly x 7 days")
+    page.select_option("#medEye", "OU")
+    page.fill("#medIndication", "dry eye")
+    page.fill("#medNote", "then stop")
+    page.locator("#medNote").press("Enter")                       # Enter in this panel must stage the entry, not submit the exam
+    page.wait_for_function("document.querySelectorAll('#rxStaged li').length === 3")
+    assert page.url == exam_form_url
+    staged = page.locator("#rxStaged").inner_text()
+    assert "Zzpill Oral Test" in staged and "PO" in staged and "Zzcustom Rx Drops" in staged and "nightly x 7 days" in staged
+
+    # Remove the pill again; the hidden field follows the list.
+    page.locator("#rxStaged li", has_text="Zzpill Oral Test").locator("button", has_text="Remove").click()
+    assert page.locator("#rxStaged li").count() == 2
+    import json as _json
+    assert [m.get("name") or m.get("drug_id") for m in _json.loads(page.locator("#prescribedMeds").input_value())][1] == "Zzcustom Rx Drops"
+
+    # Orders: the step's own list creates tracked orders; the old guidance sentence about the panels is gone.
+    page.locator("#step-disposition .test-chip", has_text=re.compile(r"^\s*VF\s*$")).locator("input").check()
+    page.fill('input[name="rx_order_note"]', "before the next pressure check")
+    page.locator('textarea[name="treatment_note"]').fill("Warm compresses twice daily")
+    page.locator('input[name="rx_decision"][value="none"]').check()
+    page.locator('form[action="/exams/new"] button[type="submit"]', has_text="Save Exam").click()
+    page.wait_for_url(re.compile(r"/exams/\d+$"))
+    exam_id = int(page.url.rstrip("/").split("/")[-1])
+
+    card = page.locator("#dispositionCard")
+    assert "Zzdrop Ophthalmic Test" in card.locator("#rxPrescribedRow").inner_text() and "0.005% ophthalmic solution" in card.locator("#rxPrescribedRow").inner_text()
+    assert "Zzcustom Rx Drops" in card.locator("#rxPrescribedRow").inner_text() and "dry eye" in card.locator("#rxPrescribedRow").inner_text()
+    assert "Zzpill" not in card.inner_text()                                                                   # removed before saving, never recorded
+    assert "Visual Field" in card.locator("#rxOrdersRow").inner_text() and "ordered" in card.locator("#rxOrdersRow").inner_text().lower()
+    assert "Warm compresses twice daily" in card.inner_text()
+
+    con = sqlite3.connect(live_db_path)
+    try:
+        meds = con.execute("SELECT name, strength, eye, status, source, prescribed_exam_id, start_date, is_custom FROM patient_medications "
+                           "WHERE patient_id = ? ORDER BY id", (pid,)).fetchall()
+        orders = con.execute("SELECT status, ordered_exam_id, follow_up_id, notes FROM diagnostic_orders WHERE patient_id = ?", (pid,)).fetchall()
+    finally:
+        con.close()
+    assert [(m[0], m[1], m[2], m[3], m[4], m[5], m[7]) for m in meds] == [
+        ("Zzdrop Ophthalmic Test", "0.005% ophthalmic solution", "OS", "active", "prescribed", exam_id, 0),
+        ("Zzcustom Rx Drops", None, "OU", "active", "prescribed", exam_id, 1)]
+    assert meds[0][6] is not None                                                                              # started on the exam date
+    assert orders == [("ordered", exam_id, None, "before the next pressure check")]
+
+    # They are on the patient's medication list like any other entry.
+    page.goto(live_server + f"/patients/{pid}/medications")
+    assert page.locator("#medsSection tr", has_text="Zzdrop Ophthalmic Test").count() == 1
+    assert page.locator("#medsSection tr", has_text="Zzcustom Rx Drops").count() == 1
+
+
+def test_exam_prescription_step_refuses_a_tampered_medication_and_saves_no_exam(logged_in_page, live_server, live_db_path, drug_catalog_seed):
+    """The server re-validates every staged medication: an entry the intake rules would refuse (a dosage of another drug) blocks the whole save."""
+    import sqlite3
+    page = logged_in_page
+    pid = _fresh_patient(page, live_server, "Rxstep", "Tamperpatient")
+    page.goto(live_server + f"/exams/new?patient_id={pid}")
+    page.select_option('select[name="provider_id"]', index=1)
+    drop, pill = drug_catalog_seed["Zzdrop Ophthalmic Test"], drug_catalog_seed["Zzpill Oral Test"]
+    con = sqlite3.connect(live_db_path)
+    try:
+        pill_dosage = con.execute("SELECT id FROM drug_dosages WHERE drug_id = ? LIMIT 1", (pill,)).fetchone()[0]
+        freq = con.execute("SELECT id FROM drug_frequencies ORDER BY id LIMIT 1").fetchone()[0]
+    finally:
+        con.close()
+    bad = [{"is_custom": False, "drug_id": drop, "dosage_id": pill_dosage, "frequency_id": freq, "eye": "OU"}]
+    page.evaluate("v => { document.getElementById('prescribedMeds').value = v; }", _json_dumps(bad))
+    page.locator('form[action="/exams/new"] button[type="submit"]', has_text="Save Exam").click()
+    page.wait_for_load_state()
+    assert "/exams/new" in page.url and "dosage that belongs to the selected medication" in page.locator("body").inner_text()
+    con = sqlite3.connect(live_db_path)
+    try:
+        assert con.execute("SELECT COUNT(*) FROM eye_exams WHERE patient_id = ?", (pid,)).fetchone()[0] == 0
+        assert con.execute("SELECT COUNT(*) FROM patient_medications WHERE patient_id = ?", (pid,)).fetchone()[0] == 0
+    finally:
+        con.close()
+
+
+def _json_dumps(v):
+    import json
+    return json.dumps(v)
+
+
+def test_exam_orders_get_the_same_billing_rule_gate_as_return_visit_tests(logged_in_page, live_server, live_db_path):
+    """OCT + Optos ticked under Orders: the NCCI banner shows at once, the save is refused without the override, and goes through with it."""
+    import sqlite3
+    page = logged_in_page
+    pid = _fresh_patient(page, live_server, "Rxstep", "Billingpatient")
+
+    def open_form():
+        page.goto(live_server + f"/exams/new?patient_id={pid}")
+        page.select_option('select[name="provider_id"]', index=1)
+        for label in ("OCT", "OPTOS"):
+            page.locator("#step-disposition .test-chip", has_text=re.compile(rf"^\s*{label}\s*$")).locator("input").check()
+
+    open_form()
+    banner = page.locator("#rx-order-ncci-banner")
+    assert banner.is_visible() and page.locator("#followup-ncci-warning-banner").is_hidden()                  # this group only, not the return-visit one
+    page.locator('form[action="/exams/new"] button[type="submit"]', has_text="Save Exam").click()
+    page.wait_for_load_state("networkidle")
+    assert 'Check "Override Billing Rule"' in page.locator("body").inner_text()
+
+    open_form()
+    page.locator("#rx_billing_override").check()
+    page.fill("#rx_billing_override_reason", "Documented clinical justification")
+    page.locator('form[action="/exams/new"] button[type="submit"]', has_text="Save Exam").click()
+    page.wait_for_url(re.compile(r"/exams/\d+$"))
+    exam_id = int(page.url.rstrip("/").split("/")[-1])
+    assert page.locator("#rxOrdersRow li").count() == 2
+    con = sqlite3.connect(live_db_path)
+    try:
+        assert con.execute("SELECT COUNT(*) FROM diagnostic_orders WHERE ordered_exam_id = ?", (exam_id,)).fetchone()[0] == 2
+        assert con.execute("SELECT COUNT(*) FROM eye_exams WHERE patient_id = ?", (pid,)).fetchone()[0] == 1      # the refused save left nothing behind
+    finally:
+        con.close()

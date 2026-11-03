@@ -952,6 +952,11 @@ a.tile:hover { text-decoration: none; }
 .med-intake-status:empty { min-height: 0; margin: 0; }
 .med-intake-actions { display: flex; gap: var(--space-3); flex-wrap: wrap; }
 .med-intake select:disabled, .med-intake input:disabled { background: var(--surface-sunken); color: var(--ink-muted); cursor: not-allowed; }
+/* Exam form -- Prescription & treatment: medications staged for this visit, and the sub-headings between the step's parts. */
+.exam-subhead { font-size: 1rem; margin: var(--space-6) 0 var(--space-1); }
+.rx-staged { list-style: none; margin: var(--space-3) 0; padding: 0; display: grid; gap: var(--space-2); }
+.rx-staged[hidden] { display: none; }
+.rx-staged-item { display: flex; justify-content: space-between; align-items: center; gap: var(--space-3); background: var(--primary-soft); border-radius: 8px; padding: var(--space-2) var(--space-3); }
 .med-combo-field { position: relative; }
 .med-combo-list { position: absolute; z-index: 20; left: 0; right: 0; top: 100%; margin: 4px 0 0; padding: var(--space-1); list-style: none; max-height: 18rem; overflow-y: auto; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px var(--shadow-pop); }
 .med-combo-option { padding: 0.5rem 0.65rem; border-radius: 6px; font-size: 0.9rem; color: var(--ink); cursor: pointer; }

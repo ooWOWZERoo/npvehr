@@ -23,6 +23,8 @@ from ehr.services import ros_responses
 from ehr.services import medications as med_svc
 from ehr.services import pcp_letter
 from ehr.services import safety as safety_svc
+from ehr.services import exam_prescribing
+from ehr.models.medications import PatientMedication
 
 router = APIRouter(prefix="/exams", tags=["exams"])
 templates = Jinja2Templates(directory="ehr/templates")
@@ -142,6 +144,12 @@ async def create_exam(request: Request, db: Session = Depends(get_db)):
     try:
         return_visit_blocks = [b for b in (
             _parse_return_visit_block(g, form, ""), _parse_return_visit_block(g, form, "_2")) if b]
+    except ValueError as e:
+        return HTMLResponse(str(e), status_code=400)
+    # Prescription & treatment step (v3.06): the medications staged in the form are re-validated by the same rules as the Medications
+    # tab before the exam is created, so a bad entry refuses the whole save instead of leaving a half-written visit.
+    try:
+        prescribed = exam_prescribing.parse_prescribed(db, g("prescribed_meds"))
     except ValueError as e:
         return HTMLResponse(str(e), status_code=400)
     exam = EyeExam(
@@ -292,6 +300,18 @@ async def create_exam(request: Request, db: Session = Depends(get_db)):
             db.add(DiagnosticOrder(patient_id=exam.patient_id, diagnostic_test_id=t.id,
                 ordered_by_user_id=request.state.user.id, ordered_exam_id=exam.id,
                 follow_up_id=followup.id, notes=block["reason"]))
+    # Prescription & treatment step (v3.06): medications prescribed join the patient's medication list, tests ticked under Orders become
+    # real DiagnosticOrder rows. Orders get the same NCCI gate as the return-visit tests (override checkbox + reason, providers only).
+    exam_prescribing.add_prescribed(db, exam, request.state.user.id, prescribed)
+    step_tests = exam_prescribing.tests_to_order(db, exam, form.getlist("rx_order_codes"))
+    try:
+        billing_override.enforce(db, request.state.user, [t.cpt_code for t in step_tests if t.cpt_code],
+            override_checked=form.get("rx_billing_override") == "true", override_reason=g("rx_billing_override_reason"),
+            source="exam", record_id=exam.id)
+    except billing_override.BillingRuleBlocked as e:
+        db.rollback()
+        return HTMLResponse(str(e), status_code=400)
+    exam_prescribing.place_orders(db, exam, request.state.user.id, step_tests, g("rx_order_note"))
     # Binocular Vision & Pediatrics (Vision Therapy) assessment (5.4) -- same
     # all-optional rule.
     bv_fields = dict(
@@ -357,7 +377,9 @@ def exam_detail(request: Request, exam_id: int, db: Session = Depends(get_db)):
          "safety_acks": safety_svc.acknowledgements_for_exam(db, exam_id),
          "safety_ack_required": request.query_params.get("safety_ack_required") == "1",
          "pcp_candidate": pcp_letter.candidate(db, e), "pcp_has_letter": pcp_letter.recent_status(db, e.patient_id),
-         "pcp_error": request.query_params.get("pcp_error"), "med_reviews": med_svc.reviews_for_exam(db, exam_id)})
+         "pcp_error": request.query_params.get("pcp_error"), "med_reviews": med_svc.reviews_for_exam(db, exam_id),
+         "prescribed_meds": db.query(PatientMedication).filter(PatientMedication.prescribed_exam_id == exam_id).order_by(PatientMedication.id).all(),
+         "exam_orders": db.query(DiagnosticOrder).filter(DiagnosticOrder.ordered_exam_id == exam_id).order_by(DiagnosticOrder.id).all()})
 
 
 @router.post("/{exam_id}/sign", dependencies=[Depends(require_role(*EXAM_SIGN))])
